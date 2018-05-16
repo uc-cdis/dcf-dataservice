@@ -1,0 +1,10 @@
+mock==1.0.1
+pytest-cov==2.5.1
+#requests_mock==1.4.0
+#httmock==1.2.3
+coverage==3.7.1
+#mock==1.0.1
+#pytest-flask==0.8.1
+
+setuptools==36.6.0
+-e git+https://github.com/uc-cdis/cdis-python-utils.git@0.2.8#egg=cdispyutils
