@@ -10,13 +10,18 @@ import threading
 import time
 import timeit
 
+#from google.auth.transport.requests import AuthorizedSession
+from google.resumable_media import requests as google_req, common
+from google.cloud import storage
+
 from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 from dev_settings import SIGNPOST
 
+from google_upload2 import GCSObjectStreamUpload
 THREAD_NUM = 4
-
+DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 global exitFlag
 exitFlag = 0
 
@@ -27,25 +32,13 @@ indexclient = IndexClient(SIGNPOST['host'], SIGNPOST['version'], SIGNPOST['auth'
 queueLock = threading.Lock()
 workQueue = Queue.Queue()
 
-def get_file_from_uuid(uuid):
-    '''
-    get document from indexd with provided uuid
-    '''
-    doc = None
-    if uuid:
-        doc = indexclient.get(uuid)
-    return doc
-
-def create_index(**kwargs):
-    return indexclient.create(**kwargs)
-
 def get_fileinfo_list_from_manifest(manifest_file):
     """
     get list of dictionaries from manifest file.
     [
         {
-            'did':'11111111111111111',
-            'filename': 'abc.bam',
+            'did':'11443f3c-9b8b-4e47-b5b7-529468fec098',
+            'filename': 'test1.bam',
             'size': 1,
             'hash': '1223344543t34mt43tb43ofh',
             'metadata': 'abcxyz'
@@ -53,84 +46,86 @@ def get_fileinfo_list_from_manifest(manifest_file):
     ]
     """
     fake = {
-            'did':'11111111111111111',
-            'filename': 'abc.bam',
+            'fileid':'48a779c9-379f-46e0-85cc-db26b928d776',
+            'filename': 'abc1.bam',
             'size': 1,
             'hash': '1223344543t34mt43tb43ofh'}
+    fake2 = {
+             'fileid':'22c96d28-894d-4c6c-9fab-39a6599b0451',
+             'filename': 'abc2.bam',
+             'size': 1,
+             'hash': '1223344543t34mt43tb43ofh'}
 
-    l = [fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake]
+    l = [fake, fake2]
 
-    #with open(manifest_file) as f:
-    #    read(f)
     return l
 
-def call_aws_copy(fi, from_bucket, to_bucket):
-    execstr = "aws s3 sync s3://{} s3://{} --exclude \"*\"".format(from_bucket, to_bucket)
-    execstr = execstr + " --include \"{}/{}\"".format(fi.get("did"), fi.get("filename"))
-    os.system(execstr)
-    print("running the job on {}".format(fi.get("did")))
-    print(execstr)
+def exec_google_copy(fi,to_bucket, token):
+    data_endpt = DATA_ENDPT + fi.get('fileid',"")
+    response = requests.get(data_endpt,
+                         stream=True,
+                         headers = {
+                             "Content-Type": "application/json",
+                             "X-Auth-Token": token
+                             })
+    if response.status_code != 200:
+        print response.status_code
+        return
+    client = storage.Client()
+    #bucket = client.get(to_bucket)
+    blob_name = fi.get('fileid') + '/' + fi.get('filename')
+    num = 0
+    start = timeit.default_timer()
+    with GCSObjectStreamUpload(client=client, bucket_name='cdistest', blob_name=blob_name) as s:
+        for chunk in response.iter_content(chunk_size=102400):
+            num = num + 1
+            if num % 1000 == 0:
+                break
+            if chunk: # filter out keep-alive new chunks
+                s.write(chunk)
 
-def exec_aws_cmd(cmd):
-    os.system(cmd)
-    #print(cmd)
-
-def gen_aws_cmd():
-    l = []
-    for i in xrange(1,20):
-        cmd = "aws s3 cp s3://mybucket20018/gentoo_root{}.img s3://xssxs ".format(i)
-        l.append(cmd)
-    return l
-
-def exec_google_copy(fi,from_bucket, to_bucket):
-    pass
-
-def process_data(threadName, from_bucket, to_bucket, q, vendor):
+def process_data(threadName, to_bucket, jobQueue, token):
     while not exitFlag:
         queueLock.acquire()
-        if not q.empty():
-            fi = q.get()
+        if not jobQueue.empty():
+            fi = jobQueue.get()
             queueLock.release()
             print "%s processing %s" % (threadName, fi)
-            #call_aws_copy(fi, from_bucket, to_bucket
-            if vendor == 'aws':
-                exec_aws_cmd(fi)
+            exec_google_copy(fi, to_bucket, token)
         else:
             queueLock.release()
+            time.sleep(20)
 
-class singleThread(threading.Thread):
-    def __init__(self, threadID, threadName, from_bucket, to_bucket, q, vendor):
+class GoogleCopySingleThread(threading.Thread):
+    def __init__(self, threadID, threadName, to_bucket, jobQueue):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.threadName = threadName
-        self.from_bucket = from_bucket
         self.to_bucket = to_bucket
-        self.q = q
-        self.vendor = vendor
+        self.jobQueue = jobQueue
+        self.token = '' # fill here if want to test
 
     def run(self):
         print "Starting " + self.name
-        process_data(self.threadName, self.from_bucket, self.to_bucket, self.q, self.vendor)
+        process_data(self.threadName, self.to_bucket, self.jobQueue, self.token)
         print "\nExiting " + self.name
 
 
-class AWSBucketReplication(object):
+class GoogleBucketTransfer(object):
 
     def __init__(self, from_bucket, to_bucket, manifest_file):
-        self.from_bucket = from_bucket
         self.to_bucket = to_bucket
         self.manifest_file = manifest_file
         self.thread_list = []
         for i in xrange(0,THREAD_NUM):
-            thread = singleThread(str(i), 'thread_{}'.format(i), self.from_bucket, self.to_bucket, workQueue, 'aws')
+            thread = GoogleCopySingleThread(str(i), 'thread_{}'.format(i), self.to_bucket, workQueue)
             self.thread_list.append(thread)
 
     def prepare(self):
         """
         concurently process a set of data files.
         """
-        #submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
-        submitting_files = gen_aws_cmd()
+        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
         for th in self.thread_list:
             th.start()
         queueLock.acquire()
@@ -166,7 +161,7 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
     #args = parse_arguments()
-    aws = AWSBucketReplication('from','to','test')
+    aws = GoogleBucketTransfer('from','to','test')
     aws.prepare()
     aws.run()
     end = timeit.default_timer()
