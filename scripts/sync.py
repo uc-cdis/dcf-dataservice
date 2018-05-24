@@ -12,19 +12,23 @@ import timeit
 
 from cdislogging import get_logger
 
-from indexclient.client import IndexClient
-from dev_settings import SIGNPOST
+from google_resumable_upload import GCSObjectStreamUpload
 
-THREAD_NUM = 4
+DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
+MODE = 'test'
 
 global exitFlag
 exitFlag = 0
 
+global totalDownloadedBytes
+totalDownloadedBytes = 0
+
+global aliveThreads
+aliveThreads = 0
+
 logger = get_logger("ReplicationThread")
 
-indexclient = IndexClient(SIGNPOST['host'], SIGNPOST['version'], SIGNPOST['auth'])
-
-queueLock = threading.Lock()
+semaphoreLock = threading.Lock()
 workQueue = Queue.Queue()
 
 def get_file_from_uuid(uuid):
@@ -36,8 +40,15 @@ def get_file_from_uuid(uuid):
         doc = indexclient.get(uuid)
     return doc
 
-def create_index(**kwargs):
-    return indexclient.create(**kwargs)
+def gen_mock_manifest_data():
+    fake = {
+            'did':'11111111111111111',
+            'filename': 'abc.bam',
+            'size': 1,
+            'acl': '1223344543t34mt43tb43ofh'}
+
+    l = [fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake]
+    return l
 
 def get_fileinfo_list_from_manifest(manifest_file):
     """
@@ -48,32 +59,30 @@ def get_fileinfo_list_from_manifest(manifest_file):
             'filename': 'abc.bam',
             'size': 1,
             'hash': '1223344543t34mt43tb43ofh',
-            'metadata': 'abcxyz'
+            'acl': 'abcxyz'
         },
     ]
     """
-    fake = {
-            'did':'11111111111111111',
-            'filename': 'abc.bam',
-            'size': 1,
-            'hash': '1223344543t34mt43tb43ofh'}
-
-    l = [fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake,fake]
-
-    #with open(manifest_file) as f:
-    #    read(f)
+    l = []
+    try:
+        with open(manifest_file) as f:
+            read(f)
+    except IOError as e:
+        logger.info("File {} is not existed".format(manifest_file))
     return l
 
-def call_aws_copy(fi, data_source, to_bucket):
-    execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(data_source, to_bucket)
+def call_aws_copy(threadName, fi, data_source):
+    execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(data_source.get('from_source',''), data_source.get('to_bucket',''))
     execstr = execstr + " --include \"{}/{}\"".format(fi.get("did"), fi.get("filename"))
-    os.system(execstr)
-    print("running the job on {}".format(fi.get("did")))
+    if MODE != 'test':
+        os.system(execstr)
+    print("{} running the job on {}".format(threadName, fi.get("did")))
     print(execstr)
 
 def exec_aws_cmd(cmd):
     os.system(cmd)
 
+#for testing purpose only
 def gen_aws_cmd():
     l = []
     for i in xrange(1,20):
@@ -81,76 +90,127 @@ def gen_aws_cmd():
         l.append(cmd)
     return l
 
-def exec_google_copy(fi,data_source, to_bucket):
+
+def exec_google_copyi2(threadName, fi, data_source):
     pass
 
-def process_data(threadName, data_source, to_bucket, q, service):
+def exec_google_copy(threadName, fi, data_source):
+    return
+    data_endpt = DATA_ENDPT + fi.get('fileid',"")
+    token = ""
+    import pdb; pdb.set_trace()
+    try:
+        with open(data_source.get('token_path','')) as reader:
+            token = reader.read()
+    except IOError as e:
+        logger.info("Can not find token file!!!")
+    response = requests.get(data_endpt,
+                         stream=True,
+                         headers = {
+                             "Content-Type": "application/json",
+                             "X-Auth-Token": token
+                             })
+    import pdb; pdb.set_trace()
+    if response.status_code != 200:
+        logger.info('==========================\n')
+        logger.info('status code {} returned from downloading {}'.format(response.status_code, fi.get('fileid',"")))
+        return
+    client = storage.Client()
+    #bucket = client.get(to_bucket)
+    blob_name = fi.get('fileid') + '/' + fi.get('filename')
+    num = 0
+    start = timeit.default_timer()
+    CHUNK_SIZE = data_source.get('chunk_size',2048000)
+    with GCSObjectStreamUpload(client=client, bucket_name=data_sosurce.get('to_bucket',''), blob_name=blob_name) as s:
+        for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+            num = num + 1
+            if num % 10 == 0:
+                logger.info("%s download %f GB\n" %(threadName, num*1.0*CHUNK_SIZE/1000/1000/1000))
+                global totalDowloadedBytes
+                semaphoreLock.acquire()
+                totalDowloadedBytes = totalDowloadedBytes + 100*CHUNK_SIZE
+                semaphoreLock.release()
+            if num % 10000 == 0:
+                break
+            if chunk: # filter out keep-alive new chunks
+                s.write(chunk)
 
+def process_data(threadName, data_source, q, service):
     while not exitFlag:
-
-        print(" run thread here ")
-        queueLock.acquire()
-        print(" get lock")
+        semaphoreLock.acquire()
         if not q.empty():
             fi = q.get()
-            queueLock.release()
-            print "%s processing %s" % (threadName, fi)
-            #call_aws_copy(fi, data_source, to_bucket
+            semaphoreLock.release()
+            logger.info("%s processing %s" % (threadName, fi))
             if service == 'aws':
-                exec_aws_cmd(fi)
+                call_aws_copy(threadName, fi, data_source)
             elif service == 'google':
-                exec_google_copy(fi, data_source, to_bucket)
+                exec_google_copy(threadName, fi, data_source)
             else:
-                print "not supported!!!"
+                logger.info("not supported!!!")
         else:
-            queueLock.release()
+            semaphoreLock.release()
 
 class singleThread(threading.Thread):
-    def __init__(self, threadID, threadName, data_source, to_bucket, q, vendor):
+    def __init__(self, threadID, threadName, data_source, q, vendor):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.threadName = threadName
         self.data_source = data_source
-        self.to_bucket = to_bucket
         self.q = q
         self.vendor = vendor
 
     def run(self):
-        print "Starting " + self.name
-        process_data(self.threadName, self.data_source, self.to_bucket, self.q, self.vendor)
-        print "\nExiting " + self.name
+        logger.info("Starting " + self.name)
+        global aliveThreads
+        semaphoreLock.acquire()
+        aliveThreads = aliveThreads + 1
+        semaphoreLock.release()
+        process_data(self.threadName, self.data_source, self.q, self.vendor)
+        logger.info("\nExiting " + self.name)
+
+        semaphoreLock.acquire()
+        aliveThreads = aliveThreads - 1
+        semaphoreLock.release()
 
 class BucketReplication(object):
-    def __init__(self, data_source, to_bucket, manifest_file, thread_num, service):
+    def __init__(self, data_source, manifest_file, thread_num, service):
         self.thread_list = []
         self.manifest_file = manifest_file
         self.data_source = data_source
-        self.to_bucket = to_bucket
         self.service = service
         self.thread_list = []
         self.thread_num = thread_num
         for i in xrange(0,self.thread_num):
-            thread = singleThread(str(i), 'thread_{}'.format(i), self.data_source, self.to_bucket, workQueue, self.service)
+            thread = singleThread(str(i), 'thread_{}'.format(i), self.data_source, workQueue, self.service)
             self.thread_list.append(thread)
 
     def prepare(self):
         """
         concurently process a set of data files.
         """
-        #submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
-        submitting_files = gen_aws_cmd()
+        #ubmitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        submitting_files = gen_mock_manifest_data()
         for th in self.thread_list:
             th.start()
-        queueLock.acquire()
+        semaphoreLock.acquire()
         for fi in submitting_files:
             workQueue.put(fi)
-        queueLock.release()
+        semaphoreLock.release()
 
     def run(self):
-        print("run ...")
+
+        global aliveThreads
+        runningThreads = aliveThreads
+
+        start = timeit.default_timer()
         # Wait for queue to empty
         while not workQueue.empty():
-            pass
+            current = timeit.default_timer()
+            running_time = current - start
+            if running_time % 10 == 0:
+                logger.info("Total data transfered %f GB" %(totalDownloadedBytes*1.0/1000/1000/1000))
+                logger.info("Times in second {}".format(current - start))
 
         # Notify threads it's time to exit
         global exitFlag
@@ -159,17 +219,17 @@ class BucketReplication(object):
         # Wait for all threads to complete
         for t in self.thread_list:
             t.join()
-        print "Done"
+        logger.info("Done")
 
 class AWSBucketReplication(BucketReplication):
 
-    def __init__(self, data_source, to_bucket, manifest_file, thread_num):
-        super(AWSBucketReplication,self).__init__(data_source, to_bucket, manifest_file,thread_num, 'aws')
+    def __init__(self, data_source, manifest_file, thread_num):
+        super(AWSBucketReplication,self).__init__(data_source,  manifest_file, thread_num, 'aws')
 
 class GOOGLEBucketReplication(BucketReplication):
 
-    def __init__(self, data_source, to_bucket, manifest_file, thread_num):
-        super(AWSBucketReplication,self).__init__(data_source, to_bucket, manifest_file,thread_num,'google')
+    def __init__(self, data_source, manifest_file, thread_num):
+        super(GOOGLEBucketReplication,self).__init__(data_source, manifest_file, thread_num, 'google')
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -184,10 +244,12 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
     #args = parse_arguments()
-    aws = AWSBucketReplication('from','to','test',10)
-    aws.prepare()
-    aws.run()
-    end = timeit.default_timer()
-    print end-start
+    #aws = AWSBucketReplication({'from_bucket': 'from','to_bucket': 'to'},'test',10)
+    #aws.prepare()
+    #aws.run()
+    #end = timeit.default_timer()
+    google = GOOGLEBucketReplication({'token_path': '~/token','chunk_size':2048000},'test',10)
+    google.prepare()
+    google.run()
     #if args.action == 'sync':
     #    print "sync from gdc aws bucket to gen3 dcf bucket"
