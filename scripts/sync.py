@@ -64,8 +64,8 @@ def get_fileinfo_list_from_manifest(manifest_file):
     #    read(f)
     return l
 
-def call_aws_copy(fi, from_bucket, to_bucket):
-    execstr = "aws s3 sync s3://{} s3://{} --exclude \"*\"".format(from_bucket, to_bucket)
+def call_aws_copy(fi, data_source, to_bucket):
+    execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(data_source, to_bucket)
     execstr = execstr + " --include \"{}/{}\"".format(fi.get("did"), fi.get("filename"))
     os.system(execstr)
     print("running the job on {}".format(fi.get("did")))
@@ -73,7 +73,6 @@ def call_aws_copy(fi, from_bucket, to_bucket):
 
 def exec_aws_cmd(cmd):
     os.system(cmd)
-    #print(cmd)
 
 def gen_aws_cmd():
     l = []
@@ -82,47 +81,56 @@ def gen_aws_cmd():
         l.append(cmd)
     return l
 
-def exec_google_copy(fi,from_bucket, to_bucket):
+def exec_google_copy(fi,data_source, to_bucket):
     pass
 
-def process_data(threadName, from_bucket, to_bucket, q, vendor):
+def process_data(threadName, data_source, to_bucket, q, service):
+
     while not exitFlag:
+
+        print(" run thread here ")
         queueLock.acquire()
+        print(" get lock")
         if not q.empty():
             fi = q.get()
             queueLock.release()
             print "%s processing %s" % (threadName, fi)
-            #call_aws_copy(fi, from_bucket, to_bucket
-            if vendor == 'aws':
+            #call_aws_copy(fi, data_source, to_bucket
+            if service == 'aws':
                 exec_aws_cmd(fi)
+            elif service == 'google':
+                exec_google_copy(fi, data_source, to_bucket)
+            else:
+                print "not supported!!!"
         else:
             queueLock.release()
 
 class singleThread(threading.Thread):
-    def __init__(self, threadID, threadName, from_bucket, to_bucket, q, vendor):
+    def __init__(self, threadID, threadName, data_source, to_bucket, q, vendor):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.threadName = threadName
-        self.from_bucket = from_bucket
+        self.data_source = data_source
         self.to_bucket = to_bucket
         self.q = q
         self.vendor = vendor
 
     def run(self):
         print "Starting " + self.name
-        process_data(self.threadName, self.from_bucket, self.to_bucket, self.q, self.vendor)
+        process_data(self.threadName, self.data_source, self.to_bucket, self.q, self.vendor)
         print "\nExiting " + self.name
 
-
-class AWSBucketReplication(object):
-
-    def __init__(self, from_bucket, to_bucket, manifest_file):
-        self.from_bucket = from_bucket
-        self.to_bucket = to_bucket
-        self.manifest_file = manifest_file
+class BucketReplication(object):
+    def __init__(self, data_source, to_bucket, manifest_file, thread_num, service):
         self.thread_list = []
-        for i in xrange(0,THREAD_NUM):
-            thread = singleThread(str(i), 'thread_{}'.format(i), self.from_bucket, self.to_bucket, workQueue, 'aws')
+        self.manifest_file = manifest_file
+        self.data_source = data_source
+        self.to_bucket = to_bucket
+        self.service = service
+        self.thread_list = []
+        self.thread_num = thread_num
+        for i in xrange(0,self.thread_num):
+            thread = singleThread(str(i), 'thread_{}'.format(i), self.data_source, self.to_bucket, workQueue, self.service)
             self.thread_list.append(thread)
 
     def prepare(self):
@@ -139,7 +147,7 @@ class AWSBucketReplication(object):
         queueLock.release()
 
     def run(self):
-
+        print("run ...")
         # Wait for queue to empty
         while not workQueue.empty():
             pass
@@ -153,12 +161,22 @@ class AWSBucketReplication(object):
             t.join()
         print "Done"
 
+class AWSBucketReplication(BucketReplication):
+
+    def __init__(self, data_source, to_bucket, manifest_file, thread_num):
+        super(AWSBucketReplication,self).__init__(data_source, to_bucket, manifest_file,thread_num, 'aws')
+
+class GOOGLEBucketReplication(BucketReplication):
+
+    def __init__(self, data_source, to_bucket, manifest_file, thread_num):
+        super(AWSBucketReplication,self).__init__(data_source, to_bucket, manifest_file,thread_num,'google')
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title='action', dest='action')
 
     create_data = subparsers.add_parser('sync')
-    create_data.add_argument('--from_bucket', required=True)
+    create_data.add_argument('--data_source', required=True)
     create_data.add_argument('--to_bucket', required=True)
     create_data.add_argument('--manifest_file', required=True)
     return parser.parse_args()
@@ -166,7 +184,7 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
     #args = parse_arguments()
-    aws = AWSBucketReplication('from','to','test')
+    aws = AWSBucketReplication('from','to','test',10)
     aws.prepare()
     aws.run()
     end = timeit.default_timer()
