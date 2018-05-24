@@ -3,6 +3,7 @@ from os import listdir
 from os.path import isfile, join
 import requests
 import sys
+import subprocess
 import getopt
 import argparse
 import Queue
@@ -59,7 +60,8 @@ def get_fileinfo_list_from_manifest(manifest_file):
             'filename': 'abc.bam',
             'size': 1,
             'hash': '1223344543t34mt43tb43ofh',
-            'acl': 'abcxyz'
+            'acl': 'abcxyz',
+            'project': 'TCGA'
         },
     ]
     """
@@ -90,15 +92,36 @@ def gen_aws_cmd():
         l.append(cmd)
     return l
 
+def check_hash_bucket_object(fi, data_source):
+    bucket = data_source.get('to_bucket','')
+    data = fileid
+    batcmd = 'gsutil hash -h {}'.format(bucket)
+    result = subprocess.check_output(batcmd, shell=True)
 
-def exec_google_copyi2(threadName, fi, data_source):
-    pass
+def get_bucket_name(fi):
+
+    bucketname = ''
+    if fi.get('acl','') == "*":
+        bucketname = fi.get('project','') + "_public"
+    else:
+        bucketname = fi.get('project','') + "_protected"
+
+    return bucketname
+
+def create_bucket(bucketname):
+    client = storage.Client()
+    bucket = client.bucket(bucketname)
+    if not bucket.exists():
+        try:
+            bucket = client.create_bucket(bucketname)
+        except Exception as e:
+            logger.info(e)
+            return False
+    return True
 
 def exec_google_copy(threadName, fi, data_source):
-    return
     data_endpt = DATA_ENDPT + fi.get('fileid',"")
     token = ""
-    import pdb; pdb.set_trace()
     try:
         with open(data_source.get('token_path','')) as reader:
             token = reader.read()
@@ -110,18 +133,25 @@ def exec_google_copy(threadName, fi, data_source):
                              "Content-Type": "application/json",
                              "X-Auth-Token": token
                              })
-    import pdb; pdb.set_trace()
     if response.status_code != 200:
         logger.info('==========================\n')
-        logger.info('status code {} returned from downloading {}'.format(response.status_code, fi.get('fileid',"")))
+        logger.info('status code {} when downloading {} from GDC API'.format(response.status_code, fi.get('fileid',"")))
         return
     client = storage.Client()
     #bucket = client.get(to_bucket)
-    blob_name = fi.get('fileid') + '/' + fi.get('filename')
+    project = get_project_name(fi)
+    blob_name = project + "/" + fi.get('fileid') + '/' + fi.get('filename')
+    bucket_name = get_bucket_name(fi)
+    isCreated = create_bucket(bucket_name)
+
+    if not isCreated:
+        logger.info("There is no bucket with provided name")
+        return
+
     num = 0
     start = timeit.default_timer()
     CHUNK_SIZE = data_source.get('chunk_size',2048000)
-    with GCSObjectStreamUpload(client=client, bucket_name=data_sosurce.get('to_bucket',''), blob_name=blob_name) as s:
+    with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name) as s:
         for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
             num = num + 1
             if num % 10 == 0:
