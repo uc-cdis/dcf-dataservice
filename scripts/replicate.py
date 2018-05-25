@@ -20,6 +20,11 @@ from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 from cdislogging import get_logger
 from settings import PROJECT_MAP
+from utils import (check_bucket_is_exists,
+                 extract_md5_from_text,
+                 get_fileinfo_list_from_manifest,
+                 get_bucket_name,
+                 get_fileinfo_list_from_manifest)
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 MODE = 'test'
@@ -38,124 +43,27 @@ logger = get_logger("ReplicationThread")
 semaphoreLock = threading.Lock()
 workQueue = Queue.Queue()
 
-def gen_test_data():
-
-    fake = {
-        'fileid': '989e6e5e-809e-4fb3-b5c6-6b03962e9798',
-        'filename': 'abc1.bam',
-        'size': 1,
-        'hash': '1223344543t34mt43tb43ofh',
-        'project': 'TCGA',
-        'acl': '*'}
-    fake2 = {
-        'fileid': 'b0fcabc2-7516-4a98-81e6-c32726e9b835',
-        'filename': 'abc2.bam',
-        'size': 1,
-        'hash': '1223344543t34mt43tb43ofh',
-        'project': 'TCGA',
-        'acl': 'tgca'}
-
-    fake3 = {
-        'fileid': '0210e2f4-d040-4fa5-ba6d-4195aa9cd0cf',
-        'filename': 'abc3.bam',
-        'size': 1,
-        'hash': '1223344543t34mt43tb43ofh',
-        'project': 'TCGA',
-        'acl': 'tgca'}
-
-    fake4 = {
-        'fileid': 'd63771d1-7fec-4c0d-97b5-2f1534e31372',
-        'filename': 'abc4.bam',
-        'size': 1,
-        'hash': '1223344543t34mt43tb43ofh',
-        'project': 'TCGA',
-        'acl': 'tgca'}
-
-    fake5 = {
-        'fileid': '35cd71f3-64bc-41d6-ab8b-342c8c99dadc',
-        'filename': 'abc5.bam',
-        'size': 1,
-        'hash': '1223344543t34mt43tb43ofh',
-        'project': 'TCGA',
-        'acl': '*'}
-    l = [fake, fake2, fake3, fake4, fake5]
-    for i in xrange(6, 21):
-        tmp = copy.deepcopy(l[i % 5])
-        tmp['filename'] = 'abc{}.bam'.format(i)
-        l.append(tmp)
-    return l
-
-
-def get_fileinfo_list_from_manifest(manifest_file):
-    """
-    get list of dictionaries from manifest file.
-    Temporaly ignore this function until the officical manifest file come out
-    [
-        {
-            'did':'11111111111111111',
-            'filename': 'abc.bam',
-            'size': 1,
-            'hash': '1223344543t34mt43tb43ofh',
-            'acl': 'tcga',
-            'project': 'TCGA'
-        },
-    ]
-    """
-    l = []
-    try:
-        with open(manifest_file,'r') as f:
-            f.read()
-    except IOError as e:
-        logger.info("File {} is not existed".format(manifest_file))
-    return l
-
-
 def call_aws_copy(threadName, fi, global_config):
-    import pdb; pdb.set_trace()
     execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(
         global_config.get('from_source', ''), global_config.get('to_bucket', ''))
     execstr = execstr + \
         " --include \"{}/{}\"".format(fi.get("did"), fi.get("filename"))
     if MODE != 'test':
         os.system(execstr)
-    print("{} running the job on {}".format(threadName, fi.get("did")))
-    print(execstr)
-
-
-def get_bucket_name(fi):
-    """
-    TCGA-open -> gdc-tcga-phs000178-open
-    TCGA-controled -> gdc-tcga-phs000178-controled
-    TARGET-controled -> gdc-target-phs000218-controlled
-    """
-    bucketname = ''
-    project = fi.get('project', '')
-    if fi.get('acl', '') == "*":
-        bucketname = 'gdc-' + PROJECT_MAP.get(project, '') + "-open"
-    else:
-        bucketname = 'gdc-' + PROJECT_MAP.get(project, '') + "-controlled"
-
-    return bucketname
-
-
-def check_bucket_is_exists(bucket_name):
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    return bucket.exists()
-
-
-def extract_md5_from_text(text):
-    m = re.search('[0-9,a-f]{32}', text.lower())
-    if m:
-        return m.group(0)
-    else:
-        return None
+    logger.info("{} running the job on {}".format(threadName, fi.get("did")))
+    logger.info(execstr)
 
 
 def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     """
     require that bucket_name already existed
     check if blob object is existed or not
+    Args:
+        bucket_name(str): the name of bucket
+        blob_name(str): the name of blob
+        fi(dict): file info dictionary
+    Returns:
+        bool value indicating if the blob is exist or not
     """
     client = storage.Client()
     bucket = client.bucket(bucket_name)
@@ -171,7 +79,7 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
 
 def exec_google_copy(threadName, fi, global_config):
     """
-    Copy file to google bucket
+    Copy file to google bucket. Implemented using google cloud resumale API
     Args:
         threadName(str): name of the thread
         fi(dict): file information
@@ -205,7 +113,7 @@ def exec_google_copy(threadName, fi, global_config):
     client = storage.Client()
 
     blob_name = fi.get('fileid') + '/' + fi.get('filename')
-    bucket_name = get_bucket_name(fi)
+    bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
     if not check_bucket_is_exists(bucket_name):
         logger.info("There is no bucket with provided name")

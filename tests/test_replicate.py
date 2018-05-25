@@ -1,6 +1,7 @@
 import mock
 from mock import MagicMock
 from mock import patch
+import pytest
 
 import scripts.replicate
 from scripts.replicate import AWSBucketReplication
@@ -25,13 +26,14 @@ def gen_mock_manifest_data():
          fake, fake, fake, fake, fake, fake, fake, fake]
     return l
 
+@pytest.fixture
+def initialization():
+    scripts.replicate.exitFlag = 0
 
 @patch('scripts.replicate.get_fileinfo_list_from_manifest')
 def test_multithread_google(get_file_from_manifest,monkeypatch):
     monkeypatch.setattr(
          'scripts.replicate.MODE', 'test')
-    monkeypatch.setattr(
-             'scripts.replicate.exitFlag', 0)
     get_file_from_manifest.return_value = gen_mock_manifest_data()
     number_of_threads = 2
     scripts.replicate.exec_google_copy = MagicMock()
@@ -42,18 +44,15 @@ def test_multithread_google(get_file_from_manifest,monkeypatch):
     assert scripts.replicate.exec_google_copy.called == True
 
 @patch('scripts.replicate.get_fileinfo_list_from_manifest')
-def test_multithread_aws(get_file_from_manifest,monkeypatch):
+def test_multithread_aws(get_file_from_manifest,monkeypatch,initialization):
     monkeypatch.setattr(
             'scripts.replicate.MODE', 'test')
-    monkeypatch.setattr(
-            'scripts.replicate.exitFlag', 0)
     get_file_from_manifest.return_value = gen_mock_manifest_data()
-    number_of_threads = 1
+    number_of_threads = 4
     scripts.replicate.call_aws_copy = MagicMock()
     aws = AWSBucketReplication({'from_bucket': 'from','to_bucket': 'to'},'test',number_of_threads)
     aws.prepare()
     aws.run()
-
     assert scripts.replicate.call_aws_copy.called == True
 
 
