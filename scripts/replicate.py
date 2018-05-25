@@ -178,7 +178,8 @@ def exec_google_copy(threadName, fi, global_config):
     Return: None
 
     """
-
+    if MODE == 'test':
+        return
     data_endpt = DATA_ENDPT + fi.get('fileid', "")
     token = ""
     try:
@@ -286,9 +287,9 @@ class BucketReplication(object):
         """
         concurently process a set of data files.
         """
-        #ubmitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
         # submitting_files = gen_mock_manifest_data()i
-        submitting_files = gen_test_data()
+        #submitting_files = gen_test_data()
         for th in self.thread_list:
             th.start()
         semaphoreLock.acquire()
