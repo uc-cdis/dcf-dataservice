@@ -3,6 +3,7 @@ from os import listdir
 from os.path import isfile, join
 import requests
 import sys
+import copy
 import re
 import subprocess
 import getopt
@@ -11,9 +12,10 @@ import Queue
 import threading
 import time
 import timeit
-
+import google
 from cdislogging import get_logger
-
+from google.cloud import storage
+from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 from settings import PROJECT_MAP
 
@@ -43,6 +45,53 @@ def get_file_from_uuid(uuid):
         doc = indexclient.get(uuid)
     return doc
 
+def gen_test_data():
+
+    fake = {
+            'fileid':'989e6e5e-809e-4fb3-b5c6-6b03962e9798',
+            'filename': 'abc1.bam',
+            'size': 1,
+            'hash': '1223344543t34mt43tb43ofh',
+	    'project': 'TCGA',
+	    'acl': '*'}
+    fake2 = {
+             'fileid':'b0fcabc2-7516-4a98-81e6-c32726e9b835',
+             'filename': 'abc2.bam',
+             'size': 1,
+             'hash': '1223344543t34mt43tb43ofh',
+	     'project': 'TCGA',
+             'acl': 'tgca'}
+
+    fake3 = {
+             'fileid':'0210e2f4-d040-4fa5-ba6d-4195aa9cd0cf',
+             'filename': 'abc3.bam',
+             'size': 1,
+             'hash': '1223344543t34mt43tb43ofh',
+	     'project': 'TCGA',
+             'acl': 'tgca'}
+
+    fake4 = {
+             'fileid':'d63771d1-7fec-4c0d-97b5-2f1534e31372',
+             'filename': 'abc4.bam',
+             'size': 1,
+             'hash': '1223344543t34mt43tb43ofh',
+	     'project': 'TCGA',
+             'acl': 'tgca'}
+
+    fake5 = {
+             'fileid':'35cd71f3-64bc-41d6-ab8b-342c8c99dadc',
+             'filename': 'abc5.bam',
+             'size': 1,
+             'hash': '1223344543t34mt43tb43ofh',
+	     'project': 'TCGA',
+             'acl': '*'}
+    l = [fake,fake2,fake3,fake4,fake5]
+    for i in xrange(6,21):
+        tmp = copy.deepcopy(l[i%5])
+        tmp['filename'] = 'abc{}.bam'.format(i)
+        l.append(tmp)
+    return l
+
 def gen_mock_manifest_data():
     fake = {
             'did':'11111111111111111',
@@ -62,7 +111,7 @@ def get_fileinfo_list_from_manifest(manifest_file):
             'filename': 'abc.bam',
             'size': 1,
             'hash': '1223344543t34mt43tb43ofh',
-            'acl': 'abcxyz',
+            'acl': 'tcga',
             'project': 'TCGA'
         },
     ]
@@ -75,8 +124,8 @@ def get_fileinfo_list_from_manifest(manifest_file):
         logger.info("File {} is not existed".format(manifest_file))
     return l
 
-def call_aws_copy(threadName, fi, data_source):
-    execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(data_source.get('from_source',''), data_source.get('to_bucket',''))
+def call_aws_copy(threadName, fi, global_config):
+    execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(global_config.get('from_source',''), global_config.get('to_bucket',''))
     execstr = execstr + " --include \"{}/{}\"".format(fi.get("did"), fi.get("filename"))
     if MODE != 'test':
         os.system(execstr)
@@ -94,8 +143,8 @@ def gen_aws_cmd():
         l.append(cmd)
     return l
 
-def check_hash_bucket_object(fi, data_source):
-    bucket = data_source.get('to_bucket','')
+def check_hash_bucket_object(fi, global_config):
+    bucket = global_config.get('to_bucket','')
     data = fileid
     batcmd = 'gsutil hash -h {}'.format(bucket)
     result = subprocess.check_output(batcmd, shell=True)
@@ -131,11 +180,12 @@ def extract_md5_from_text(text):
 def check_blob_name_exists_and_match_md5(bucket_name,blob_name,fi):
     """
     require that bucket_name already existed
+    check if blob object is existed or not
 
     """
     client = storage.Client()
     bucket = client.bucket(bucket_name)
-    blob = google.cloud.storage.Blob(blob_name, bucket)
+    blob = Blob(blob_name, bucket)
     if blob.exists():
         execstr = 'gsutil hash -h gs://{}/{}'.format(bucket_name, blob_name)
         result = subprocess.check_output(execstr, shell=True).strip('\n"\'')
@@ -144,18 +194,24 @@ def check_blob_name_exists_and_match_md5(bucket_name,blob_name,fi):
             return md5_hash == fi.get('hash','')
     return False
 
-def exec_google_copy(threadName, fi, data_source):
+def exec_google_copy(threadName, fi, global_config):
+    """
+    Copy file to google bucket
+    Args:
+        threadName(str): name of the thread
+        fi(dict): file information
+
+    """
 
     data_endpt = DATA_ENDPT + fi.get('fileid',"")
     token = ""
     try:
-        with open(data_source.get('token_path',''), 'r') as f:
+        with open(global_config.get('token_path',''), 'r') as f:
             token = str(f.read().strip())
-            print(token)
     except IOError as e:
         logger.info("Can not find token file!!!")
 
-   response = requests.get(data_endpt,
+    response = requests.get(data_endpt,
                          stream=True,
                          headers = {
                              "Content-Type": "application/json",
@@ -166,7 +222,9 @@ def exec_google_copy(threadName, fi, data_source):
         logger.info('==========================\n')
         logger.info('status code {} when downloading {} from GDC API'.format(response.status_code, fi.get('fileid',"")))
         return
+    
     client = storage.Client()
+    
     blob_name = fi.get('fileid') + '/' + fi.get('filename')
     bucket_name = get_bucket_name(fi)
 
@@ -174,27 +232,27 @@ def exec_google_copy(threadName, fi, data_source):
         logger.info("There is no bucket with provided name")
         return
 
-    if check_blob_name_exists_and_match_md5(blob_name):
+    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         return
 
     num = 0
     start = timeit.default_timer()
-    chunk_size = data_source.get('chunk_size',2048000)
+    chunk_size = global_config.get('chunk_size',2048000)
     with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name) as s:
         for chunk in response.iter_content(chunk_size=chunk_size):
             num = num + 1
             if num % 10 == 0:
                 logger.info("%s download %f GB\n" %(threadName, num*1.0*chunk_size/1000/1000/1000))
-                global totalDowloadedBytes
+                global totalDownloadedBytes
                 semaphoreLock.acquire()
-                totalDowloadedBytes = totalDowloadedBytes + 100*chunk_size
+                totalDownloadedBytes = totalDownloadedBytes + 100*chunk_size
                 semaphoreLock.release()
             if num % 10000 == 0:
                 break
             if chunk: # filter out keep-alive new chunks
                 s.write(chunk)
 
-def process_data(threadName, data_source, q, service):
+def process_data(threadName, global_config, q, service):
     while not exitFlag:
         semaphoreLock.acquire()
         if not q.empty():
@@ -202,20 +260,20 @@ def process_data(threadName, data_source, q, service):
             semaphoreLock.release()
             logger.info("%s processing %s" % (threadName, fi))
             if service == 'aws':
-                call_aws_copy(threadName, fi, data_source)
+                call_aws_copy(threadName, fi, global_config)
             elif service == 'google':
-                exec_google_copy(threadName, fi, data_source)
+                exec_google_copy(threadName, fi, global_config)
             else:
                 logger.info("not supported!!!")
         else:
             semaphoreLock.release()
 
 class singleThread(threading.Thread):
-    def __init__(self, threadID, threadName, data_source, q, vendor):
+    def __init__(self, threadID, threadName, global_config, q, vendor):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.threadName = threadName
-        self.data_source = data_source
+        self.global_config = global_config
         self.q = q
         self.vendor = vendor
 
@@ -225,7 +283,7 @@ class singleThread(threading.Thread):
         semaphoreLock.acquire()
         aliveThreads = aliveThreads + 1
         semaphoreLock.release()
-        process_data(self.threadName, self.data_source, self.q, self.vendor)
+        process_data(self.threadName, self.global_config, self.q, self.vendor)
         logger.info("\nExiting " + self.name)
 
         semaphoreLock.acquire()
@@ -233,15 +291,15 @@ class singleThread(threading.Thread):
         semaphoreLock.release()
 
 class BucketReplication(object):
-    def __init__(self, data_source, manifest_file, thread_num, service):
+    def __init__(self, global_config, manifest_file, thread_num, service):
         self.thread_list = []
         self.manifest_file = manifest_file
-        self.data_source = data_source
+        self.global_config = global_config
         self.service = service
         self.thread_list = []
         self.thread_num = thread_num
         for i in xrange(0,self.thread_num):
-            thread = singleThread(str(i), 'thread_{}'.format(i), self.data_source, workQueue, self.service)
+            thread = singleThread(str(i), 'thread_{}'.format(i), self.global_config, workQueue, self.service)
             self.thread_list.append(thread)
 
     def prepare(self):
@@ -249,7 +307,8 @@ class BucketReplication(object):
         concurently process a set of data files.
         """
         #ubmitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
-        submitting_files = gen_mock_manifest_data()
+        #submitting_files = gen_mock_manifest_data()i
+	submitting_files = gen_test_data()
         for th in self.thread_list:
             th.start()
         semaphoreLock.acquire()
@@ -282,20 +341,20 @@ class BucketReplication(object):
 
 class AWSBucketReplication(BucketReplication):
 
-    def __init__(self, data_source, manifest_file, thread_num):
-        super(AWSBucketReplication,self).__init__(data_source,  manifest_file, thread_num, 'aws')
+    def __init__(self, global_config, manifest_file, thread_num):
+        super(AWSBucketReplication,self).__init__(global_config,  manifest_file, thread_num, 'aws')
 
 class GOOGLEBucketReplication(BucketReplication):
 
-    def __init__(self, data_source, manifest_file, thread_num):
-        super(GOOGLEBucketReplication,self).__init__(data_source, manifest_file, thread_num, 'google')
+    def __init__(self, global_config, manifest_file, thread_num):
+        super(GOOGLEBucketReplication,self).__init__(global_config, manifest_file, thread_num, 'google')
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title='action', dest='action')
 
     create_data = subparsers.add_parser('sync')
-    create_data.add_argument('--data_source', required=True)
+    create_data.add_argument('--global_config', required=True)
     create_data.add_argument('--to_bucket', required=True)
     create_data.add_argument('--manifest_file', required=True)
     return parser.parse_args()
@@ -307,7 +366,7 @@ if __name__ == "__main__":
     #aws.prepare()
     #aws.run()
     #end = timeit.default_timer()
-    google = GOOGLEBucketReplication({'token_path': '/Users/giangbui/gdc-token.txt','chunk_size':2048000},'test',10)
+    google = GOOGLEBucketReplication({'token_path': '/home/giangbui/gdc-token.txt','chunk_size':2048000},'test',1)
     google.prepare()
     google.run()
     #if args.action == 'sync':
