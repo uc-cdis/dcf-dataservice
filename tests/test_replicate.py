@@ -30,6 +30,8 @@ def gen_mock_manifest_data():
 def test_multithread_google(get_file_from_manifest,monkeypatch):
     monkeypatch.setattr(
          'scripts.replicate.MODE', 'test')
+    monkeypatch.setattr(
+             'scripts.replicate.exitFlag', 0)
     get_file_from_manifest.return_value = gen_mock_manifest_data()
     number_of_threads = 2
     scripts.replicate.exec_google_copy = MagicMock()
@@ -39,18 +41,20 @@ def test_multithread_google(get_file_from_manifest,monkeypatch):
     google.run()
     assert scripts.replicate.exec_google_copy.called == True
 
-#patch('scripts.replicate.get_fileinfo_list_from_manifest')
-#def test_multithread_aws(get_file_from_manifest,monkeypatch):
-#   monkeypatch.setattr(
-#           'scripts.replicate.MODE', 'test')
-#   get_file_from_manifest.return_value = gen_mock_manifest_data()
-#   number_of_threads = 3
-#   scripts.replicate.call_aws_copy = MagicMock()
-#   aws = AWSBucketReplication({'from_bucket': 'from','to_bucket': 'to'},'test',number_of_threads)
-#   aws.prepare()
-#   aws.run()
-#
-#   assert scripts.replicate.call_aws_copy.called == True
+@patch('scripts.replicate.get_fileinfo_list_from_manifest')
+def test_multithread_aws(get_file_from_manifest,monkeypatch):
+    monkeypatch.setattr(
+            'scripts.replicate.MODE', 'test')
+    monkeypatch.setattr(
+            'scripts.replicate.exitFlag', 0)
+    get_file_from_manifest.return_value = gen_mock_manifest_data()
+    number_of_threads = 1
+    scripts.replicate.call_aws_copy = MagicMock()
+    aws = AWSBucketReplication({'from_bucket': 'from','to_bucket': 'to'},'test',number_of_threads)
+    aws.prepare()
+    aws.run()
+
+    assert scripts.replicate.call_aws_copy.called == True
 
 
 

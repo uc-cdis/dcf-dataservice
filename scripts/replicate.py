@@ -111,6 +111,7 @@ def get_fileinfo_list_from_manifest(manifest_file):
 
 
 def call_aws_copy(threadName, fi, global_config):
+    import pdb; pdb.set_trace()
     execstr = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(
         global_config.get('from_source', ''), global_config.get('to_bucket', ''))
     execstr = execstr + \
@@ -164,7 +165,7 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         result = subprocess.check_output(execstr, shell=True).strip('\n"\'')
         md5_hash = extract_md5_from_text(result)
         if md5_hash:
-            return md5_hash == fi.get('hash', '')
+            return md5_hash == fi.get('hash', '').lower()
     return False
 
 
