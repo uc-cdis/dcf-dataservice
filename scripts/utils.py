@@ -6,6 +6,7 @@ def Base64ToHexHash(base64_hash):
 
 #st = Base64ToHexHash('YXg/2Z/PYhMRgRXqxJBjpg==')
 
+
 def check_bucket_is_exists(bucket_name):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
