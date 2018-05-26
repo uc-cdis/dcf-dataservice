@@ -11,7 +11,6 @@ RUN apt-get update && apt-get upgrade -y \
       apt-transport-https \
       lsb-release \
       curl \
-      dnsutils \
       gcc \
       git \
       openssh-client \
@@ -21,43 +20,24 @@ RUN apt-get update && apt-get upgrade -y \
       python-setuptools \
       vim \
       less \
-      jq \
       ssh \
-      ftp \
-      wget
+      wget \
+      boto3
+
+COPY . /dcf-dataservice
+WORKDIR /dcf-dataservice
 
 RUN  easy_install -U pip \
     && pip install --upgrade pip \
     && pip install --upgrade setuptools \
-    && pip install -U crcmod \
-    && pip install awscli --upgrade \
-    && pip install yq --upgrade
+    && pip install awscli --upgradei \
+    && pip install -r requirments.txt
 
-# From  https://hub.docker.com/r/google/cloud-sdk/~/dockerfile/
-RUN export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
-    echo "deb https://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" > /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
+RUN 
     apt-get update && \
     apt-get install -y google-cloud-sdk \
-        google-cloud-sdk-app-engine-python \
-        google-cloud-sdk-app-engine-java \
-        google-cloud-sdk-app-engine-go \
-        google-cloud-sdk-datalab \
-        google-cloud-sdk-datastore-emulator \
-        google-cloud-sdk-pubsub-emulator \
-        google-cloud-sdk-bigtable-emulator \
-        google-cloud-sdk-cbt \
-        kubectl && \
-    gcloud config set core/disable_usage_reporting true && \
-    gcloud config set component_manager/disable_update_check true && \
-    gcloud config set metrics/environment github_docker_image && \
-    gcloud --version && \
-    kubectl version --client
-
-RUN useradd -m -s /bin/bash ubuntu
-
-WORKDIR /home/ubuntu
-USER ubuntu
+    google-cloud-sdk-app-engine-python \ 
+    gcloud --version 
 
 CMD /bin/bash
 
