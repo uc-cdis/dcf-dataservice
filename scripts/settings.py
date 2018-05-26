@@ -7,7 +7,7 @@ SIGNPOST = {
    'auth': None}
 
 PROJECT_MAP = {
-        'TCGA': 'tcga-xxxx-phs000178',
+        'TGCA': 'tcga-xxxx-phs000178',
         'TARGET': 'target-xxxx-phs000218',
         'FM': 'fm-xxxx-phs000179',
         'CCLE': 'ccle-xxx'

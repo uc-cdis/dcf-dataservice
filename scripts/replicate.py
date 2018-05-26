@@ -22,7 +22,7 @@ def parse_arguments():
 
 if __name__ == "__main__":
     start = timeit.default_timer()
-    aws = AWSBucketReplication({'from_bucket': 'from','manifest_file':'./test'})
+    aws = AWSBucketReplication({'from_bucket': 'mybucket20018','manifest_file':'./test','chunk_size': 4})
     aws.run()
     #end = timeit.default_timer()
     #google = GOOGLEBucketReplication(

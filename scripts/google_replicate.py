@@ -20,11 +20,10 @@ from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 from cdislogging import get_logger
 from settings import PROJECT_MAP
-from utils import (check_bucket_is_exists,
-                 extract_md5_from_text,
-                 get_fileinfo_list_from_manifest,
-                 get_bucket_name,
-                 get_fileinfo_list_from_manifest)
+from utils import (extract_md5_from_text,
+                   get_fileinfo_list_from_manifest,
+                   get_bucket_name,
+                   get_fileinfo_list_from_manifest)
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 MODE = 'test'
@@ -43,6 +42,11 @@ logger = get_logger("ReplicationThread")
 semaphoreLock = threading.Lock()
 workQueue = Queue.Queue()
 
+def check_bucket_is_exists(bucket_name):
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    return bucket.exists()
+
 def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     """
     require that bucket_name already existed
@@ -52,7 +56,7 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         blob_name(str): the name of blob
         fi(dict): file info dictionary
     Returns:
-        bool value indicating if the blob is exist or not
+        bool: indicating value if the blob is exist or not
     """
     client = storage.Client()
     bucket = client.bucket(bucket_name)
