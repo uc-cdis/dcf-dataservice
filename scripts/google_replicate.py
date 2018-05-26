@@ -26,7 +26,9 @@ from utils import (extract_md5_from_text,
                    get_fileinfo_list_from_manifest)
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
-MODE = 'test'
+MODE = 'intergration_test'
+if MODE == 'intergration_test':
+    from intergration_data_test import google_gen_test_data
 
 global exitFlag
 exitFlag = 0
@@ -66,11 +68,38 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         result = subprocess.check_output(execstr, shell=True).strip('\n"\'')
         md5_hash = extract_md5_from_text(result)
         if md5_hash:
+	    logger.info("hash {}".format(md5_hash))
             return md5_hash == fi.get('hash', '').lower()
     return False
 
-
 def exec_google_copy(threadName, fi, global_config):
+    """
+    """
+    client = storage.Client()
+    blob_name = fi.get('fileid') + '/' + fi.get('filename')
+    bucket_name = get_bucket_name(fi, PROJECT_MAP)
+
+    if not check_bucket_is_exists(bucket_name):
+        logger.info("There is no bucket with provided name {}".format(bucket_name))
+        return
+
+    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+	logger.info("object {} is already existed. Not need to re-copy".format(blob_name))
+        return
+
+    resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, global_config)
+    # check if object is copied correctly by comparing md5 hash
+    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+        logger.info("object {} successfully copied ".format(blob_name))
+    else:
+	resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, global_config)
+	if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+	    logger.info("object {} successfully copied ".format(blob_name))
+	else:
+	    logger.info("can not copy {} to GOOGLE bucket".format(blob_name))
+
+
+def resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, global_config):
     """
     Copy file to google bucket. Implemented using google cloud resumale API
     Args:
@@ -82,8 +111,12 @@ def exec_google_copy(threadName, fi, global_config):
     """
     if MODE == 'test':
         return
+
+    start = timeit.default_timer()
+    chunk_size = global_config.get('chunk_size', 2048000)
     data_endpt = DATA_ENDPT + fi.get('fileid', "")
     token = ""
+
     try:
         with open(global_config.get('token_path', ''), 'r') as f:
             token = str(f.read().strip())
@@ -103,25 +136,11 @@ def exec_google_copy(threadName, fi, global_config):
             response.status_code, fi.get('fileid', "")))
         return
 
-    client = storage.Client()
-
-    blob_name = fi.get('fileid') + '/' + fi.get('filename')
-    bucket_name = get_bucket_name(fi, PROJECT_MAP)
-
-    if not check_bucket_is_exists(bucket_name):
-        logger.info("There is no bucket with provided name")
-        return
-
-    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-        return
-
     num = 0
-    start = timeit.default_timer()
-    chunk_size = global_config.get('chunk_size', 2048000)
     with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name) as s:
         for chunk in response.iter_content(chunk_size=chunk_size):
             num = num + 1
-            if num % 10 == 0:
+            if num % 100 == 0:
                 logger.info("%s download %f GB\n" %
                             (threadName, num*1.0*chunk_size/1000/1000/1000))
                 global totalDownloadedBytes
@@ -175,16 +194,17 @@ class GOOGLEBucketReplication(object):
         self.thread_num = thread_num
         for i in xrange(0, self.thread_num):
             thread = singleThread(str(i), 'thread_{}'.format(
-                i), self.global_config, workQueue, self.service)
+                i), self.global_config, workQueue)
             self.thread_list.append(thread)
 
     def prepare(self):
         """
         concurently process a set of data files.
         """
-        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
-        # submitting_files = gen_mock_manifest_data()i
-        #submitting_files = gen_test_data()
+	if MODE != 'intergration_test':
+	    submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+	else:
+      	    submitting_files = google_gen_test_data()
         for th in self.thread_list:
             th.start()
         semaphoreLock.acquire()

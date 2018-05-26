@@ -14,7 +14,7 @@ from utils import (get_fileinfo_list_from_manifest,
 
 MODE = 'intergration_test'
 if MODE == 'intergration_test':
-    from intergration_test import gen_aws_test_data
+    from intergration_data_test import gen_aws_test_data
 
 logger = get_logger("ReplicationThread")
 
