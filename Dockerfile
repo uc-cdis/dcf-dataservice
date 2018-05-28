@@ -15,8 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     less \
     ssh \
-    wget \
-    boto3
+    wget
     
  COPY . /dcf-dataservice
  WORKDIR /dcf-dataservice
