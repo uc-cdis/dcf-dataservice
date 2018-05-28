@@ -21,7 +21,6 @@ from google_resumable_upload import GCSObjectStreamUpload
 from cdislogging import get_logger
 from settings import PROJECT_MAP
 from utils import (extract_md5_from_text,
-                   get_fileinfo_list_from_manifest,
                    get_bucket_name,
                    get_fileinfo_list_from_manifest)
 
@@ -44,7 +43,7 @@ logger = get_logger("ReplicationThread")
 semaphoreLock = threading.Lock()
 workQueue = Queue.Queue()
 
-def check_bucket_is_exists(bucket_name):
+def check_bucket(bucket_name):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     return bucket.exists()
@@ -79,7 +78,7 @@ def exec_google_copy(threadName, fi, global_config):
     blob_name = fi.get('fileid') + '/' + fi.get('filename')
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
-    if not check_bucket_is_exists(bucket_name):
+    if not check_bucket(bucket_name):
         logger.info("There is no bucket with provided name {}".format(bucket_name))
         return
 
@@ -109,8 +108,6 @@ def resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, glo
     Return: None
 
     """
-    if MODE == 'test':
-        return
 
     start = timeit.default_timer()
     chunk_size = global_config.get('chunk_size', 2048000)
@@ -135,7 +132,9 @@ def resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, glo
         logger.info('status code {} when downloading {} from GDC API'.format(
             response.status_code, fi.get('fileid', "")))
         return
+    streaming(client, response, bucket_name, blob_name)
 
+def streaming(client, response, bucket_name, blob_name):
     num = 0
     with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name) as s:
         for chunk in response.iter_content(chunk_size=chunk_size):

@@ -1,11 +1,13 @@
+import os
 import mock
 from mock import MagicMock
 from mock import patch
 import pytest
-
+import google
 import scripts.replicate
-from scripts.replicate import AWSBucketReplication
-from scripts.replicate import GOOGLEBucketReplication
+from scripts.aws_replicate import AWSBucketReplication
+from scripts.google_replicate import GOOGLEBucketReplication, exec_google_copy, resumable_streaming_copy
+from scripts.google_resumable_upload import GCSObjectStreamUpload
 
 TEST_UUID = '11111111111111111111111111111111'
 TEST_FILENAME = 'test'
@@ -28,52 +30,161 @@ def gen_mock_manifest_data():
 
 @pytest.fixture
 def initialization():
-    scripts.replicate.exitFlag = 0
+    scripts.google_replicate.exitFlag = 0
 
-@patch('scripts.replicate.get_fileinfo_list_from_manifest')
-def test_multithread_google(get_file_from_manifest,monkeypatch):
+
+@patch('scripts.google_replicate.get_fileinfo_list_from_manifest')
+#@patch('scripts..get_fileinfo_list_from_manifest')
+def test_multithread_google(get_file_from_manifest, monkeypatch, initialization):
     monkeypatch.setattr(
-         'scripts.replicate.MODE', 'test')
+         'scripts.google_replicate.MODE', 'test')
+
     get_file_from_manifest.return_value = gen_mock_manifest_data()
-    number_of_threads = 2
-    scripts.replicate.exec_google_copy = MagicMock()
+    number_of_threads = 10
+    scripts.google_replicate.exec_google_copy = MagicMock()
     google = GOOGLEBucketReplication(
          {'token_path': '/test/token.txt', 'chunk_size': 2048000}, 'test', number_of_threads)
+
     google.prepare()
     google.run()
-    assert scripts.replicate.exec_google_copy.called == True
+    assert scripts.google_replicate.exec_google_copy.call_count == 16
 
-#patch('scripts.replicate.AMZBucketReplication.get_submitting_indexd_files')
-#patch('scripts.sync.AMZBucketReplication.get_file_from_uuid')
-#ef test_uuid_not_existed(get_index_uuid, get_submitting_files):
-#   """
-#   in case that uuid is not existed, copy object from backup bucket to dcf bucket and update indexd
-#   """
-#   document = MagicMock()
-#   document.did = TEST_UUID
-#   document.urls = TEST_URL
-#   document.filename = TEST_FILENAME
-#   get_index_uuid.return_value = document
-#   get_submitting_files.return_value = [{'did':TEST_UUID, 'filename': TEST_FILENAME}]
-#
-#   instance = AMZBucketReplication('test1','test2','manifest')
-#   instance.create_index = MagicMock()
-#   instance.call_aws_copy = MagicMock()
-#
-#   instance.run()
-#   assert instance.create_index.called == True
-#   assert instance.call_aws_copy.called == True
-#
-#patch('scripts.sync.AMZBucketReplication.get_fileinfo_list_from_manifest')
-#patch('scripts.sync.AMZBucketReplication.get_file_from_uuid')
-#ef test_uuid_is_existed(get_index_uuid, get_fileinfo_list, monkeypatch):
-#
-#   document = MagicMock()
-#   document.did = TEST_UUID
-#   document.urls = TEST_URL
-#   document.filename = TEST_FILENAME
-#   get_index_uuid.return_value = document
-#   get_fileinfo_list.return_value = [{'did':TEST_UUID, 'filename': TEST_FILENAME}]
-#   instance = AMZBucketReplication('test1','test2','manifest')
-#   submitting_files = instance.get_submitting_indexd_files()
-#   assert len(submitting_files) == 0
+@patch('google.cloud.storage.Client')
+@patch('scripts.google_replicate.check_blob_name_exists_and_match_md5')
+@patch('scripts.google_replicate.check_bucket')
+def test_resumable_streaming_copy_called(mock_check_bucket, mock_check_blob,  mock_client, initialization):
+    mock_check_bucket.return_value = True
+    mock_check_blob.return_value = False
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    exec_google_copy("test",{"fileid":"test_file_id","filename":"test file name"},{})
+    assert scripts.google_replicate.resumable_streaming_copy.called == True
+
+@patch('google.cloud.storage.Client')
+@patch('scripts.google_replicate.check_blob_name_exists_and_match_md5')
+@patch('scripts.google_replicate.check_bucket')
+def test_resumable_streaming_copy_not_called_due_to_existed_blob(mock_check_bucket, mock_check_blob,  mock_client, initialization):
+    mock_check_bucket.return_value = True
+    mock_check_blob.return_value = True
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    exec_google_copy("test",{"fileid":"test_file_id","filename":"test file name"},{})
+    assert scripts.google_replicate.resumable_streaming_copy.called == False
+
+@patch('scripts.google_replicate.check_bucket')
+def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(mock_check_bucket,  initialization):
+    mock_check_bucket.return_value = False
+    google.cloud.storage.Client = MagicMock()
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    exec_google_copy("test",{"fileid":"test_file_id","filename":"test file name"},{})
+    assert scripts.google_replicate.resumable_streaming_copy.called == False
+
+@patch('google.cloud.storage.Client')
+@patch('scripts.google_replicate.check_blob_name_exists_and_match_md5')
+@patch('scripts.google_replicate.check_bucket')
+def test_resumable_streaming_copy_called_one_time(mock_check_bucket, mock_check_blob,  mock_client, initialization):
+    mock_check_bucket.return_value = True
+    mock_check_blob.side_effect = [False, True]
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    exec_google_copy("test",{"fileid":"test_file_id","filename":"test file name"},{})
+    assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
+
+@patch('google.cloud.storage.Client')
+@patch('scripts.google_replicate.check_blob_name_exists_and_match_md5')
+@patch('scripts.google_replicate.check_bucket')
+def test_resumable_streaming_copy_called_two_time(mock_check_bucket, mock_check_blob,  mock_client, initialization):
+    mock_check_bucket.return_value = True
+    mock_check_blob.side_effect = [False, False, True]
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    exec_google_copy("test",{"fileid":"test_file_id","filename":"test file name"},{})
+    assert scripts.google_replicate.resumable_streaming_copy.call_count == 2
+
+@patch('google.cloud.storage.Client')
+@patch('requests.get')
+def test_treamUpload_called(mock_requests_get, mock_client, initialization):
+    class Mock_Requests(object):
+        def __init__(self, _status_code):
+            self.status_code = _status_code
+    mock_value = Mock_Requests(200)
+    mock_requests_get.return_value = mock_value
+    scripts.google_replicate.streaming = MagicMock()
+    resumable_streaming_copy("test",{"fileid":"test_file_id","filename":"test file name"},mock_client, 'bucket_test', 'blob_test', {})
+    scripts.google_replicate.streaming.called == True
+
+
+@patch('google.cloud.storage.Client')
+@patch('requests.get')
+def test_streamUpload_not_called(mock_requests_get, mock_client, initialization):
+    class Mock_Requests(object):
+        def __init__(self, _status_code):
+            self.status_code = _status_code
+    mock_value = Mock_Requests(400)
+    mock_requests_get.return_value = mock_value
+    scripts.google_replicate.streaming = MagicMock()
+    resumable_streaming_copy("test",{"fileid":"test_file_id","filename":"test file name"},mock_client, 'bucket_test', 'blob_test', {})
+    scripts.google_replicate.streaming.called == False
+
+@patch('scripts.aws_replicate.check_bucket')
+def test_call_aws_copy(mock_aws_check_bucket):
+    instance = AWSBucketReplication({})
+    mock_aws_check_bucket.return_value = False
+    instance.get_etag_aws_object = MagicMock()
+    instance.call_aws_copy(gen_mock_manifest_data(), {})
+    assert instance.get_etag_aws_object.called == False
+
+@patch('scripts.aws_replicate.check_object')
+@patch('scripts.aws_replicate.check_bucket')
+def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_check_bucket, mock_aws_check_object):
+    instance = AWSBucketReplication({'chunk_size': 1})
+    mock_aws_check_bucket.return_value = True
+    mock_aws_check_object.side_effect = [False, False]
+
+    os.system = MagicMock()
+    scripts.aws_replicate.get_etag_aws_object = MagicMock()
+    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+    assert os.system.call_count == 0
+    assert scripts.aws_replicate.check_object.call_count == 2
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 1
+
+
+@patch('scripts.aws_replicate.check_object')
+@patch('scripts.aws_replicate.check_bucket')
+def test_call_aws_copy_with_success_upload_first_try(mock_aws_check_bucket, mock_aws_check_object):
+    instance = AWSBucketReplication({'chunk_size': 1})
+    mock_aws_check_bucket.return_value = True
+    mock_aws_check_object.side_effect = [True, True]
+
+    os.system = MagicMock()
+    scripts.aws_replicate.get_etag_aws_object= MagicMock()
+    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, '1223344543t34mt43tb43ofh', '1223344543t34mt43tb43ofh']
+    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+    assert os.system.call_count == 1
+    assert scripts.aws_replicate.check_object.call_count == 2
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+
+@patch('scripts.aws_replicate.check_object')
+@patch('scripts.aws_replicate.check_bucket')
+def test_call_aws_copy_with_success_upload_second_try(mock_aws_check_bucket, mock_aws_check_object):
+    instance = AWSBucketReplication({'chunk_size': 1})
+    mock_aws_check_bucket.return_value = True
+    mock_aws_check_object.side_effect = [True, True]
+    os.system = MagicMock()
+    scripts.aws_replicate.get_etag_aws_object= MagicMock()
+    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, 'wrong hash', '1223344543t34mt43tb43ofh']
+    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+    assert os.system.call_count == 2
+    assert scripts.aws_replicate.check_object.call_count == 2
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+
+@patch('scripts.aws_replicate.check_object')
+@patch('scripts.aws_replicate.check_bucket')
+def test_call_aws_copy_with_success_upload_second_try(mock_aws_check_bucket, mock_aws_check_object):
+    instance = AWSBucketReplication({'chunk_size': 1})
+    mock_aws_check_bucket.return_value = True
+    mock_aws_check_object.side_effect = [True, True]
+    os.system = MagicMock()
+    scripts.aws_replicate.get_etag_aws_object= MagicMock()
+    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, 'wrong hash', 'wrong hash']
+    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+    assert os.system.call_count == 2
+    assert scripts.aws_replicate.check_object.call_count == 2
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+

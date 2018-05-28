@@ -170,15 +170,18 @@ class AWSBucketReplication(object):
                 for fi in files[index:index + number_copying_files]:
                     object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                     if not check_object(s3, global_config.get('from_bucket', ''), object_name):
-                        logger.info('object {} is not existed'.format(object_name))
+                        if turn == 0:
+                            logger.info('object {} is not existed'.format(object_name))
+                        continue
                     etag = get_etag_aws_object(s3, target_bucket, object_name)
                     if etag is None or (etag.lower() != fi.get('hash','').lower()):
                         execstr = execstr + \
                             " --include \"{}\"".format(object_name)
-                os.system(execstr)
-                logger.info(execstr)
+                if execstr != baseCmd:
+                    os.system(execstr)
+                    logger.info(execstr)
 
-            # Log all failure cases here
+            # Log all failure and success cases here
             for fi in files[index:index + number_copying_files]:
                 object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                 etag = get_etag_aws_object(s3, target_bucket, object_name)
@@ -186,7 +189,7 @@ class AWSBucketReplication(object):
                     logger.info(" Can not copy {} to new AWS bucket. Etag {}".format(fi.get('fileid',''), etag))
                     self.totalBytes = self.totalBytes - fi.get('size',0)
                 elif etag:
-                    logger.info(" Finish copy file {} to new AWS bucket". format(fi.get('fileid',''), etag))
+                    logger.info(" Done copying file {} to new AWS bucket". format(fi.get('fileid',''), etag))
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)
             logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 0.001))
 

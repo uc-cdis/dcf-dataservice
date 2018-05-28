@@ -9,7 +9,7 @@ class GCSObjectStreamUpload(object):
             client,
             bucket_name,
             blob_name,
-            chunk_size=2560 * 4*1024
+            chunk_size=256*1024
         ):
         self._client = client
         self._bucket = self._client.bucket(bucket_name)
