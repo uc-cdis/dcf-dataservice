@@ -39,12 +39,12 @@ if __name__ == "__main__":
         aws = AWSBucketReplication(bucket=args.bucket, manifest_file=args.manifest_file, global_config=json.loads(args.global_config))
         aws.run()
     elif args.action == 'google_replicate':
+        # python replicate.py google_replicate --manifest_file ./test --thread_num 4 --global_config '{"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20*1024*1024}'
         google = GOOGLEBucketReplication( global_config=json.loads(args.global_config), manifest_file=args.manifest_file, thread_num=int(args.thread_num))
         google.prepare()
         google.run()
     elif args.action == 'indexd_update_service':
         update_indexd_from_manifest(args.manifest_file)
-
 
     end = timeit.default_timer()
     print('Total time: {} seconds'.format(end-start))

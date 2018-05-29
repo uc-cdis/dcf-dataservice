@@ -28,23 +28,20 @@ DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 
 
 
-global exitFlag
-exitFlag = 0
+global EXIT_FLAG
+EXIT_FLAG = 0
 
-global totalDownloadedBytes
-totalDownloadedBytes = 0
+global TOTAL_DOWNLOADED_BYTES
+TOTAL_DOWNLOADED_BYTES = 0
 
-global aliveThreads
-aliveThreads = 0
+logger = get_logger("GoogleReplicationThread")
 
-logger = get_logger("ReplicationThread")
-
-semaphoreLock = threading.Lock()
+mutexLock = threading.Lock()
 workQueue = Queue.Queue()
 
-def check_bucket(bucket_name):
+def bucket_exists(bucket_name):
     """
-    check if bucket_name is existed or not !
+    check if bucket_name exists  or not !
     """
 
     client = storage.Client()
@@ -53,8 +50,8 @@ def check_bucket(bucket_name):
 
 def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     """
-    require that bucket_name already existed
-    check if blob object is existed or not
+    require that bucket_name has already existed
+    check if blob object exists or not
     Args:
         bucket_name(str): the name of bucket
         blob_name(str): the name of blob
@@ -90,12 +87,12 @@ def exec_google_copy(threadName, fi, global_config):
     blob_name = fi.get('fileid') + '/' + fi.get('filename')
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
-    if not check_bucket(bucket_name):
+    if not bucket_exists(bucket_name):
         logger.info("There is no bucket with provided name {}".format(bucket_name))
         return
 
     if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-	logger.info("object {} is already existed. Not need to re-copy".format(blob_name))
+	logger.info("object {} already exists. Not need to re-copy".format(blob_name))
         return
 
     resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, global_config)
@@ -123,7 +120,8 @@ def resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, glo
     """
 
     start = timeit.default_timer()
-    chunk_size = global_config.get('chunk_size', 2048000)
+    chunk_size_download = global_config.get('chunk_size_download', 2048000)
+    chunk_size_upload = global_config.get('chunk_size_upload', 1024*20*1024)
     data_endpt = DATA_ENDPT + fi.get('fileid', "")
     token = ""
 
@@ -145,9 +143,9 @@ def resumable_streaming_copy(threadName, fi, client, bucket_name, blob_name, glo
         logger.info('status code {} when downloading {} from GDC API'.format(
             response.status_code, fi.get('fileid', "")))
         return
-    streaming(threadName, client, response, bucket_name, chunk_size, blob_name)
+    streaming(threadName, client, response, bucket_name, chunk_size_download, chunk_size_upload, blob_name)
 
-def streaming(threadName, client, response, bucket_name, chunk_size, blob_name):
+def streaming(threadName, client, response, bucket_name, chunk_size_download, chunk_size_upload, blob_name):
     """
     stream the file with google resumable upload
     Args:
@@ -155,7 +153,7 @@ def streaming(threadName, client, response, bucket_name, chunk_size, blob_name):
         client(S3Client): S3 storage client
         response(httpResponse): http response
         bucket_name(str): target google bucket name
-        chunk_size(int): chunk size in bytes
+        chunk_size_download(int): chunk size in bytes from downling data file from GDC
         blob_name(str): object name
     Returns:
         None
@@ -163,31 +161,31 @@ def streaming(threadName, client, response, bucket_name, chunk_size, blob_name):
 
     # keep tract the number of chunks uploaded
     num = 0
-    with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name) as s:
-        for chunk in response.iter_content(chunk_size=chunk_size):
+    with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name, chunk_size=chunk_size_upload) as s:
+        for chunk in response.iter_content(chunk_size=chunk_size_download):
             num = num + 1
             # just for logging
             if num % 100 == 0:
                 logger.info("%s download %f GB\n" %
-                            (threadName, num*1.0*chunk_size/1000/1000/1000))
-                global totalDownloadedBytes
-                semaphoreLock.acquire()
-                totalDownloadedBytes = totalDownloadedBytes + 100*chunk_size
-                semaphoreLock.release()
+                            (threadName, num*1.0*chunk_size_download/1000/1000/1000))
+                global TOTAL_DOWNLOADED_BYTES
+                mutexLock.acquire()
+                TOTAL_DOWNLOADED_BYTES = TOTAL_DOWNLOADED_BYTES + 100*chunk_size_download
+                mutexLock.release()
             if chunk:  # filter out keep-alive new chunks
                 s.write(chunk)
 
 
 def process_data(threadName, global_config, q):
-    while not exitFlag:
-        semaphoreLock.acquire()
+    while not EXIT_FLAG:
+        mutexLock.acquire()
         if not q.empty():
             fi = q.get()
-            semaphoreLock.release()
+            mutexLock.release()
             logger.info("%s processing %s" % (threadName, fi))
             exec_google_copy(threadName, fi, global_config)
         else:
-            semaphoreLock.release()
+            mutexLock.release()
 
 
 class singleThread(threading.Thread):
@@ -200,17 +198,8 @@ class singleThread(threading.Thread):
 
     def run(self):
         logger.info("Starting " + self.name)
-        global aliveThreads
-
-        semaphoreLock.acquire()
-        aliveThreads = aliveThreads + 1
-        semaphoreLock.release()
         process_data(self.threadName, self.global_config, self.q)
         logger.info("\nExiting " + self.name)
-
-        semaphoreLock.acquire()
-        aliveThreads = aliveThreads - 1
-        semaphoreLock.release()
 
 
 class GOOGLEBucketReplication(object):
@@ -232,20 +221,17 @@ class GOOGLEBucketReplication(object):
       	# un-comment this line for generating testing data.
         # This test data contains real uuids and hashes and can be used for replicating
         # GDC data to google bucket
-        # from intergration_data_test import google_gen_test_data
-        # submitting_files = google_gen_test_data()
-	submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        from intergration_data_test import google_gen_test_data
+        submitting_files = google_gen_test_data()
+	#submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
         for th in self.thread_list:
             th.start()
-        semaphoreLock.acquire()
+        mutexLock.acquire()
         for fi in submitting_files:
             workQueue.put(fi)
-        semaphoreLock.release()
+        mutexLock.release()
 
     def run(self):
-
-        global aliveThreads
-        runningThreads = aliveThreads
 
         start = timeit.default_timer()
         # Wait for queue to empty
@@ -254,12 +240,12 @@ class GOOGLEBucketReplication(object):
             running_time = current - start
             if running_time % 10 == 0:
                 logger.info("Total data transfered %f GB" %
-                            (totalDownloadedBytes*1.0/1000/1000/1000))
+                            (TOTAL_DOWNLOADED_BYTES*1.0/1000/1000/1000))
                 logger.info("Times in second {}".format(current - start))
 
         # Notify threads it's time to exit
-        global exitFlag
-        exitFlag = 1
+        global EXIT_FLAG
+        EXIT_FLAG = 1
 
         # Wait for all threads to complete
         for t in self.thread_list:

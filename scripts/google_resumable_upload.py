@@ -1,7 +1,12 @@
+import sys
 from google.auth.transport.requests import AuthorizedSession
 from google.resumable_media import requests, common
 from google.cloud import storage
 import timeit
+
+from cdislogging import get_logger
+
+logger = get_logger("GoogleUploadThread")
 
 class GCSObjectStreamUpload(object):
     def __init__(
@@ -9,8 +14,9 @@ class GCSObjectStreamUpload(object):
             client,
             bucket_name,
             blob_name,
-            chunk_size=256*1024
+            chunk_size=2560*8*1024
         ):
+
         self._client = client
         self._bucket = self._client.bucket(bucket_name)
         self._blob = self._bucket.blob(blob_name)
@@ -26,7 +32,11 @@ class GCSObjectStreamUpload(object):
         self._request = None  # type: requests.ResumableUpload
 
     def __enter__(self):
-        self.start()
+        try:
+            self.start()
+        except ValueError as e:
+            logger.info("Error " + str(e))
+            raise SystemExit
         return self
 
     def __exit__(self, exc_type, *_):

@@ -7,8 +7,8 @@ from cdislogging import get_logger
 from indexclient.client import IndexClient
 
 from utils import get_fileinfo_list_from_manifest, get_bucket_name
-from aws_replicate import check_bucket as aws_check_bucket, check_object as aws_check_object
-from google_replicate import check_bucket as gs_check_bucket, check_blob_name_exists_and_match_md5 as gs_check_object
+from aws_replicate import bucket_exists as aws_bucket_exists, object_exists as aws_object_exists
+from google_replicate import bucket_exists as gs_bucket_exists, check_blob_name_exists_and_match_md5 as gs_object_exists
 from settings import SIGNPOST, PROJECT_MAP
 
 
@@ -36,27 +36,27 @@ def update_indexd_from_manifest(manifest_file):
         if doc is not None:
             logger.info("document with uuid {} already existed")
             continue
-        urls = ['https://gov', ]
+        urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
         gonna_add_s3_loc = True
         gonna_add_gs_loc = True
 
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
 
-        if not aws_check_bucket(s3, s3_bucket_name):
+        if not aws_bucket_exists(s3, s3_bucket_name):
             logger.info("aws bucket {} is not existed".format(s3_bucket_name))
             gonna_add_s3_loc = False
-        if not aws_check_object(s3, s3_bucket_name, s3_object_name):
+        if not aws_object_exists(s3, s3_bucket_name, s3_object_name):
             logger.info("aws object {} is not existed".format(s3_object_name))
             gonna_add_s3_loc = False
 
         gs_bucket_name = s3_bucket_name
         gs_object_name = s3_object_name
 
-        if not gs_check_bucket(gs_bucket_name):
+        if not gs_bucket_exists(gs_bucket_name):
             logger.info("gcs bucket {} is not existed".format(gs_bucket_name))
             gonna_add_gs_loc = False
-        if not gs_check_object(gs_bucket_name, gs_object_name, fi):
+        if not gs_object_exists(gs_bucket_name, gs_object_name, fi):
             logger.info("gcs object {} is not existed".format(gs_object_name))
             gonna_add_gs_loc = False
 

@@ -59,7 +59,17 @@ def get_fileinfo_list_from_manifest(manifest_file):
     l = []
     try:
         with open(manifest_file,'r') as f:
-            f.read()
+            content = f.readlines()
+            headers = content[0].replace("\r","").replace("\n","").split('\t')
+            for row in content[1:]:
+                dictionary = dict()
+                values = row.replace("\r","").replace("\n","").split('\t')
+                dictionary = dict(zip(headers, values))
+                dictionary['size'] = int(dictionary['size'])
+                l.append(dictionary)
+
+            return l
+
     except IOError as e:
         print("File {} is not existed".format(manifest_file))
     return l

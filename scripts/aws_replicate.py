@@ -12,14 +12,14 @@ from utils import (get_fileinfo_list_from_manifest,
 
 logger = get_logger("AWSReplication")
 
-def check_bucket(s3, bucket_name):
+def bucket_exists(s3, bucket_name):
     """
-    check if the bucket is exists or not
+    check if the bucket exists or not
     Args:
         s3(s3client): s3 client
         bucket_name: the name of bucket
     Returns:
-        bool: indicate value
+        bool: bucket exists or not
     Side effects:
         log if no access and no bucket
     """
@@ -30,22 +30,21 @@ def check_bucket(s3, bucket_name):
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response['Error']['Code'])
         if error_code == 403:
-            logger,info("Private Bucket. Forbidden Access!")
+            logger.info("Private Bucket. Forbidden Access!")
             return True
         elif error_code == 404:
             logger.info("Bucket {} Does Not Exist!".format(bucket_name))
             return False
 
-def check_object(s3, bucket_name, key):
+def object_exists(s3, bucket_name, key):
     """
-    check if object is existed or not
-    pre-condition: bucket_name should be existed
+    check if object exists or not
     Args:
         s3(s3client): s3 client
         bucket_name(str): the name of the bucket
         key(str): object key
     Returns:
-        bool: indicate the object is existed or not
+        bool: object exists or not
     Side effect:
         Log in case that no access provided
     """
@@ -55,7 +54,7 @@ def check_object(s3, bucket_name, key):
     except botocore.exceptions.ClientError as e:
          error_code = int(e.response['Error']['Code'])
          if error_code == 403:
-             logger,info("Private object. Forbidden Access!")
+             logger.info("Private object. Forbidden Access!")
              return True
          elif error_code == 404:
              return False
@@ -150,7 +149,7 @@ class AWSBucketReplication(object):
         chunk_size = global_config.get('chunk_size',1)
         target_bucket = get_bucket_name(files[0], PROJECT_MAP)
         s3  = boto3.resource('s3')
-        if not check_bucket(s3, target_bucket):
+        if not bucket_exists(s3, target_bucket):
             # log and return. See the function for detail
             return
 
@@ -166,9 +165,9 @@ class AWSBucketReplication(object):
                 execstr = baseCmd
                 for fi in files[index:index + number_copying_files]:
                     object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-                    if not check_object(s3, self.bucket, object_name):
+                    if not object_exists(s3, self.bucket, object_name):
                         if turn == 0:
-                            logger.info('object {} is not existed'.format(object_name))
+                            logger.info('object {} does not exist'.format(object_name))
                         continue
                     etag = get_etag_aws_object(s3, target_bucket, object_name)
                     if etag is None or (etag.lower() != fi.get('hash','').lower()):
