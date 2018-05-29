@@ -28,7 +28,7 @@ def get_file_from_uuid(uuid):
 def create_index(**kwargs):
     return indexclient.create(**kwargs)
 
-def update_indexd_from_manifest(manifest_file, aws_bucket_name)
+def update_indexd_from_manifest(manifest_file):
     submitting_files = get_fileinfo_list_from_manifest(manifest_file)
     s3 = boto3.resource('s3')
     for fi in submitting_files:

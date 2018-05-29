@@ -34,11 +34,7 @@ def initialization():
 
 
 @patch('scripts.google_replicate.get_fileinfo_list_from_manifest')
-#@patch('scripts..get_fileinfo_list_from_manifest')
-def test_multithread_google(get_file_from_manifest, monkeypatch, initialization):
-    monkeypatch.setattr(
-         'scripts.google_replicate.MODE', 'test')
-
+def test_multithread_google(get_file_from_manifest, initialization):
     get_file_from_manifest.return_value = gen_mock_manifest_data()
     number_of_threads = 10
     scripts.google_replicate.exec_google_copy = MagicMock()
@@ -124,7 +120,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client, initialization)
 
 @patch('scripts.aws_replicate.check_bucket')
 def test_call_aws_copy(mock_aws_check_bucket):
-    instance = AWSBucketReplication({})
+    instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={})
     mock_aws_check_bucket.return_value = False
     instance.get_etag_aws_object = MagicMock()
     instance.call_aws_copy(gen_mock_manifest_data(), {})
@@ -133,7 +129,7 @@ def test_call_aws_copy(mock_aws_check_bucket):
 @patch('scripts.aws_replicate.check_object')
 @patch('scripts.aws_replicate.check_bucket')
 def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_check_bucket, mock_aws_check_object):
-    instance = AWSBucketReplication({'chunk_size': 1})
+    instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_check_bucket.return_value = True
     mock_aws_check_object.side_effect = [False, False]
 
@@ -148,7 +144,7 @@ def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_check_bucket, mo
 @patch('scripts.aws_replicate.check_object')
 @patch('scripts.aws_replicate.check_bucket')
 def test_call_aws_copy_with_success_upload_first_try(mock_aws_check_bucket, mock_aws_check_object):
-    instance = AWSBucketReplication({'chunk_size': 1})
+    instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_check_bucket.return_value = True
     mock_aws_check_object.side_effect = [True, True]
 
@@ -163,7 +159,7 @@ def test_call_aws_copy_with_success_upload_first_try(mock_aws_check_bucket, mock
 @patch('scripts.aws_replicate.check_object')
 @patch('scripts.aws_replicate.check_bucket')
 def test_call_aws_copy_with_success_upload_second_try(mock_aws_check_bucket, mock_aws_check_object):
-    instance = AWSBucketReplication({'chunk_size': 1})
+    instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_check_bucket.return_value = True
     mock_aws_check_object.side_effect = [True, True]
     os.system = MagicMock()
@@ -177,7 +173,7 @@ def test_call_aws_copy_with_success_upload_second_try(mock_aws_check_bucket, moc
 @patch('scripts.aws_replicate.check_object')
 @patch('scripts.aws_replicate.check_bucket')
 def test_call_aws_copy_with_success_upload_second_try(mock_aws_check_bucket, mock_aws_check_object):
-    instance = AWSBucketReplication({'chunk_size': 1})
+    instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_check_bucket.return_value = True
     mock_aws_check_object.side_effect = [True, True]
     os.system = MagicMock()

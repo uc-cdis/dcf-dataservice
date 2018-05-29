@@ -8,15 +8,9 @@ import boto3, botocore
 from cdislogging import get_logger
 from settings import PROJECT_MAP
 from utils import (get_fileinfo_list_from_manifest,
-                   get_bucket_name,
-                   get_fileinfo_list_from_manifest)
+                   get_bucket_name)
 
-
-MODE = 'intergration_test'
-if MODE == 'intergration_test':
-    from intergration_data_test import gen_aws_test_data
-
-logger = get_logger("ReplicationThread")
+logger = get_logger("AWSReplication")
 
 def check_bucket(s3, bucket_name):
     """
@@ -90,7 +84,9 @@ def get_etag_aws_object(s3, bucket_name, key):
 
 class AWSBucketReplication(object):
 
-    def __init__(self, global_config):
+    def __init__(self, bucket, manifest_file, global_config):
+        self.bucket = bucket
+        self.manifest_file = manifest_file
         self.global_config = global_config
         self.totalBytes = 0
         self.totalDownloadedBytes = 0
@@ -104,10 +100,12 @@ class AWSBucketReplication(object):
         Returns:
             dict: each value corresponding to a list of file info. Key is only for indexing
         """
-        if MODE == 'intergration_test':
-            submitting_files = gen_aws_test_data()
-        else:
-            submitting_files = get_fileinfo_list_from_manifest(self.global_config.get('manifest_file',''))
+        # un-comment those lines for generating testing data.
+        # This test data contains real uuids and hashes and can be used for replicating
+        # aws bucket to aws bucket
+        # from intergration_data_test import gen_aws_test_data
+        # submitting_files = gen_aws_test_data()
+        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
 
         project_set = set()
         for fi in submitting_files:
@@ -157,8 +155,7 @@ class AWSBucketReplication(object):
             return
 
         while index < len(files):
-            baseCmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(
-                    global_config.get('from_bucket', ''), target_bucket)
+            baseCmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(self.bucket, target_bucket)
 
             number_copying_files = min(chunk_size, len(files) - index)
 
@@ -169,7 +166,7 @@ class AWSBucketReplication(object):
                 execstr = baseCmd
                 for fi in files[index:index + number_copying_files]:
                     object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-                    if not check_object(s3, global_config.get('from_bucket', ''), object_name):
+                    if not check_object(s3, self.bucket, object_name):
                         if turn == 0:
                             logger.info('object {} is not existed'.format(object_name))
                         continue
