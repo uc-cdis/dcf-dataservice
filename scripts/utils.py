@@ -60,6 +60,8 @@ def get_fileinfo_list_from_manifest(manifest_file):
     try:
         with open(manifest_file,'r') as f:
             content = f.readlines()
+            if len(content) <= 1:
+                return l
             headers = content[0].replace("\r","").replace("\n","").split('\t')
             for row in content[1:]:
                 dictionary = dict()

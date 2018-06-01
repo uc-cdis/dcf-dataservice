@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import timeit
+import subprocess
+import shlex
 
 import boto3, botocore
 
@@ -102,9 +104,9 @@ class AWSBucketReplication(object):
         # un-comment those lines for generating testing data.
         # This test data contains real uuids and hashes and can be used for replicating
         # aws bucket to aws bucket
-        # from intergration_data_test import gen_aws_test_data
-        # submitting_files = gen_aws_test_data()
-        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        from intergration_data_test import gen_aws_test_data
+        submitting_files = gen_aws_test_data()
+        #submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
 
         project_set = set()
         for fi in submitting_files:
@@ -154,7 +156,7 @@ class AWSBucketReplication(object):
             return
 
         while index < len(files):
-            baseCmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(self.bucket, target_bucket)
+            base_cmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(self.bucket, target_bucket)
 
             number_copying_files = min(chunk_size, len(files) - index)
 
@@ -162,28 +164,29 @@ class AWSBucketReplication(object):
             # the system runs the below code two times, checking for the etag is performed for each time.
             # The system will log all the file with failure copy in the next step
             for turn in xrange(0,2):
-                execstr = baseCmd
+                execstr = base_cmd
                 for fi in files[index:index + number_copying_files]:
                     object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+                    source_etag = get_etag_aws_object(s3, self.bucket, object_name)
                     if not object_exists(s3, self.bucket, object_name):
                         if turn == 0:
                             logger.info('object {} does not exist'.format(object_name))
                         continue
                     etag = get_etag_aws_object(s3, target_bucket, object_name)
-                    if etag is None or (etag.lower() != fi.get('hash','').lower()):
-                        execstr = execstr + \
-                            " --include \"{}\"".format(object_name)
-                if execstr != baseCmd:
-                    os.system(execstr)
+                    #if etag is None or (etag.lower() != fi.get('hash','').lower()):
+                    if etag is None or (etag != source_etag):
+                        execstr += " --include \"{}\"".format(object_name)
+                if execstr != base_cmd:
+                    subprocess.Popen(shlex.split(execstr)).wait()
                     logger.info(execstr)
 
             # Log all failure and success cases here
             for fi in files[index:index + number_copying_files]:
                 object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                 etag = get_etag_aws_object(s3, target_bucket, object_name)
-                if etag is None or (etag.lower() != fi.get('hash','').lower()):
+                if etag is None or (etag != source_etag):
                     logger.info(" Can not copy {} to new AWS bucket. Etag {}".format(fi.get('fileid',''), etag))
-                    self.totalBytes = self.totalBytes - fi.get('size',0)
+                    self.totalBytes -= fi.get('size',0)
                 elif etag:
                     logger.info(" Done copying file {} to new AWS bucket". format(fi.get('fileid',''), etag))
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)

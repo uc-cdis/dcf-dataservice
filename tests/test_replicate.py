@@ -1,4 +1,5 @@
 import os
+import subprocess
 import mock
 from mock import MagicMock
 from mock import patch
@@ -16,7 +17,7 @@ TEST_URL = ['test_url1', 'test_url2']
 
 def gen_mock_manifest_data():
     fake = {
-        'did': '11111111111111111',
+        'fileid': '11111111111111111',
         'filename': 'abc.bam',
         'size': 1,
         'hash': '1223344543t34mt43tb43ofh',
@@ -133,12 +134,12 @@ def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_bucket_exists, m
     mock_aws_bucket_exists.return_value = True
     mock_aws_object_exists.side_effect = [False, False]
 
-    os.system = MagicMock()
+    subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object = MagicMock()
     instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert os.system.call_count == 0
+    assert subprocess.Popen.call_count == 0
     assert scripts.aws_replicate.object_exists.call_count == 2
-    assert scripts.aws_replicate.get_etag_aws_object.call_count == 1
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
 
 
 @patch('scripts.aws_replicate.object_exists')
@@ -148,13 +149,13 @@ def test_call_aws_copy_with_success_upload_first_try(mock_aws_bucket_exists, moc
     mock_aws_bucket_exists.return_value = True
     mock_aws_object_exists.side_effect = [True, True]
 
-    os.system = MagicMock()
+    subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object= MagicMock()
-    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, '1223344543t34mt43tb43ofh', '1223344543t34mt43tb43ofh']
+    scripts.aws_replicate.get_etag_aws_object.side_effect = ['original etag', None, 'original etag', 'original etag', 'original etag']
     instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert os.system.call_count == 1
+    assert subprocess.Popen.call_count == 1
     assert scripts.aws_replicate.object_exists.call_count == 2
-    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 5
 
 @patch('scripts.aws_replicate.object_exists')
 @patch('scripts.aws_replicate.bucket_exists')
@@ -162,25 +163,25 @@ def test_call_aws_copy_with_success_upload_second_try(mock_aws_bucket_exists, mo
     instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_bucket_exists.return_value = True
     mock_aws_object_exists.side_effect = [True, True]
-    os.system = MagicMock()
+    subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object= MagicMock()
-    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, 'wrong hash', '1223344543t34mt43tb43ofh']
+    scripts.aws_replicate.get_etag_aws_object.side_effect = ['original etag', None, 'original etag', 'wrong hash', 'original etag']
     instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert os.system.call_count == 2
+    assert subprocess.Popen.call_count == 2
     assert scripts.aws_replicate.object_exists.call_count == 2
-    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 5
 
 @patch('scripts.aws_replicate.object_exists')
 @patch('scripts.aws_replicate.bucket_exists')
-def test_call_aws_copy_with_success_upload_second_try(mock_aws_bucket_exists, mock_aws_object_exists):
+def test_call_aws_copy_with_fail_upload_second_try(mock_aws_bucket_exists, mock_aws_object_exists):
     instance = AWSBucketReplication(bucket='test_bucket', manifest_file = 'test_manifest', global_config={'chunk_size': 1})
     mock_aws_bucket_exists.return_value = True
     mock_aws_object_exists.side_effect = [True, True]
-    os.system = MagicMock()
+    subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object= MagicMock()
-    scripts.aws_replicate.get_etag_aws_object.side_effect = [None, 'wrong hash', 'wrong hash']
+    scripts.aws_replicate.get_etag_aws_object.side_effect = ['original etag', None, 'original etag', 'wrong hash', 'wrong hash', 'wrong hash']
     instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert os.system.call_count == 2
+    assert subprocess.Popen.call_count == 2
     assert scripts.aws_replicate.object_exists.call_count == 2
-    assert scripts.aws_replicate.get_etag_aws_object.call_count == 3
+    assert scripts.aws_replicate.get_etag_aws_object.call_count == 5
 
