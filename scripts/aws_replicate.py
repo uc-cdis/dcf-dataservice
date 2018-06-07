@@ -104,9 +104,9 @@ class AWSBucketReplication(object):
         # un-comment those lines for generating testing data.
         # This test data contains real uuids and hashes and can be used for replicating
         # aws bucket to aws bucket
-        from intergration_data_test import gen_aws_test_data
-        submitting_files = gen_aws_test_data()
-        #submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        #from intergration_data_test import gen_aws_test_data
+        #submitting_files = gen_aws_test_data()
+        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
 
         project_set = set()
         for fi in submitting_files:
@@ -161,20 +161,20 @@ class AWSBucketReplication(object):
             number_copying_files = min(chunk_size, len(files) - index)
 
             # According to AWS document, copying failure is very rare. In order to handle the failure case,
-            # the system runs the below code two times, checking for the etag is performed for each time.
+            # the system runs the below code two times, checking if the object is existed in the target bucket,
+            # The key idea is AWS internally handle the copying process, if the object exists in the target bucket
+            # that means success otherwise failure
             # The system will log all the file with failure copy in the next step
+
             for turn in xrange(0,2):
                 execstr = base_cmd
                 for fi in files[index:index + number_copying_files]:
                     object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-                    source_etag = get_etag_aws_object(s3, self.bucket, object_name)
                     if not object_exists(s3, self.bucket, object_name):
                         if turn == 0:
                             logger.info('object {} does not exist'.format(object_name))
                         continue
-                    etag = get_etag_aws_object(s3, target_bucket, object_name)
-                    #if etag is None or (etag.lower() != fi.get('hash','').lower()):
-                    if etag is None or (etag != source_etag):
+                    if not object_exists(s3, target_bucket, object_name):
                         execstr += " --include \"{}\"".format(object_name)
                 if execstr != base_cmd:
                     subprocess.Popen(shlex.split(execstr)).wait()
@@ -183,14 +183,13 @@ class AWSBucketReplication(object):
             # Log all failure and success cases here
             for fi in files[index:index + number_copying_files]:
                 object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-                etag = get_etag_aws_object(s3, target_bucket, object_name)
-                if etag is None or (etag != source_etag):
-                    logger.info(" Can not copy {} to new AWS bucket. Etag {}".format(fi.get('fileid',''), etag))
+                if not object_exists(s3, target_bucket, object_name):
+                    logger.info(" Can not copy {}/{} to new AWS bucket.".format(fi.get('fileid',''), fi.get('filename','')))
                     self.totalBytes -= fi.get('size',0)
-                elif etag:
-                    logger.info(" Done copying file {} to new AWS bucket". format(fi.get('fileid',''), etag))
+                else:
+                    logger.info(" Done copying file {}/{} to new AWS bucket". format(fi.get('fileid',''), fi.get('filename','')))
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)
-            logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 0.001))
+            logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 1.0e-6))
 
             index = index + number_copying_files
 

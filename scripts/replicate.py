@@ -35,7 +35,7 @@ if __name__ == "__main__":
     start = timeit.default_timer()
     args = parse_arguments()
     if args.action == 'aws_replicate':
-        # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./test --global_config '{"chunk_size": 4}'
+        # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 4}'
         aws = AWSBucketReplication(bucket=args.bucket, manifest_file=args.manifest_file, global_config=json.loads(args.global_config))
         aws.run()
     elif args.action == 'google_replicate':

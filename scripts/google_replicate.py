@@ -27,7 +27,6 @@ from utils import (extract_md5_from_text,
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 
 
-
 global EXIT_FLAG
 EXIT_FLAG = 0
 
@@ -221,9 +220,9 @@ class GOOGLEBucketReplication(object):
       	# un-comment this line for generating testing data.
         # This test data contains real uuids and hashes and can be used for replicating
         # GDC data to google bucket
-        from intergration_data_test import google_gen_test_data
-        submitting_files = google_gen_test_data()
-	#submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        #from intergration_data_test import google_gen_test_data
+        #submitting_files = google_gen_test_data()
+	submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
         for th in self.thread_list:
             th.start()
         mutexLock.acquire()
