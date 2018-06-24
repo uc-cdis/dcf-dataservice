@@ -1,6 +1,7 @@
 from binascii import unhexlify, hexlify
 import base64
 import re
+import argparse
 
 def Base64ToHexHash(base64_hash):
     return hexlify(base64.decodestring(base64_hash.strip('\n"\'')))
@@ -41,6 +42,18 @@ def extract_md5_from_text(text):
     else:
         return None
 
+def get_headers(manifest_file):
+    try:
+        with open(manifest_file,'r') as f:
+            content = f.readlines()
+            if len(content) <= 1:
+                return []
+            return content[0].replace("\r","").replace("\n","").split('\t')
+
+    except IOError as e:
+         print("File {} is not existed".format(manifest_file))
+    return []
+
 def get_fileinfo_list_from_manifest(manifest_file):
     """
     get list of dictionaries from manifest file.
@@ -76,3 +89,35 @@ def get_fileinfo_list_from_manifest(manifest_file):
         print("File {} is not existed".format(manifest_file))
     return l
 
+def split_manifest_file(manifest_file, file_nums=1):
+    headers = get_headers(manifest_file)
+    rows = get_fileinfo_list_from_manifest(manifest_file)
+    nrow_in_subfile = len(rows)/file_nums
+    file_index = 0
+    for file_index in xrange(0, file_nums):
+        sub_rows = []
+        if file_index < file_nums - 1:
+            sub_rows = rows[file_index*nrow_in_subfile:(file_index+1)*nrow_in_subfile]
+        else:
+            sub_rows = rows[file_index*nrow_in_subfile:]
+
+        new_filename = '{}_{}'.format(manifest_file, file_index)
+        with open(new_filename,'w') as writer:
+            writer.write('{}\t{}\t{}\t{}\t{}\t{}'.format(headers[0], headers[1], headers[2], headers[3], headers[4], headers[5]))
+            for row in sub_rows:
+                writer.write('{}\t{}\t{}\t{}\t{}\t{}'.format(row.get(headers[0]), row.get(headers[1]), row.get(headers[2]), row.get(headers[3]), row.get(headers[4]), row.get(headers[5])))
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title='action', dest='action')
+
+    aws_replicate_cmd = subparsers.add_parser('split')
+    aws_replicate_cmd.add_argument('--filename', required=True)
+    aws_replicate_cmd.add_argument('--num', required=True)
+    args = parser.parse_args()
+
+    if args.action == 'split':
+        split_manifest_file(args.filename, int(args.num))
+
+if __name__ == '__main__':
+    main()

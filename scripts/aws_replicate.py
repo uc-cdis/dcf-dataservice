@@ -8,11 +8,17 @@ import shlex
 import boto3, botocore
 
 from cdislogging import get_logger
-from settings import PROJECT_MAP
+from indexclient.client import IndexClient
+
+from settings import PROJECT_MAP, SIGNPOST
 from utils import (get_fileinfo_list_from_manifest,
                    get_bucket_name)
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
 logger = get_logger("AWSReplication")
+
+indexclient = IndexClient(SIGNPOST['host'], SIGNPOST['version'], SIGNPOST['auth'])
 
 def bucket_exists(s3, bucket_name):
     """
@@ -135,6 +141,33 @@ class AWSBucketReplication(object):
         for _, files in file_grp.iteritems():
             self.call_aws_copy(files, self.global_config)
 
+    def update_indexd(self, fi):
+        """
+        """
+        s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
+        s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+
+        doc = get_file_from_uuid(fi.get('fileid',''))
+        if doc is not None:
+            if s3_object_name in doc.urls:
+                return
+            doc.urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
+            doc.patch()
+
+        urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
+
+        if object_exists(s3, s3_bucket_name, s3_object_name):
+            urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
+
+        doc = create_index(did=fi.get('fileid',''),
+                           hashes=fi.get('hash',''),
+                           size=fi.get('size',0),
+                           urls=urls)
+        if doc is None:
+            logger.info("successfuly create an record with uuid {}".format(fi.get('fileid','')))
+        else:
+            logger.info("fail to create an record with uuid {}".format(fi.get('fileid','')))
+
     def call_aws_copy(self, files, global_config):
         """
         Call AWS SLI to copy a chunk of  files from a bucket to another bucket.
@@ -148,13 +181,14 @@ class AWSBucketReplication(object):
             None
         """
         index = 0
-        chunk_size = global_config.get('chunk_size',1)
+        chunk_size = global_config.get('chunk_size', 1)
         target_bucket = get_bucket_name(files[0], PROJECT_MAP)
         s3  = boto3.resource('s3')
         if not bucket_exists(s3, target_bucket):
             # log and return. See the function for detail
             return
 
+        failure_cases = []
         while index < len(files):
             base_cmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(self.bucket, target_bucket)
 
@@ -187,9 +221,21 @@ class AWSBucketReplication(object):
                     logger.info(" Can not copy {}/{} to new AWS bucket.".format(fi.get('fileid',''), fi.get('filename','')))
                     self.totalBytes -= fi.get('size',0)
                 else:
+                    urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
                     logger.info(" Done copying file {}/{} to new AWS bucket". format(fi.get('fileid',''), fi.get('filename','')))
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)
             logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 1.0e-6))
 
             index = index + number_copying_files
 
+        logger.info("Store all uuids that can not be copied")
+        filename = os.path.join(dir_path,'fail_copy.txt')
+        with open(filename,'w') as writer:
+            writer.write('fileid\tfilename\tsize\thash\tacl\tproject')
+            for fi in failure_cases:
+                writer.write('{}\t{}\t{}\t{}\t{}\t{}'.format(fi.get('fileid',''), fi.get('filename',''), fi.get('size',0), fi.get('hash',''), fi.get('acl','*'), fi.get('project','')))
+        # upload to s3
+        log_bucket = global_config.get('log_bucket','')
+        if log_bucket != '':
+            cmd = "aws s3 cp {} s3://{}".format(filename, log_bucket)
+            subprocess.Popen(shlex.split(cmd)).wait()

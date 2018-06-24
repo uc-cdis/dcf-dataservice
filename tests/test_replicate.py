@@ -44,7 +44,7 @@ def test_multithread_google(get_file_from_manifest, initialization):
 
     google.prepare()
     google.run()
-    assert scripts.google_replicate.exec_google_copy.call_count == 9
+    assert scripts.google_replicate.exec_google_copy.call_count == 16
 
 @patch('google.cloud.storage.Client')
 @patch('scripts.google_replicate.check_blob_name_exists_and_match_md5')
