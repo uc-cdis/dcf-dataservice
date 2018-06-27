@@ -85,3 +85,6 @@ def run(argv=None):
   prog = p.run()
   prog.wait_until_finish()
 
+if __name__ == '__main__':
+  logging.getLogger().setLevel(logging.INFO)
+  run()
