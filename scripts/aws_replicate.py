@@ -234,7 +234,7 @@ class AWSBucketReplication(object):
             writer.write('fileid\tfilename\tsize\thash\tacl\tproject')
             for fi in failure_cases:
                 writer.write('{}\t{}\t{}\t{}\t{}\t{}'.format(fi.get('fileid',''), fi.get('filename',''), fi.get('size',0), fi.get('hash',''), fi.get('acl','*'), fi.get('project','')))
-        # upload to s3
+        # upload manifest file to s3
         log_bucket = global_config.get('log_bucket','')
         if log_bucket != '':
             cmd = "aws s3 cp {} s3://{}".format(filename, log_bucket)
