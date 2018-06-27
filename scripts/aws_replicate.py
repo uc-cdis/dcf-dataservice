@@ -112,7 +112,7 @@ class AWSBucketReplication(object):
         # aws bucket to aws bucket
         #from intergration_data_test import gen_aws_test_data
         #submitting_files = gen_aws_test_data()
-        submitting_files = get_fileinfo_list_from_manifest(self.manifest_file)
+        submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
 
         project_set = set()
         for fi in submitting_files:
@@ -149,10 +149,10 @@ class AWSBucketReplication(object):
 
         doc = get_file_from_uuid(fi.get('fileid',''))
         if doc is not None:
-            if s3_object_name in doc.urls:
-                return
-            doc.urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
-            doc.patch()
+            if s3_object_name not in doc.urls:
+                doc.urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
+                doc.patch()
+            return
 
         urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
 

@@ -43,6 +43,7 @@ RUN export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
         google-cloud-sdk-pubsub-emulator \
         google-cloud-sdk-bigtable-emulator \
         google-cloud-sdk-cbt \
+        google-cloud-dataflow \
         kubectl && \
     gcloud config set core/disable_usage_reporting true && \
     gcloud config set component_manager/disable_update_check true && \
