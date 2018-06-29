@@ -10,7 +10,7 @@ import boto3, botocore
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from settings import PROJECT_MAP, SIGNPOST
+from settings import PROJECT_MAP, INDEXD
 from utils import (get_fileinfo_list_from_manifest,
                    get_bucket_name)
 
@@ -18,7 +18,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 logger = get_logger("AWSReplication")
 
-indexclient = IndexClient(SIGNPOST['host'], SIGNPOST['version'], SIGNPOST['auth'])
+indexclient = IndexClient(INDEXD['host'], INDEXD['version'], INDEXD['auth'])
 
 def bucket_exists(s3, bucket_name):
     """
@@ -147,7 +147,7 @@ class AWSBucketReplication(object):
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
 
-        doc = get_file_from_uuid(fi.get('fileid',''))
+        doc = indexclient.get(fi.get('fileid',''))
         if doc is not None:
             if s3_object_name not in doc.urls:
                 doc.urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
@@ -159,7 +159,7 @@ class AWSBucketReplication(object):
         if object_exists(s3, s3_bucket_name, s3_object_name):
             urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
 
-        doc = create_index(did=fi.get('fileid',''),
+        doc = indexclient.create(did=fi.get('fileid',''),
                            hashes=fi.get('hash',''),
                            size=fi.get('size',0),
                            urls=urls)
@@ -223,6 +223,10 @@ class AWSBucketReplication(object):
                 else:
                     urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
                     logger.info(" Done copying file {}/{} to new AWS bucket". format(fi.get('fileid',''), fi.get('filename','')))
+                    try:
+                        self.update_indexd(fi)
+                    except Exception as e:
+                        logger.info(e)
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)
             logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 1.0e-6))
 

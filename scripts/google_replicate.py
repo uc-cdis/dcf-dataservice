@@ -14,16 +14,18 @@ import google
 from google.cloud import storage
 from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
-
 import logging as logger
-from settings import PROJECT_MAP
+
+from indexclient.client import IndexClient
+from settings import PROJECT_MAP, INDEXD
 from utils import (extract_md5_from_text,
                    get_bucket_name)
+
+indexclient = IndexClient(INDEXD['host'], INDEXD['version'], INDEXD['auth'])
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024*20*1024
-
 
 FAIL = False
 SUCCESS = True
@@ -65,6 +67,32 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
             return md5_hash == fi.get('hash', '').lower()
     return False
 
+def update_indexd(fi):
+    """
+    """
+    gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
+    gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+    doc = indexclient.get(fi.get('fileid',''))
+
+    if doc is not None:
+        if gs_object_name not in doc.urls:
+            doc.urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
+            doc.patch()
+        return
+
+    urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
+
+    if object_exists(gs, gs_bucket_name, gs_object_name):
+        urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
+    doc = indexclient.create(did=fi.get('fileid',''),
+                             hashes=fi.get('hash',''),
+                             size=fi.get('size',0),
+                             urls=urls)
+    if doc is None:
+        logger.info("successfuly create an record with uuid {}".format(fi.get('fileid','')))
+    else:
+        logger.info("fail to create an record with uuid {}".format(fi.get('fileid','')))
+
 def exec_google_copy(fi, global_config):
     """
     copy a file to google bucket.
@@ -74,7 +102,6 @@ def exec_google_copy(fi, global_config):
     Returns:
         None
     """
-
     client = storage.Client()
     blob_name = fi.get('fileid') + '/' + fi.get('filename')
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
@@ -91,17 +118,19 @@ def exec_google_copy(fi, global_config):
     # check if object is copied correctly by comparing md5 hash
     if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         logger.info("object {} successfully copied ".format(blob_name))
-        return SUCCESS
     else:
         # try to re-copy the file
 	resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
 	if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
 	    logger.info("object {} successfully copied ".format(blob_name))
-            return SUCCESS
 	else:
             # log the failure case
 	    logger.info("can not copy {} to GOOGLE bucket".format(blob_name))
             return FAIL
+    try:
+        update_indexd(fi)
+    except Exception as e:
+        logger.info(e)
     return SUCCESS
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):

@@ -79,7 +79,7 @@ def test_resumable_streaming_copy_called_two_time(mock_bucket_exists, mock_check
 
 @patch('google.cloud.storage.Client')
 @patch('requests.get')
-def test_treamUpload_called(mock_requests_get, mock_client):
+def test_streamUpload_called(mock_requests_get, mock_client):
     class Mock_Requests(object):
         def __init__(self, _status_code):
             self.status_code = _status_code
@@ -143,6 +143,7 @@ def test_call_aws_copy_with_success_upload_second_try(mock_aws_bucket_exists, mo
     mock_aws_bucket_exists.return_value = True
     mock_aws_object_exists.side_effect = [True, False, True, False, True]
     subprocess.Popen = MagicMock()
+
     scripts.aws_replicate.get_etag_aws_object= MagicMock()
     instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
     assert subprocess.Popen.call_count == 2

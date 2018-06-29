@@ -2,7 +2,7 @@ import os
 import json
 
 # Signpost
-SIGNPOST = {
+INDEXD = {
   'host': 'http://localhost:8000',
   'version': 'v0',
   'auth': None}
@@ -18,6 +18,6 @@ try:
     with open('/secrets/dcf_dataservice_credentials.json','r') as f:
         data = json.loads(f.read())
         PROJECT_MAP = data.get('PROJECT_MAP',{})
-        SIGNPOST = data.get('SIGNPOST',{})
+        INDEXD = data.get('INDEXD',{})
 except Exception:
     pass
