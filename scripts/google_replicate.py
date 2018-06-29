@@ -17,7 +17,7 @@ from google_resumable_upload import GCSObjectStreamUpload
 import logging as logger
 
 from indexclient.client import IndexClient
-from settings import PROJECT_MAP, INDEXD
+from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import (extract_md5_from_text,
                    get_bucket_name)
 
@@ -69,6 +69,11 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
 
 def update_indexd(fi):
     """
+    update a record to indexd
+    Args:
+        fi(dict): file info
+    Returns:
+         None
     """
     gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
     gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
@@ -146,13 +151,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     chunk_size_download = global_config.get('chunk_size_download', DEFAULT_CHUNK_SIZE_DOWNLOAD)
     chunk_size_upload = global_config.get('chunk_size_upload', DEFAULT_CHUNK_SIZE_UPLOAD)
     data_endpt = DATA_ENDPT + fi.get('fileid', "")
-    token = ""
-
-    try:
-        with open(global_config.get('token_path', ''), 'r') as f:
-            token = str(f.read().strip())
-    except IOError as e:
-        logger.info("Can not find token file!!!")
+    token = GDC_TOKEN
 
     response = requests.get(data_endpt,
                             stream=True,

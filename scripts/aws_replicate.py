@@ -143,6 +143,11 @@ class AWSBucketReplication(object):
 
     def update_indexd(self, fi):
         """
+        update a record to indexd
+        Args:
+            fi(dict): file info
+        Returns:
+            None
         """
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))

@@ -24,19 +24,18 @@ FILE_HEADERS = ['fileid', 'filename', 'size', 'hash', 'acl', 'project']
 #global_config ={"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20971520}
 
 class FileCopyingDoFn(beam.DoFn):
-  """Process each line of input text into words."""
 
   def __init__(self, config):
     super(FileCopyingDoFn, self).__init__()
     self.global_config = config
 
   def process(self, element):
-    """Returns an iterator over the words of this element.
-    The element is a line of text.  If the line is blank, note that, too.
+    """Process each line of the manifest file.
+    The element is a line of text.
     Args:
-      element: the element being processed
+      element: the row being processed
     Returns:
-      The processed element.
+      The outcome of the copying process. True/False means success/failure
     """
     text_line = element.strip()
     if not text_line:
@@ -51,7 +50,7 @@ def format_result(result):
     return '%s %s %d %s %s %s: %d' % (fi.get('fileid'), fi.get('filename'), int(fi.get('size')), fi.get('hash'), fi.get('acl'), fi.get('project'), success)
 
 def run(argv=None):
-  """Main entry point; defines and runs the wordcount pipeline."""
+  """Main entry point; defines and runs the copying pipeline."""
   parser = argparse.ArgumentParser()
   parser.add_argument('--input',
                       dest='input',
@@ -63,11 +62,12 @@ def run(argv=None):
                       help='Output file to write results to.')
   parser.add_argument('--global_config',
                       dest='global_config',
-                      required=True,
                       help='global configuration')
   known_args, pipeline_args = parser.parse_known_args(argv)
 
-
+  global_config = {}
+  if known_args.global_config:
+    global_config = json.loads(known_args.global_config)
   # We use the save_main_session option because one or more DoFn's in this
   # workflow rely on global context (e.g., a module imported at module level).
   pipeline_options = PipelineOptions(pipeline_args)
@@ -77,7 +77,7 @@ def run(argv=None):
   # Read the text file[pattern] into a PCollection.
   lines = p | 'read' >> ReadFromText(file_pattern=known_args.input, skip_header_lines=1)
   result = (lines
-            | 'copy' >> beam.ParDo(FileCopyingDoFn(json.loads(known_args.global_config))))
+            | 'copy' >> beam.ParDo(FileCopyingDoFn(global_config)))
   formated_result = result | 'format' >> beam.Map(format_result)
   formated_result | 'write' >> WriteToText(known_args.output)
   prog = p.run()
