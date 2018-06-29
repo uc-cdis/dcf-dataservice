@@ -22,7 +22,6 @@ except NameError:
 
 FILE_HEADERS = ['fileid', 'filename', 'size', 'hash', 'acl', 'project']
 #global_config ={"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20971520}
-global global_config
 
 class FileCopyingDoFn(beam.DoFn):
   """Process each line of input text into words."""
@@ -45,11 +44,11 @@ class FileCopyingDoFn(beam.DoFn):
     words = text_line.split()
     fi = dict(zip(FILE_HEADERS, words))
 
-    return [(fi.get('fileid',''), exec_google_copy(fi, self.global_config))]
+    return [(fi, exec_google_copy(fi, self.global_config))]
 
 def format_result(result):
-    (uuid, success) = result
-    return '%s: %d' % (uuid, success)
+    (fi, success) = result
+    return '%s %s %d %s %s %s: %d' % (fi.get('fileid'), fi.get('filename'), int(fi.get('size')), fi.get('hash'), fi.get('acl'), fi.get('project'), success)
 
 def run(argv=None):
   """Main entry point; defines and runs the wordcount pipeline."""
@@ -76,7 +75,7 @@ def run(argv=None):
   p = beam.Pipeline(options=pipeline_options)
 
   # Read the text file[pattern] into a PCollection.
-  lines = p | 'read' >> ReadFromText(known_args.input)
+  lines = p | 'read' >> ReadFromText(file_pattern=known_args.input, skip_header_lines=1)
   result = (lines
             | 'copy' >> beam.ParDo(FileCopyingDoFn(json.loads(known_args.global_config))))
   formated_result = result | 'format' >> beam.Map(format_result)
