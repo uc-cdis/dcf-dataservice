@@ -8,8 +8,6 @@ import argparse
 import json
 
 from aws_replicate import AWSBucketReplication
-from google_replicate import GOOGLEBucketReplication
-from indexd_update_service import update_indexd_from_manifest
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -20,17 +18,7 @@ def parse_arguments():
     aws_replicate_cmd.add_argument('--bucket', required=True)
     aws_replicate_cmd.add_argument('--manifest_file', required=True)
 
-    google_replicate_cmd = subparsers.add_parser('google_replicate')
-    google_replicate_cmd.add_argument('--global_config', required=True)
-    google_replicate_cmd.add_argument('--manifest_file', required=True)
-    google_replicate_cmd.add_argument('--thread_num', required=True)
-
-    indexd_update_cmd = subparsers.add_parser('indexd_update')
-    indexd_update_cmd.add_argument('--manifest_file', required=True)
-
     return parser.parse_args()
-
-
 if __name__ == "__main__":
     start = timeit.default_timer()
     args = parse_arguments()
@@ -38,13 +26,6 @@ if __name__ == "__main__":
         # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 4}'
         aws = AWSBucketReplication(bucket=args.bucket, manifest_file=args.manifest_file, global_config=json.loads(args.global_config))
         aws.run()
-    elif args.action == 'google_replicate':
-        # python replicate.py google_replicate --manifest_file ./test --thread_num 4 --global_config '{"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20971520}'
-        google = GOOGLEBucketReplication( global_config=json.loads(args.global_config), manifest_file=args.manifest_file, thread_num=int(args.thread_num))
-        google.prepare()
-        google.run()
-    elif args.action == 'indexd_update_service':
-        update_indexd_from_manifest(args.manifest_file)
 
     end = timeit.default_timer()
     print('Total time: {} seconds'.format(end-start))

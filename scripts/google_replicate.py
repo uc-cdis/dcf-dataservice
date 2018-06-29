@@ -15,7 +15,7 @@ from google.cloud import storage
 from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 
-from cdislogging import get_logger
+import logging as logger
 from settings import PROJECT_MAP
 from utils import (extract_md5_from_text,
                    get_bucket_name)
@@ -27,11 +27,6 @@ DEFAULT_CHUNK_SIZE_UPLOAD = 1024*20*1024
 
 FAIL = False
 SUCCESS = True
-
-global TOTAL_DOWNLOADED_BYTES
-TOTAL_DOWNLOADED_BYTES = 0
-
-logger = get_logger("GoogleReplicationThread")
 
 def bucket_exists(bucket_name):
     """
@@ -67,36 +62,8 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         result = subprocess.check_output(execstr, shell=True).strip('\n"\'')
         md5_hash = extract_md5_from_text(result)
         if md5_hash:
-	    logger.info("hash {}".format(md5_hash))
             return md5_hash == fi.get('hash', '').lower()
     return False
-
-def update_indexd(self, fi):
-     """
-     """
-     gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
-     gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-
-     doc = get_file_from_uuid(fi.get('fileid',''))
-     if doc is not None:
-         if gs_object_name not in doc.urls:
-             doc.urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
-             doc.patch()
-         return
-
-     urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
-
-     if object_exists(s3, gs_bucket_name, gs_object_name):
-         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
-
-     doc = create_index(did=fi.get('fileid',''),
-                        hashes=fi.get('hash',''),
-                        size=fi.get('size',0),
-                        urls=urls)
-     if doc is None:
-         logger.info("successfuly create an record with uuid {}".format(fi.get('fileid','')))
-     else:
-         logger.info("fail to create an record with uuid {}".format(fi.get('fileid','')))
 
 def exec_google_copy(fi, global_config):
     """
@@ -176,7 +143,7 @@ def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upl
     """
     stream the file with google resumable upload
     Args:
-        client(S3Client): S3 storage client
+        client(GSClient): gs storage client
         response(httpResponse): http response
         bucket_name(str): target google bucket name
         chunk_size_download(int): chunk size in bytes from downling data file from GDC
@@ -190,9 +157,8 @@ def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upl
     with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name, chunk_size=chunk_size_upload) as s:
         for chunk in response.iter_content(chunk_size=chunk_size_download):
             num = num + 1
-            # just for logging
             if num % 100 == 0:
-                logger.info("%s download %f GB\n" %
+                logger.info("Download %f GB\n" %
                             (num*1.0*chunk_size_download/1000/1000/1000))
             if chunk:  # filter out keep-alive new chunks
                 s.write(chunk)

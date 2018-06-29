@@ -3,10 +3,7 @@ from google.auth.transport.requests import AuthorizedSession
 from google.resumable_media import requests, common
 from google.cloud import storage
 import timeit
-
-from cdislogging import get_logger
-
-logger = get_logger("GoogleUploadThread")
+import logging
 
 class GCSObjectStreamUpload(object):
     def __init__(
@@ -35,7 +32,7 @@ class GCSObjectStreamUpload(object):
         try:
             self.start()
         except ValueError as e:
-            logger.info("Error " + str(e))
+            logging.info("Error " + str(e))
             raise SystemExit
         return self
 

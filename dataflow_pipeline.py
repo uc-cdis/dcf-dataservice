@@ -11,8 +11,9 @@ from apache_beam.metrics import Metrics
 from apache_beam.metrics.metric import MetricsFilter
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
+import json
 
-from google_replicate import exec_google_copy
+from scripts.google_replicate import exec_google_copy
 
 try:
   unicode           # pylint: disable=unicode-builtin
@@ -20,18 +21,15 @@ except NameError:
   unicode = str
 
 FILE_HEADERS = ['fileid', 'filename', 'size', 'hash', 'acl', 'project']
-global_config ={"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20971520}
+#global_config ={"token_path": "./gdc-token.txt", "chunk_size_download": 2048000, "chunk_size_upload": 20971520}
+global global_config
 
 class FileCopyingDoFn(beam.DoFn):
   """Process each line of input text into words."""
 
-  def __init__(self):
+  def __init__(self, config):
     super(FileCopyingDoFn, self).__init__()
-    self.words_counter = Metrics.counter(self.__class__, 'words')
-    self.word_lengths_counter = Metrics.counter(self.__class__, 'word_lengths')
-    self.word_lengths_dist = Metrics.distribution(
-        self.__class__, 'word_len_dist')
-    self.empty_line_counter = Metrics.counter(self.__class__, 'empty_lines')
+    self.global_config = config
 
   def process(self, element):
     """Returns an iterator over the words of this element.
@@ -45,13 +43,9 @@ class FileCopyingDoFn(beam.DoFn):
     if not text_line:
       self.empty_line_counter.inc(1)
     words = text_line.split()
-    for w in words:
-      self.words_counter.inc()
-      self.word_lengths_counter.inc(len(w))
-      self.word_lengths_dist.update(len(w))
     fi = dict(zip(FILE_HEADERS, words))
 
-    return [(fi.get('fileid',''), exec_google_copy(fi, global_config))]
+    return [(fi.get('fileid',''), exec_google_copy(fi, self.global_config))]
 
 def format_result(result):
     (uuid, success) = result
@@ -62,13 +56,18 @@ def run(argv=None):
   parser = argparse.ArgumentParser()
   parser.add_argument('--input',
                       dest='input',
-                      default='./manifest',
+                      default='./scripts/test_data.txt',
                       help='Input file to process.')
   parser.add_argument('--output',
                       dest='output',
                       required=True,
                       help='Output file to write results to.')
+  parser.add_argument('--global_config',
+                      dest='global_config',
+                      required=True,
+                      help='global configuration')
   known_args, pipeline_args = parser.parse_known_args(argv)
+
 
   # We use the save_main_session option because one or more DoFn's in this
   # workflow rely on global context (e.g., a module imported at module level).
@@ -79,7 +78,7 @@ def run(argv=None):
   # Read the text file[pattern] into a PCollection.
   lines = p | 'read' >> ReadFromText(known_args.input)
   result = (lines
-            | 'copy' >> beam.ParDo(FileCopyingDoFn()))
+            | 'copy' >> beam.ParDo(FileCopyingDoFn(json.loads(known_args.global_config))))
   formated_result = result | 'format' >> beam.Map(format_result)
   formated_result | 'write' >> WriteToText(known_args.output)
   prog = p.run()
