@@ -18,7 +18,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 logger = get_logger("AWSReplication")
 
-indexclient = IndexClient(INDEXD['host'], INDEXD['version'], INDEXD['auth'])
+indexclient = IndexClient(INDEXD['host'], INDEXD['version'], (INDEXD['auth']['username'], INDEXD['auth']['password']))
 
 def bucket_exists(s3, bucket_name):
     """
@@ -149,6 +149,7 @@ class AWSBucketReplication(object):
         Returns:
             None
         """
+        s3 = boto3.resource('s3')
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
 
@@ -159,7 +160,7 @@ class AWSBucketReplication(object):
                 doc.patch()
             return
 
-        urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
+        urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi.get('fileid',''))]
 
         if object_exists(s3, s3_bucket_name, s3_object_name):
             urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
@@ -168,7 +169,7 @@ class AWSBucketReplication(object):
                            hashes=fi.get('hash',''),
                            size=fi.get('size',0),
                            urls=urls)
-        if doc is None:
+        if doc is not None:
             logger.info("successfuly create an record with uuid {}".format(fi.get('fileid','')))
         else:
             logger.info("fail to create an record with uuid {}".format(fi.get('fileid','')))
@@ -231,6 +232,7 @@ class AWSBucketReplication(object):
                     try:
                         self.update_indexd(fi)
                     except Exception as e:
+                        logger.info("Update indexd error")
                         logger.info(e)
                     self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get("size", 0)
             logger.info("=====================Total  %2.2f========================", self.totalDownloadedBytes/(self.totalBytes*100 + 1.0e-6))

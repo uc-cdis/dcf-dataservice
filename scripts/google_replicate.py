@@ -21,7 +21,7 @@ from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import (extract_md5_from_text,
                    get_bucket_name)
 
-indexclient = IndexClient(INDEXD['host'], INDEXD['version'], INDEXD['auth'])
+indexclient = IndexClient(INDEXD['host'], INDEXD['version'], (INDEXD['auth']['username'], INDEXD['auth']['password']))
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
@@ -87,8 +87,10 @@ def update_indexd(fi):
 
     urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
 
-    if object_exists(gs, gs_bucket_name, gs_object_name):
+    if blob_exists(gs_bucket_name, gs_object_name):
         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
+
+    doc = None
     doc = indexclient.create(did=fi.get('fileid',''),
                              hashes=fi.get('hash',''),
                              size=fi.get('size',0),

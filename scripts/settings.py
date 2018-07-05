@@ -4,7 +4,7 @@ import json
 INDEXD = {
   'host': 'http://localhost:8000',
   'version': 'v0',
-  'auth': None}
+  'auth': {'username':'test', 'password':'test'}}
 
 PROJECT_MAP = {
        'TGCA': 'tcga-xxxx-phs000178',
