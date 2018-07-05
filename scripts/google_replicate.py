@@ -180,7 +180,7 @@ def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upl
         None
     """
 
-    # keep tract the number of chunks uploaded
+    # keep track the number of chunks uploaded
     num = 0
     with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name, chunk_size=chunk_size_upload) as s:
         for chunk in response.iter_content(chunk_size=chunk_size_download):

@@ -1,7 +1,6 @@
 import os
 import json
 
-# Signpost
 INDEXD = {
   'host': 'http://localhost:8000',
   'version': 'v0',
