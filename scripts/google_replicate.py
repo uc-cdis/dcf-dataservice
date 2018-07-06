@@ -90,7 +90,6 @@ def update_indexd(fi):
     if blob_exists(gs_bucket_name, gs_object_name):
         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
 
-    doc = None
     doc = indexclient.create(did=fi.get('fileid',''),
                              hashes=fi.get('hash',''),
                              size=fi.get('size',0),

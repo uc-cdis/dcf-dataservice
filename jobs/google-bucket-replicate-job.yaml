@@ -1,5 +1,5 @@
 # run with 
-# g3k runjob google-bucket-replicate PROJECT google_project INPUT_BUCKET input_bucket LOG_BUCKET log_bucket
+# g3k runjob google-bucket-replicate-job.yaml PROJECT google_project INPUT_BUCKET input_bucket LOG_BUCKET log_bucket
 apiVersion: batch/v1
 kind: Job
 metadata:
