@@ -24,6 +24,13 @@ if [[ -d ${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice ]]; then
      g3kubectl create secret generic dcf-dataservice-json-secret --from-file=dcf_dataservice_credentials.json=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/creds.json
   fi
 
+  if ! g3kubectl get secrets/dcf-dataservice-settings-secrets > /dev/null 2>&1; then
+      if [[ ! -f "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice_settings" ]]; then
+          touch "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice_settings"
+      fi
+      g3kubectl create secret generic dcf-dataservice-settings-secrets --from-file=dcf_dataservice_settings=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/dcf_dataservice_settings
+   fi
+
   if ! g3kubectl get configmaps/data-service-manifest > /dev/null 2>&1; then
      if [[ ! -f "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/manifest" ]]; then
        touch "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/manifest"

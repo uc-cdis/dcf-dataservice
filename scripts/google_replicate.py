@@ -83,6 +83,7 @@ def update_indexd(fi):
         if gs_object_name not in doc.urls:
             doc.urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
             doc.patch()
+            logger.info("successfuly update the record with uuid {}".format(fi.get('fileid','')))
         return
 
     urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
@@ -91,13 +92,13 @@ def update_indexd(fi):
         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
 
     doc = indexclient.create(did=fi.get('fileid',''),
-                             hashes=fi.get('hash',''),
+                             hashes={'md5': fi.get('hash','')},
                              size=fi.get('size',0),
                              urls=urls)
-    if doc is None:
-        logger.info("successfuly create an record with uuid {}".format(fi.get('fileid','')))
+    if doc is not None:
+        logger.info("successfuly create a record with uuid {}".format(fi.get('fileid','')))
     else:
-        logger.info("fail to create an record with uuid {}".format(fi.get('fileid','')))
+        logger.info("fail to create a record with uuid {}".format(fi.get('fileid','')))
 
 def exec_google_copy(fi, global_config):
     """

@@ -38,10 +38,9 @@ class FileCopyingDoFn(beam.DoFn):
       The outcome of the copying process. True/False means success/failure
     """
     text_line = element.strip()
-    if not text_line:
-      self.empty_line_counter.inc(1)
     words = text_line.split()
     fi = dict(zip(FILE_HEADERS, words))
+    fi['size'] = int(fi['size'])
 
     return [(fi, exec_google_copy(fi, self.global_config))]
 
