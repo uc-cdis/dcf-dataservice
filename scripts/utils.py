@@ -18,7 +18,7 @@ def get_bucket_name(fi, PROJECT_MAP):
     """
     bucketname = ''
     project = fi.get('project', '')
-    if fi.get('acl', '') == "*":
+    if fi.get('acl', '') == "*" or fi.get('acl','') == "open":
         bucketname = 'gdc-' + PROJECT_MAP.get(project, '') + "-open"
     else:
         bucketname = 'gdc-' + PROJECT_MAP.get(project, '') + "-controlled"
