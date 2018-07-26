@@ -79,14 +79,3 @@ class GCSObjectStreamUpload(object):
     def tell(self):
         return self._read
 
-if __name__ == '__main__':
-    client = storage.Client()
-    start = timeit.default_timer()
-
-    with GCSObjectStreamUpload(client=client, bucket_name='cdistest', blob_name='test-blob') as s:
-        for _ in range(100):
-            s.write(b'x' * 10240000)
-
-    end = timeit.default_timer()
-    print(end - start)
-

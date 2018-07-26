@@ -21,7 +21,9 @@ from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import (extract_md5_from_text,
                    get_bucket_name)
 
-indexclient = IndexClient(INDEXD['host'], INDEXD['version'], (INDEXD['auth']['username'], INDEXD['auth']['password']))
+indexclient = IndexClient(
+        INDEXD['host'], INDEXD['version'],
+        (INDEXD['auth']['username'], INDEXD['auth']['password']))
 
 DATA_ENDPT = 'https://api.gdc.cancer.gov/data/'
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
@@ -30,6 +32,7 @@ DEFAULT_CHUNK_SIZE_UPLOAD = 1024*20*1024
 FAIL = False
 SUCCESS = True
 
+
 def bucket_exists(bucket_name):
     """
     check if bucket_name exists or not!
@@ -37,6 +40,7 @@ def bucket_exists(bucket_name):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     return bucket.exists()
+
 
 def blob_exists(bucket_name, blob_name):
     """
@@ -48,6 +52,7 @@ def blob_exists(bucket_name, blob_name):
         blob = Blob(blob_name, bucket)
         return blob.exists()
     return False
+
 
 def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     """
@@ -67,6 +72,7 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
             return md5_hash == fi.get('hash', '').lower()
     return False
 
+
 def update_indexd(fi):
     """
     update a record to indexd
@@ -77,13 +83,15 @@ def update_indexd(fi):
     """
     gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
     gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-    doc = indexclient.get(fi.get('fileid',''))
+    doc = indexclient.get(fi.get('fileid', ''))
 
     if doc is not None:
         if gs_object_name not in doc.urls:
-            doc.urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
+            doc.urls.append(
+                "gs://{}/{}".format(gs_bucket_name, gs_object_name))
             doc.patch()
-            logger.info("successfuly update the record with uuid {}".format(fi.get('fileid','')))
+            logger.info("successfuly update the record with uuid {}".format(
+                fi.get('fileid', '')))
         return
 
     urls = ['https://api.gdc.cancer.gov/data/{}'.format(fi['fileid'])]
@@ -91,14 +99,17 @@ def update_indexd(fi):
     if blob_exists(gs_bucket_name, gs_object_name):
         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
 
-    doc = indexclient.create(did=fi.get('fileid',''),
-                             hashes={'md5': fi.get('hash','')},
-                             size=fi.get('size',0),
+    doc = indexclient.create(did=fi.get('fileid', ''),
+                             hashes={'md5': fi.get('hash', '')},
+                             size=fi.get('size', 0),
                              urls=urls)
     if doc is not None:
-        logger.info("successfuly create a record with uuid {}".format(fi.get('fileid','')))
+        logger.info("successfuly create a record with uuid {}".format(
+            fi.get('fileid', '')))
     else:
-        logger.info("fail to create a record with uuid {}".format(fi.get('fileid','')))
+        logger.info("fail to create a record with uuid {}".format(
+            fi.get('fileid', '')))
+
 
 def exec_google_copy(fi, global_config):
     """
@@ -114,11 +125,13 @@ def exec_google_copy(fi, global_config):
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
     if not bucket_exists(bucket_name):
-        logger.info("There is no bucket with provided name {}".format(bucket_name))
+        logger.info(
+            "There is no bucket with provided name {}".format(bucket_name))
         return FAIL
 
     if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-	logger.info("object {} already exists. Not need to re-copy".format(blob_name))
+        logger.info(
+            "object {} already exists. Not need to re-copy".format(blob_name))
         return SUCCESS
 
     resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
@@ -127,12 +140,13 @@ def exec_google_copy(fi, global_config):
         logger.info("object {} successfully copied ".format(blob_name))
     else:
         # try to re-copy the file
-	resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-	if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-	    logger.info("object {} successfully copied ".format(blob_name))
-	else:
+        resumable_streaming_copy(
+            fi, client, bucket_name, blob_name, global_config)
+        if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+            logger.info("object {} successfully copied ".format(blob_name))
+        else:
             # log the failure case
-	    logger.info("can not copy {} to GOOGLE bucket".format(blob_name))
+            logger.info("can not copy {} to GOOGLE bucket".format(blob_name))
             return FAIL
     try:
         update_indexd(fi)
@@ -140,18 +154,22 @@ def exec_google_copy(fi, global_config):
         logger.info(e)
     return SUCCESS
 
-def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
+
+def resumable_streaming_copy(
+        fi, client, bucket_name,
+        blob_name, global_config):
     """
     Copy file to google bucket. Implemented using google cloud resumale API
     Args:
         fi(dict): file information
         global_config(dict): configurations
-    Return: None
+    Returns: None
     """
 
-    start = timeit.default_timer()
-    chunk_size_download = global_config.get('chunk_size_download', DEFAULT_CHUNK_SIZE_DOWNLOAD)
-    chunk_size_upload = global_config.get('chunk_size_upload', DEFAULT_CHUNK_SIZE_UPLOAD)
+    chunk_size_download = global_config.get(
+        'chunk_size_download', DEFAULT_CHUNK_SIZE_DOWNLOAD)
+    chunk_size_upload = global_config.get(
+        'chunk_size_upload', DEFAULT_CHUNK_SIZE_UPLOAD)
     data_endpt = DATA_ENDPT + fi.get('fileid', "")
     token = GDC_TOKEN
 
@@ -167,16 +185,20 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
         logger.info('status code {} when downloading {} from GDC API'.format(
             response.status_code, fi.get('fileid', "")))
         return
-    streaming(client, response, bucket_name, chunk_size_download, chunk_size_upload, blob_name)
+    streaming(client, response, bucket_name,
+              chunk_size_download, chunk_size_upload, blob_name)
 
-def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upload, blob_name):
+
+def streaming(
+        client, response, bucket_name,
+        chunk_size_download, chunk_size_upload, blob_name):
     """
     stream the file with google resumable upload
     Args:
         client(GSClient): gs storage client
         response(httpResponse): http response
         bucket_name(str): target google bucket name
-        chunk_size_download(int): chunk size in bytes from downling data file from GDC
+        chunk_size_download(int): chunk size in bytes from downling data file
         blob_name(str): object name
     Returns:
         None
@@ -184,7 +206,11 @@ def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upl
 
     # keep track the number of chunks uploaded
     num = 0
-    with GCSObjectStreamUpload(client=client, bucket_name=bucket_name, blob_name=blob_name, chunk_size=chunk_size_upload) as s:
+    with GCSObjectStreamUpload(client=client,
+                               bucket_name=bucket_name,
+                               blob_name=blob_name,
+                               chunk_size=chunk_size_upload) as s:
+
         for chunk in response.iter_content(chunk_size=chunk_size_download):
             num = num + 1
             if num % 100 == 0:
@@ -192,4 +218,3 @@ def streaming(client, response, bucket_name, chunk_size_download, chunk_size_upl
                             (num*1.0*chunk_size_download/1000/1000/1000))
             if chunk:  # filter out keep-alive new chunks
                 s.write(chunk)
-

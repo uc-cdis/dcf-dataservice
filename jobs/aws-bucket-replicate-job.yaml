@@ -37,7 +37,7 @@
 # }
 # 
 # HOW TO RUN
-# g3k runjob aws-bucket-replicate-job.yaml GDC_BUCKET_NAME gdc_test_bk_bucket LOG_BUCKET log_bucket CHUNK_SIZE 4
+# g3k runjob aws-bucket-replicate GDC_BUCKET_NAME gdc_test_bk_bucket LOG_BUCKET log_bucket CHUNK_SIZE 4
 apiVersion: batch/v1
 kind: Job
 metadata:
