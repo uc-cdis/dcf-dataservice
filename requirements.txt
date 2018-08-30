@@ -8,4 +8,4 @@ google-cloud-dataflow==2.5.0
 setuptools==36.6.0
 -e git+https://github.com/uc-cdis/cdis-python-utils.git@0.2.8#egg=cdispyutils
 -e git+https://git@github.com/uc-cdis/cdislogging.git@master#egg=cdislogging
--e git+https://git@github.com/uc-cdis/indexclient.git@1.5.4#egg=indexclient
+-e git+https://git@github.com/uc-cdis/indexclient.git@1.5.6#egg=indexclient
