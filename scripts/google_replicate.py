@@ -86,9 +86,9 @@ def update_indexd(fi):
     doc = indexclient.get(fi.get('fileid', ''))
 
     if doc is not None:
-        if gs_object_name not in doc.urls:
-            doc.urls.append(
-                "gs://{}/{}".format(gs_bucket_name, gs_object_name))
+        url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
+        if url not in doc.urls:
+            doc.urls.append(url)
             doc.patch()
             logger.info("successfuly update the record with uuid {}".format(
                 fi.get('fileid', '')))

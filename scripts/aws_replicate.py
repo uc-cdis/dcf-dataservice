@@ -120,19 +120,19 @@ class AWSBucketReplication(object):
         submitting_files, _ = get_fileinfo_list_from_manifest(
             self.manifest_file)
 
-        project_set = set()
+        project_acl_set = set()
         for fi in submitting_files:
             self.totalBytes = self.totalBytes + fi.get('size', 0)
             if fi.get('project'):
-                project_set.add(fi.get('project'))
+                project_acl_set.add(fi.get('project') + fi.get('acl'))
 
         file_grp = dict()
         key = 0
-        while len(project_set) > 0:
-            project = project_set.pop()
+        while len(project_acl_set) > 0:
+            project_acl = project_acl_set.pop()
             same_project_files = []
             for fi in submitting_files:
-                if fi.get('project') == project:
+                if fi.get('project') + fi.get('acl') == project_acl:
                     same_project_files.append(fi)
             if len(same_project_files) > 0:
                 if key in file_grp:
@@ -161,9 +161,9 @@ class AWSBucketReplication(object):
 
         doc = indexclient.get(fi.get('fileid', ''))
         if doc is not None:
-            if s3_object_name not in doc.urls:
-                doc.urls.append(
-                    "s3://{}/{}".format(s3_bucket_name, s3_object_name))
+            url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
+            if url not in doc.urls:
+                doc.urls.append(url)
                 doc.patch()
                 logger.info("successfuly update the record with uuid {}"
                             .format(fi.get('fileid', '')))
