@@ -12,16 +12,17 @@ from cdislogging import get_logger
 from indexclient.client import IndexClient
 
 from settings import PROJECT_MAP, INDEXD
-from utils import (get_fileinfo_list_from_manifest,
-                   get_bucket_name)
+from utils import get_fileinfo_list_from_manifest, get_bucket_name
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 logger = get_logger("AWSReplication")
 
-indexclient = IndexClient(INDEXD['host'], INDEXD['version'],
-                          (INDEXD['auth']['username'],
-                          INDEXD['auth']['password']))
+indexclient = IndexClient(
+    INDEXD["host"],
+    INDEXD["version"],
+    (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+)
 
 
 def bucket_exists(s3, bucket_name):
@@ -39,7 +40,7 @@ def bucket_exists(s3, bucket_name):
         s3.meta.client.head_bucket(Bucket=bucket_name)
         return True
     except botocore.exceptions.ClientError as e:
-        error_code = int(e.response['Error']['Code'])
+        error_code = int(e.response["Error"]["Code"])
         if error_code == 403:
             logger.info("Private Bucket. Forbidden Access!")
             return True
@@ -64,7 +65,7 @@ def object_exists(s3, bucket_name, key):
         s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         return True
     except botocore.exceptions.ClientError as e:
-        error_code = int(e.response['Error']['Code'])
+        error_code = int(e.response["Error"]["Code"])
         if error_code == 403:
             logger.info("Private object. Forbidden Access!")
             return True
@@ -87,7 +88,7 @@ def get_etag_aws_object(s3, bucket_name, key):
     try:
         hash = object.e_tag.strip('"')[0:32]
     except botocore.exceptions.ClientError as e:
-        error_code = int(e.response['Error']['Code'])
+        error_code = int(e.response["Error"]["Code"])
         if error_code == 403:
             logger.info("Private Bucket. Forbidden Access!")
         return None
@@ -95,7 +96,6 @@ def get_etag_aws_object(s3, bucket_name, key):
 
 
 class AWSBucketReplication(object):
-
     def __init__(self, bucket, manifest_file, global_config):
         self.bucket = bucket
         self.manifest_file = manifest_file
@@ -115,16 +115,15 @@ class AWSBucketReplication(object):
         # un-comment those lines for generating testing data.
         # This test data contains real uuids and hashes and can be used for replicating
         # aws bucket to aws bucket
-        #from intergration_data_test import gen_aws_test_data
-        #submitting_files = gen_aws_test_data()
-        submitting_files, _ = get_fileinfo_list_from_manifest(
-            self.manifest_file)
+        # from intergration_data_test import gen_aws_test_data
+        # submitting_files = gen_aws_test_data()
+        submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
 
         project_acl_set = set()
         for fi in submitting_files:
-            self.totalBytes = self.totalBytes + fi.get('size', 0)
-            if fi.get('project'):
-                project_acl_set.add(fi.get('project') + fi.get('acl'))
+            self.totalBytes = self.totalBytes + fi.get("size", 0)
+            if fi.get("project"):
+                project_acl_set.add(fi.get("project") + fi.get("acl"))
 
         file_grp = dict()
         key = 0
@@ -132,7 +131,7 @@ class AWSBucketReplication(object):
             project_acl = project_acl_set.pop()
             same_project_files = []
             for fi in submitting_files:
-                if fi.get('project') + fi.get('acl') == project_acl:
+                if fi.get("project") + fi.get("acl") == project_acl:
                     same_project_files.append(fi)
             if len(same_project_files) > 0:
                 if key in file_grp:
@@ -155,36 +154,42 @@ class AWSBucketReplication(object):
         Returns:
             None
         """
-        s3 = boto3.resource('s3')
+        s3 = boto3.resource("s3")
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
 
-        doc = indexclient.get(fi.get('fileid', ''))
+        doc = indexclient.get(fi.get("fileid", ""))
         if doc is not None:
             url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
             if url not in doc.urls:
                 doc.urls.append(url)
                 doc.patch()
-                logger.info("successfuly update the record with uuid {}"
-                            .format(fi.get('fileid', '')))
+                logger.info(
+                    "successfuly update the record with uuid {}".format(
+                        fi.get("fileid", "")
+                    )
+                )
             return
 
-        urls = [
-            'https://api.gdc.cancer.gov/data/{}'.format(fi.get('fileid', ''))]
+        urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("fileid", ""))]
 
         if object_exists(s3, s3_bucket_name, s3_object_name):
             urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
 
-        doc = indexclient.create(did=fi.get('fileid', ''),
-                                 hashes={'md5': fi.get('hash', '')},
-                                 size=fi.get('size', 0),
-                                 urls=urls)
+        doc = indexclient.create(
+            did=fi.get("fileid", ""),
+            hashes={"md5": fi.get("hash", "")},
+            size=fi.get("size", 0),
+            urls=urls,
+        )
         if doc is not None:
-            logger.info("successfuly create a record with uuid {}".format(
-                fi.get('fileid', '')))
+            logger.info(
+                "successfuly create a record with uuid {}".format(fi.get("fileid", ""))
+            )
         else:
-            logger.info("fail to create a record with uuid {}".format(
-                fi.get('fileid', '')))
+            logger.info(
+                "fail to create a record with uuid {}".format(fi.get("fileid", ""))
+            )
 
     def call_aws_copy(self, files, global_config):
         """
@@ -201,17 +206,18 @@ class AWSBucketReplication(object):
             None
         """
         index = 0
-        chunk_size = global_config.get('chunk_size', 1)
+        chunk_size = global_config.get("chunk_size", 1)
         target_bucket = get_bucket_name(files[0], PROJECT_MAP)
-        s3 = boto3.resource('s3')
+        s3 = boto3.resource("s3")
         if not bucket_exists(s3, target_bucket):
             # log and return. See the function for detail
             return
 
         failure_cases = []
         while index < len(files):
-            base_cmd = "aws s3 cp s3://{} s3://{} --recursive --exclude \"*\"".format(
-                self.bucket, target_bucket)
+            base_cmd = 'aws s3 cp s3://{} s3://{} --recursive --exclude "*"'.format(
+                self.bucket, target_bucket
+            )
 
             number_copying_files = min(chunk_size, len(files) - index)
 
@@ -224,63 +230,66 @@ class AWSBucketReplication(object):
 
             for turn in xrange(0, 2):
                 execstr = base_cmd
-                for fi in files[index:index + number_copying_files]:
-                    object_name = "{}/{}".format(fi.get("fileid"),
-                                                 fi.get("filename"))
+                for fi in files[index : index + number_copying_files]:
+                    object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                     if not object_exists(s3, self.bucket, object_name):
                         if turn == 0:
-                            logger.info(
-                                'object {} does not exist'.format(object_name))
+                            logger.info("object {} does not exist".format(object_name))
                         continue
                     if not object_exists(s3, target_bucket, object_name):
-                        execstr += " --include \"{}\"".format(object_name)
+                        execstr += ' --include "{}"'.format(object_name)
                 if execstr != base_cmd:
                     subprocess.Popen(shlex.split(execstr)).wait()
                     logger.info(execstr)
 
             # Log all failure and success cases here
-            for fi in files[index:index + number_copying_files]:
-                object_name = "{}/{}".format(fi.get("fileid"),
-                                             fi.get("filename"))
+            for fi in files[index : index + number_copying_files]:
+                object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                 if not object_exists(s3, target_bucket, object_name):
-                    logger.info("Can not copy {}/{} to new AWS bucket."
-                                .format(fi.get('fileid', ''),
-                                        fi.get('filename', '')))
-                    self.totalBytes -= fi.get('size', 0)
+                    logger.info(
+                        "Can not copy {}/{} to new AWS bucket.".format(
+                            fi.get("fileid", ""), fi.get("filename", "")
+                        )
+                    )
+                    self.totalBytes -= fi.get("size", 0)
                 else:
-                    logger.info("Done copying file {}/{} to new AWS bucket"
-                                .format(fi.get('fileid', ''),
-                                        fi.get('filename', '')))
+                    logger.info(
+                        "Done copying file {}/{} to new AWS bucket".format(
+                            fi.get("fileid", ""), fi.get("filename", "")
+                        )
+                    )
                     try:
                         self.update_indexd(fi)
                     except Exception as e:
                         logger.info("Update indexd error")
                         logger.info(e)
-                    self.totalDownloadedBytes = self.totalDownloadedBytes + \
-                        fi.get("size", 0)
-            logger.info("================Total  %2.2f=====================",
-                        self.totalDownloadedBytes/(self.totalBytes*100 + 1.0e-6))
+                    self.totalDownloadedBytes = self.totalDownloadedBytes + fi.get(
+                        "size", 0
+                    )
+            logger.info(
+                "================Total  %2.2f=====================",
+                self.totalDownloadedBytes / (self.totalBytes * 100 + 1.0e-6),
+            )
 
             index = index + number_copying_files
 
         logger.info("Store all uuids that can not be copied")
-        filename = os.path.join(dir_path, 'fail_copy.txt')
-        with open(filename, 'w') as writer:
-            writer.write('fileid\tfilename\tsize\thash\tacl\tproject')
+        filename = os.path.join(dir_path, "fail_copy.txt")
+        with open(filename, "w") as writer:
+            writer.write("fileid\tfilename\tsize\thash\tacl\tproject")
             for fi in failure_cases:
                 writer.write(
-                             '{}\t{}\t{}\t{}\t{}\t{}'
-                             .format(
-                                     fi.get('fileid', ''),
-                                     fi.get('filename', ''),
-                                     fi.get('size', 0),
-                                     fi.get('hash', ''),
-                                     fi.get('acl', '*'),
-                                     fi.get('project', '')
-                                     )
-                             )
+                    "{}\t{}\t{}\t{}\t{}\t{}".format(
+                        fi.get("fileid", ""),
+                        fi.get("filename", ""),
+                        fi.get("size", 0),
+                        fi.get("hash", ""),
+                        fi.get("acl", "*"),
+                        fi.get("project", ""),
+                    )
+                )
         # upload manifest file to s3
-        log_bucket = global_config.get('log_bucket', '')
-        if log_bucket != '':
+        log_bucket = global_config.get("log_bucket", "")
+        if log_bucket != "":
             cmd = "aws s3 cp {} s3://{}".format(filename, log_bucket)
             subprocess.Popen(shlex.split(cmd)).wait()

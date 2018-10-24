@@ -5,27 +5,20 @@ from google.cloud import storage
 import timeit
 import logging
 
+
 class GCSObjectStreamUpload(object):
-    def __init__(
-            self,
-            client,
-            bucket_name,
-            blob_name,
-            chunk_size=2560*8*1024
-        ):
+    def __init__(self, client, bucket_name, blob_name, chunk_size=2560 * 8 * 1024):
 
         self._client = client
         self._bucket = self._client.bucket(bucket_name)
         self._blob = self._bucket.blob(blob_name)
 
-        self._buffer = b''
+        self._buffer = b""
         self._buffer_size = 0
         self._chunk_size = chunk_size
         self._read = 0
 
-        self._transport = AuthorizedSession(
-            credentials=self._client._credentials
-        )
+        self._transport = AuthorizedSession(credentials=self._client._credentials)
         self._request = None  # type: requests.ResumableUpload
 
     def __enter__(self):
@@ -41,16 +34,18 @@ class GCSObjectStreamUpload(object):
             self.stop()
 
     def start(self):
-        url = 'https://www.googleapis.com/upload/storage/v1/b/{}/o?uploadType=resumable'.format(self._bucket.name)
+        url = "https://www.googleapis.com/upload/storage/v1/b/{}/o?uploadType=resumable".format(
+            self._bucket.name
+        )
         self._request = requests.ResumableUpload(
             upload_url=url, chunk_size=self._chunk_size
         )
         self._request.initiate(
             transport=self._transport,
-            content_type='application/octet-stream',
+            content_type="application/octet-stream",
             stream=self,
             stream_final=False,
-            metadata={'name': self._blob.name},
+            metadata={"name": self._blob.name},
         )
 
     def stop(self):
@@ -78,4 +73,3 @@ class GCSObjectStreamUpload(object):
 
     def tell(self):
         return self._read
-
