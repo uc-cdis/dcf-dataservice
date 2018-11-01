@@ -1,4 +1,3 @@
-import os
 import json
 
 INDEXD = {
@@ -13,6 +12,7 @@ PROJECT_MAP = {
     "FM": "fm-xxxx-phs000179",
     "CCLE": "ccle-xxx",
 }
+
 GDC_TOKEN = ""
 try:
     with open("/secrets/dcf_dataservice_credentials.json", "r") as f:

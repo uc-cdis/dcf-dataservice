@@ -1,24 +1,18 @@
-from os import listdir
-from os.path import isfile, join
-import sys
-import time
-import timeit
-import copy
-import argparse
-import re
 import subprocess
-import getopt
 import requests
 
-import google
 from google.cloud import storage
 from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
-import logging as logger
 
+from cdislogging import get_logger
 from indexclient.client import IndexClient
+
+from errors import APIError
 from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import extract_md5_from_text, get_bucket_name
+
+logger = get_logger("GoogleReplication")
 
 indexclient = IndexClient(
     INDEXD["host"],
@@ -30,8 +24,12 @@ DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 20 * 1024
 
-FAIL = False
-SUCCESS = True
+
+class DataFlowLog(object):
+    def __init__(self, copy_success=False, index_success=False, message=""):
+        self.copy_success = copy_success
+        self.index_success = index_success
+        self.message = message
 
 
 def bucket_exists(bucket_name):
@@ -90,12 +88,15 @@ def update_indexd(fi):
         url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
         if url not in doc.urls:
             doc.urls.append(url)
-            doc.patch()
-            logger.info(
-                "successfuly update the record with uuid {}".format(
-                    fi.get("fileid", "")
+            try:
+                doc.patch()
+            except Exception as e:
+                raise APIError(
+                    code=500,
+                    message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                        fi.get("fileid", ""), e.message
+                    ),
                 )
-            )
         return
 
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi["fileid"])]
@@ -103,18 +104,27 @@ def update_indexd(fi):
     if blob_exists(gs_bucket_name, gs_object_name):
         urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
 
-    doc = indexclient.create(
-        did=fi.get("fileid", ""),
-        hashes={"md5": fi.get("hash", "")},
-        size=fi.get("size", 0),
-        urls=urls,
-    )
-    if doc is not None:
-        logger.info(
-            "successfuly create a record with uuid {}".format(fi.get("fileid", ""))
+    try:
+        doc = indexclient.create(
+            did=fi.get("fileid", ""),
+            hashes={"md5": fi.get("hash", "")},
+            size=fi.get("size", 0),
+            urls=urls,
         )
-    else:
-        logger.info("fail to create a record with uuid {}".format(fi.get("fileid", "")))
+        if doc is None:
+            raise APIError(
+                code=500,
+                message="INDEX_CLIENT: Fail to create a record with uuid {}".format(
+                    fi.get("fileid", "")
+                ),
+            )
+    except Exception as e:
+        raise APIError(
+            code=500,
+            message="INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
+                fi.get("fileid", ""), e.message
+            ),
+        )
 
 
 def exec_google_copy(fi, global_config):
@@ -124,38 +134,47 @@ def exec_google_copy(fi, global_config):
         fi(dict): a dictionary of a copying file
         global_config(dict): a configuration
     Returns:
-        None
+        True/False
     """
     client = storage.Client()
     blob_name = fi.get("fileid") + "/" + fi.get("filename")
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
     if not bucket_exists(bucket_name):
-        logger.info("There is no bucket with provided name {}".format(bucket_name))
-        return FAIL
+        msg = "There is no bucket with provided name {}".format(bucket_name)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
     if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-        logger.info("object {} already exists. Not need to re-copy".format(blob_name))
-        return SUCCESS
+        msg = "object {} already exists. Not need to re-copy".format(blob_name)
+        return DataFlowLog(copy_success=True, index_success=True, message=msg)
 
-    resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+    try:
+        resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+    except APIError as e:
+        logger.error(e.message)
+        return DataFlowLog(message=e.message)
+
     # check if object is copied correctly by comparing md5 hash
-    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-        logger.info("object {} successfully copied ".format(blob_name))
-    else:
+    if not check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
         # try to re-copy the file
         resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-        if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-            logger.info("object {} successfully copied ".format(blob_name))
-        else:
-            # log the failure case
-            logger.info("can not copy {} to GOOGLE bucket".format(blob_name))
-            return FAIL
+        if not check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+            msg = "can not copy {} to GOOGLE bucket".format(blob_name)
+            logger.error(msg)
+            return DataFlowLog(message=msg)
+
     try:
         update_indexd(fi)
-    except Exception as e:
-        logger.info(e)
-    return SUCCESS
+    except APIError as e:
+        logger.error(e.message)
+        return DataFlowLog(copy_success=True, index_success=False, message=e.message)
+
+    return DataFlowLog(
+        copy_success=True,
+        index_success=True,
+        message="object {} successfully copied ".format(blob_name),
+    )
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
@@ -183,16 +202,26 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     )
 
     if response.status_code != 200:
-        logger.info("==========================\n")
-        logger.info(
-            "status code {} when downloading {} from GDC API".format(
-                response.status_code, fi.get("fileid", "")
-            )
+        raise APIError(
+            code=response.status_code, message="GDCPotal: {}".format(response.message)
         )
-        return
-    streaming(
-        client, response, bucket_name, chunk_size_download, chunk_size_upload, blob_name
-    )
+
+    try:
+        streaming(
+            client,
+            response,
+            bucket_name,
+            chunk_size_download,
+            chunk_size_upload,
+            blob_name,
+        )
+    except Exception:
+        raise APIError(
+            code=500,
+            message="GCSObjectStreamUpload: Can not upload {}".format(
+                fi.get("fileid", "")
+            ),
+        )
 
 
 def streaming(
@@ -211,7 +240,6 @@ def streaming(
     """
 
     # keep track the number of chunks uploaded
-    num = 0
     with GCSObjectStreamUpload(
         client=client,
         bucket_name=bucket_name,
@@ -220,11 +248,5 @@ def streaming(
     ) as s:
 
         for chunk in response.iter_content(chunk_size=chunk_size_download):
-            num = num + 1
-            if num % 100 == 0:
-                logger.info(
-                    "Download %f GB\n"
-                    % (num * 1.0 * chunk_size_download / 1000 / 1000 / 1000)
-                )
             if chunk:  # filter out keep-alive new chunks
                 s.write(chunk)

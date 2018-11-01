@@ -1,14 +1,21 @@
-import os
 import subprocess
-import mock
-from mock import MagicMock
-from mock import patch
+
+# Python 2 and 3 compatible
+try:
+    from unittest.mock import MagicMock
+    from unittest.mock import patch
+except ImportError:
+    from mock import MagicMock
+    from mock import patch
+
+import boto3
 import pytest
 import google
 import scripts.aws_replicate
 from scripts.aws_replicate import AWSBucketReplication
 from scripts.google_replicate import exec_google_copy, resumable_streaming_copy
-from scripts.google_resumable_upload import GCSObjectStreamUpload
+
+from scripts.errors import APIError
 
 TEST_UUID = "11111111111111111111111111111111"
 TEST_FILENAME = "test"
@@ -25,7 +32,7 @@ def gen_mock_manifest_data():
         "project": "TGCA",
     }
 
-    l = [
+    return [
         fake,
         fake,
         fake,
@@ -43,7 +50,6 @@ def gen_mock_manifest_data():
         fake,
         fake,
     ]
-    return l
 
 
 @patch("google.cloud.storage.Client")
@@ -92,8 +98,10 @@ def test_resumable_streaming_copy_called_one_time(
     mock_bucket_exists.return_value = True
     mock_check_blob.side_effect = [False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    scripts.google_replicate.update_indexd = MagicMock()
     exec_google_copy({"fileid": "test_file_id", "filename": "test file name"}, {})
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
+    assert scripts.google_replicate.update_indexd.call_count == 1
 
 
 @patch("google.cloud.storage.Client")
@@ -105,8 +113,10 @@ def test_resumable_streaming_copy_called_two_time(
     mock_bucket_exists.return_value = True
     mock_check_blob.side_effect = [False, False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    scripts.google_replicate.update_indexd = MagicMock()
     exec_google_copy({"fileid": "test_file_id", "filename": "test file name"}, {})
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 2
+    assert scripts.google_replicate.update_indexd.call_count == 1
 
 
 @patch("google.cloud.storage.Client")
@@ -126,114 +136,66 @@ def test_streamUpload_called(mock_requests_get, mock_client):
         "blob_test",
         {},
     )
-    scripts.google_replicate.streaming.called == True
+    assert scripts.google_replicate.streaming.called
 
 
 @patch("google.cloud.storage.Client")
 @patch("requests.get")
 def test_streamUpload_not_called(mock_requests_get, mock_client):
     class Mock_Requests(object):
-        def __init__(self, _status_code):
-            self.status_code = _status_code
+        def __init__(self, status_code, message):
+            self.status_code = status_code
+            self.message = message
 
-    mock_value = Mock_Requests(400)
-    mock_requests_get.return_value = mock_value
+    mock_requests_get.return_value = Mock_Requests(status_code=400, message="error")
     scripts.google_replicate.streaming = MagicMock()
-    resumable_streaming_copy(
-        {"fileid": "test_file_id", "filename": "test file name"},
-        mock_client,
-        "bucket_test",
-        "blob_test",
-        {},
-    )
-    scripts.google_replicate.streaming.called == False
-
-
-@patch("scripts.aws_replicate.bucket_exists")
-def test_call_aws_copy(mock_aws_bucket_exists):
-    instance = AWSBucketReplication(
-        bucket="test_bucket", manifest_file="test_manifest", global_config={}
-    )
-    mock_aws_bucket_exists.return_value = False
-    instance.get_etag_aws_object = MagicMock()
-    instance.call_aws_copy(gen_mock_manifest_data(), {})
-    assert instance.get_etag_aws_object.called == False
-
+    with pytest.raises(APIError):
+        resumable_streaming_copy(
+            {"fileid": "test_file_id", "filename": "test file name"},
+            mock_client,
+            "bucket_test",
+            "blob_test",
+            {},
+        )
+    assert not scripts.google_replicate.streaming.called
 
 @patch("scripts.aws_replicate.object_exists")
-@patch("scripts.aws_replicate.bucket_exists")
-def test_call_aws_copy_with_no_object_in_source_bucket(
-    mock_aws_bucket_exists, mock_aws_object_exists
-):
+def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_object_exists):
     instance = AWSBucketReplication(
         bucket="test_bucket",
         manifest_file="test_manifest",
         global_config={"chunk_size": 1},
     )
-    mock_aws_bucket_exists.return_value = True
-    mock_aws_object_exists.side_effect = [False, False, False, False, False]
-
+    mock_aws_object_exists.side_effect = [False, False, False]
     subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object = MagicMock()
-    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+
+    s3 = boto3.resource("s3")
+    s3.meta.client.head_bucket = MagicMock()
+    s3.meta.client.head_bucket.return_value = True
+    instance.call_aws_copy(s3, gen_mock_manifest_data()[0:1], "target_bucket")
     assert subprocess.Popen.call_count == 0
-    assert scripts.aws_replicate.object_exists.call_count == 3
+    assert scripts.aws_replicate.object_exists.call_count == 2
 
 
 @patch("scripts.aws_replicate.object_exists")
-@patch("scripts.aws_replicate.bucket_exists")
-def test_call_aws_copy_with_success_upload_first_try(
-    mock_aws_bucket_exists, mock_aws_object_exists
-):
+def test_call_aws_copy_with_success_upload_first_try(mock_aws_object_exists):
     instance = AWSBucketReplication(
         bucket="test_bucket",
         manifest_file="test_manifest",
         global_config={"chunk_size": 1},
     )
-    mock_aws_bucket_exists.return_value = True
-    mock_aws_object_exists.side_effect = [True, False, True, True, True]
+
+    mock_aws_object_exists.side_effect = [True, False, True]
 
     subprocess.Popen = MagicMock()
     scripts.aws_replicate.get_etag_aws_object = MagicMock()
-    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
+    scripts.aws_replicate.AWSBucketReplication.update_indexd = MagicMock()
+
+    s3 = boto3.resource("s3")
+    s3.meta.client.head_bucket = MagicMock()
+    s3.meta.client.head_bucket.return_value = True
+
+    instance.call_aws_copy(s3, gen_mock_manifest_data()[0:1], "target_bucket")
     assert subprocess.Popen.call_count == 1
-    assert scripts.aws_replicate.object_exists.call_count == 5
-
-
-@patch("scripts.aws_replicate.object_exists")
-@patch("scripts.aws_replicate.bucket_exists")
-def test_call_aws_copy_with_success_upload_second_try(
-    mock_aws_bucket_exists, mock_aws_object_exists
-):
-    instance = AWSBucketReplication(
-        bucket="test_bucket",
-        manifest_file="test_manifest",
-        global_config={"chunk_size": 1},
-    )
-    mock_aws_bucket_exists.return_value = True
-    mock_aws_object_exists.side_effect = [True, False, True, False, True]
-    subprocess.Popen = MagicMock()
-
-    scripts.aws_replicate.get_etag_aws_object = MagicMock()
-    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert subprocess.Popen.call_count == 2
-    assert scripts.aws_replicate.object_exists.call_count == 5
-
-
-@patch("scripts.aws_replicate.object_exists")
-@patch("scripts.aws_replicate.bucket_exists")
-def test_call_aws_copy_with_fail_upload_second_try(
-    mock_aws_bucket_exists, mock_aws_object_exists
-):
-    instance = AWSBucketReplication(
-        bucket="test_bucket",
-        manifest_file="test_manifest",
-        global_config={"chunk_size": 1},
-    )
-    mock_aws_bucket_exists.return_value = True
-    mock_aws_object_exists.side_effect = [True, False, True, False, False]
-    subprocess.Popen = MagicMock()
-    scripts.aws_replicate.get_etag_aws_object = MagicMock()
-    instance.call_aws_copy(gen_mock_manifest_data()[0:1], {})
-    assert subprocess.Popen.call_count == 2
-    assert scripts.aws_replicate.object_exists.call_count == 5
+    assert scripts.aws_replicate.object_exists.call_count == 3

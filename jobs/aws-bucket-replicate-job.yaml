@@ -89,5 +89,6 @@ spec:
             [default]
             region: us-east-1
             """ > ~/.aws/config
+            cat /secrets/dcf_dataservice_settings > ./scripts/settings.py
             python scripts/replicate.py aws_replicate --bucket $GDC_BUCKET_NAME --manifest_file /dcf-dataservice/manifest --global_config "{\"chunk_size\": $CHUNK_SIZE, \"log_bucket\": \"$LOG_BUCKET\"}"
       restartPolicy: Never
