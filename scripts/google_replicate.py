@@ -66,9 +66,8 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     if blob_exists(bucket_name, blob_name):
         execstr = "gsutil hash -h gs://{}/{}".format(bucket_name, blob_name)
         result = subprocess.check_output(execstr, shell=True).strip("\n\"'")
-        md5_hash = extract_md5_from_text(result)
-        if md5_hash:
-            return md5_hash == fi.get("hash", "").lower()
+        return extract_md5_from_text(result) == fi.get("hash", "").lower()
+
     return False
 
 
@@ -165,7 +164,7 @@ def exec_google_copy(fi, global_config):
         update_indexd(fi)
     except APIError as e:
         logger.error(e.message)
-        return DataFlowLog(copy_success=True, index_success=False, message=e.message)
+        return DataFlowLog(copy_success=True, message=e.message)
 
     return DataFlowLog(
         copy_success=True,
