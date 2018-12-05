@@ -138,3 +138,30 @@ def write_fileinfo_list(filepath, files):
                     fi.get("project", ""),
                 )
             )
+
+
+def exec_files_grouping(files):
+    """
+    Group files into multiple groups according to the target buckets.
+    All files in the same group should be copied/deleted to/from the same bucket
+    """
+    project_acl_set = set()
+    for fi in files:
+        if fi.get("project"):
+            project_acl_set.add(fi.get("project") + fi.get("acl"))
+
+    file_grp = dict()
+    key = 0
+    while len(project_acl_set) > 0:
+        project_acl = project_acl_set.pop()
+        same_project_files = []
+        for fi in files:
+            if fi.get("project") + fi.get("acl") == project_acl:
+                same_project_files.append(fi)
+        if len(same_project_files) > 0:
+            if key in file_grp:
+                file_grp[key].append(same_project_files)
+            else:
+                file_grp[key] = same_project_files
+            key = key + 1
+    return file_grp

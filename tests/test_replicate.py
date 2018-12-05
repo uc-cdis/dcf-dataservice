@@ -159,6 +159,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
         )
     assert not scripts.google_replicate.streaming.called
 
+
 @patch("scripts.aws_replicate.object_exists")
 def test_call_aws_copy_with_no_object_in_source_bucket(mock_aws_object_exists):
     instance = AWSBucketReplication(

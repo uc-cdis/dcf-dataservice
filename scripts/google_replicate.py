@@ -92,7 +92,6 @@ def update_indexd(fi):
                 doc.patch()
             except Exception as e:
                 raise APIError(
-                    code=500,
                     message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
                         fi.get("fileid", ""), e.message
                     ),
@@ -113,14 +112,12 @@ def update_indexd(fi):
         )
         if doc is None:
             raise APIError(
-                code=500,
                 message="INDEX_CLIENT: Fail to create a record with uuid {}".format(
                     fi.get("fileid", "")
                 ),
             )
     except Exception as e:
         raise APIError(
-            code=500,
             message="INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                 fi.get("fileid", ""), e.message
             ),
@@ -217,7 +214,6 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
         )
     except Exception:
         raise APIError(
-            code=500,
             message="GCSObjectStreamUpload: Can not upload {}".format(
                 fi.get("fileid", "")
             ),

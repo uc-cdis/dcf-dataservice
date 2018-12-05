@@ -14,6 +14,9 @@ def parse_arguments():
     aws_replicate_cmd.add_argument("--bucket", required=True)
     aws_replicate_cmd.add_argument("--manifest_file", required=True)
 
+    redact_cmd = subparsers.add_parser("readact")
+    redact_cmd.add_argument("--manifest_file", required=True)
+
     return parser.parse_args()
 
 

@@ -10,7 +10,7 @@ from indexclient.client import IndexClient
 
 from errors import APIError, UserError
 from settings import PROJECT_MAP, INDEXD
-from utils import get_bucket_name, get_fileinfo_list_from_manifest
+from utils import get_bucket_name, get_fileinfo_list_from_manifest, exec_files_grouping
 
 logger = get_logger("AWSReplication")
 
@@ -62,28 +62,7 @@ class AWSBucketReplication(object):
         # from intergration_data_test import gen_aws_test_data
         # submitting_files = gen_aws_test_data()
         submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
-
-        project_acl_set = set()
-        for fi in submitting_files:
-            self.totalBytes = self.totalBytes + fi.get("size", 0)
-            if fi.get("project"):
-                project_acl_set.add(fi.get("project") + fi.get("acl"))
-
-        file_grp = dict()
-        key = 0
-        while len(project_acl_set) > 0:
-            project_acl = project_acl_set.pop()
-            same_project_files = []
-            for fi in submitting_files:
-                if fi.get("project") + fi.get("acl") == project_acl:
-                    same_project_files.append(fi)
-            if len(same_project_files) > 0:
-                if key in file_grp:
-                    file_grp[key].append(same_project_files)
-                else:
-                    file_grp[key] = same_project_files
-                key = key + 1
-        return file_grp
+        return exec_files_grouping(submitting_files)
 
     def write_log_file(self, filname):
         logger.info("Store all uuids that can not be copied")
@@ -102,6 +81,9 @@ class AWSBucketReplication(object):
         for _, files in file_grp.iteritems():
             target_bucket = get_bucket_name(files[0], PROJECT_MAP)
             self.call_aws_copy(s3, files, target_bucket)
+
+        # write result to log file
+        self.write_log_file()
 
     def update_indexd(self, fi):
         """
@@ -124,7 +106,6 @@ class AWSBucketReplication(object):
                     doc.patch()
                 except Exception as e:
                     raise APIError(
-                        code=500,
                         message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
                             fi.get("fileid", ""), e.message
                         ),
@@ -145,16 +126,9 @@ class AWSBucketReplication(object):
             )
         except Exception as e:
             raise APIError(
-                code=500,
                 message="INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                     fi.get("fileid", ""), e.message
                 ),
-            )
-        if doc is None:
-            logger.warn(
-                "INDEX_CLIENT: Fail to create a record with uuid {}".format(
-                    fi.get("fileid", "")
-                )
             )
 
     def call_aws_copy(self, s3, files, target_bucket):
@@ -199,8 +173,7 @@ class AWSBucketReplication(object):
                 if not object_exists(s3, self.bucket, object_name):
                     self.json_log[object_name] = {
                         "msg": "object does not exists in {}".format(self.bucket),
-                        "module": "Service",
-                        "code": 404,
+                        "module": "Service"
                     }
                     continue
 
@@ -220,8 +193,7 @@ class AWSBucketReplication(object):
                         "msg": "Can not copy the {} from {} to {} due to AWS CLI error.".format(
                             object_name, self.bucket, target_bucket
                         ),
-                        "module": "AWSCLI",
-                        "code": 500,
+                        "module": "AWSCLI"
                     }
                 else:
                     try:
@@ -231,8 +203,7 @@ class AWSBucketReplication(object):
                         logger.error(e.message)
                         self.json_log[object_name] = {
                             "msg": e.message,
-                            "module": "Indexd",
-                            "code": 500,
+                            "module": "Indexd"
                         }
 
                     if self.json_log["success_case"] % 1000 == 0:
