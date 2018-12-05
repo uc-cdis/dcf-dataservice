@@ -45,7 +45,7 @@ class AWSBucketReplication(object):
         self.bucket = bucket
         self.manifest_file = manifest_file
         self.global_config = global_config
-        self.json_log = {"success_case": 0}
+        self.json_log = {"success_cases": 0}
 
     def prepare(self):
         """
@@ -64,9 +64,10 @@ class AWSBucketReplication(object):
         submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
         return exec_files_grouping(submitting_files)
 
-    def write_log_file(self, filname):
+    def write_log_file(self):
         logger.info("Store all uuids that can not be copied")
-        with open(filname, "w") as outfile:
+        filename = self.global_config.get("log_file", "./log_file.json")
+        with open(filename, "w") as outfile:
             json.dump(self.json_log, outfile)
 
     def run(self):
@@ -75,7 +76,7 @@ class AWSBucketReplication(object):
         try:
             s3.meta.client.head_bucket(Bucket=self.bucket)
         except botocore.exceptions.ClientError as e:
-            raise UserError(e.message, int(e.response["Error"]["Code"]))
+            raise UserError(e.message)
 
         file_grp = self.prepare()
         for _, files in file_grp.iteritems():
@@ -97,20 +98,19 @@ class AWSBucketReplication(object):
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
         s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
 
-        doc = indexclient.get(fi.get("fileid", ""))
-        if doc is not None:
-            url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
-            if url not in doc.urls:
-                doc.urls.append(url)
-                try:
+        try:
+            doc = indexclient.get(fi.get("fileid", ""))
+            if doc is not None:
+                url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
+                if url not in doc.urls:
+                    doc.urls.append(url)
                     doc.patch()
-                except Exception as e:
-                    raise APIError(
-                        message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                            fi.get("fileid", ""), e.message
-                        ),
-                    )
-            return
+                return
+        except Exception as e:
+            raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                    fi.get("fileid", ""), e.message
+                )
+            )
 
         urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("fileid", ""))]
 
@@ -125,8 +125,7 @@ class AWSBucketReplication(object):
                 urls=urls,
             )
         except Exception as e:
-            raise APIError(
-                message="INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
+            raise APIError("INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                     fi.get("fileid", ""), e.message
                 ),
             )
@@ -152,7 +151,7 @@ class AWSBucketReplication(object):
         try:
             s3.meta.client.head_bucket(Bucket=target_bucket)
         except botocore.exceptions.ClientError as e:
-            raise UserError(e.message, int(e.response["Error"]["Code"]))
+            raise UserError(e.message)
 
         index = 0
         while index < len(files):
@@ -163,8 +162,8 @@ class AWSBucketReplication(object):
             chunk_size = min(config_chunk_size, len(files) - index)
 
             # According to AWS document, copying failure is very rare.
-            # The key idea is AWS internally handle the copying process,
-            # if the object exists in the target bucket that means the copying is success otherwise failure
+            # AWS internally handle the copying process.
+            # If the object exists in the target bucket that means the copying is success otherwise failure
 
             execstr = base_cmd
             for fi in files[index : index + chunk_size]:
@@ -172,8 +171,9 @@ class AWSBucketReplication(object):
 
                 if not object_exists(s3, self.bucket, object_name):
                     self.json_log[object_name] = {
+                        "copy_success": False,
+                        "index_success": False,
                         "msg": "object does not exists in {}".format(self.bucket),
-                        "module": "Service"
                     }
                     continue
 
@@ -190,23 +190,25 @@ class AWSBucketReplication(object):
                 object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
                 if not object_exists(s3, target_bucket, object_name):
                     self.json_log[object_name] = {
+                        "copy_success": False,
+                        "index_success": False,
                         "msg": "Can not copy the {} from {} to {} due to AWS CLI error.".format(
                             object_name, self.bucket, target_bucket
-                        ),
-                        "module": "AWSCLI"
+                        )
                     }
                 else:
                     try:
                         self.update_indexd(fi)
-                        self.json_log["success_case"] += 1
+                        self.json_log["success_cases"] += 1
                     except Exception as e:
                         logger.error(e.message)
                         self.json_log[object_name] = {
-                            "msg": e.message,
-                            "module": "Indexd"
+                            "copy_success": True,
+                            "index_success": False,
+                            "msg": e.message
                         }
 
-                    if self.json_log["success_case"] % 1000 == 0:
+                    if self.json_log["success_cases"] % 1000 == 0:
                         self.write_log_file()
 
             index = index + chunk_size

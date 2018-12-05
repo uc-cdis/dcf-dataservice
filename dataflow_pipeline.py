@@ -49,15 +49,18 @@ class FileCopyingDoFn(beam.DoFn):
 
 
 def format_result(result):
-    (fi, success) = result
-    return "%s %s %d %s %s %s: %d" % (
+    (fi, datalog) = result
+    return "%s %s %d %s %s %s %s %s %s" % (
         fi.get("fileid"),
         fi.get("filename"),
         int(fi.get("size")),
         fi.get("hash"),
         fi.get("acl"),
         fi.get("project"),
-        success,
+        datalog.copy_success,
+        datalog.index_success,
+        datalog.message
+        
     )
 
 

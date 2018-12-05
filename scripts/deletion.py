@@ -38,8 +38,7 @@ def _remove_url_from_indexd_record(uuid, urls):
         try:
             doc.patch()
         except Exception as e:
-            raise APIError(
-                message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+            raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
                     uuid, e.message
                 )
             )

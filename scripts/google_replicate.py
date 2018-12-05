@@ -5,14 +5,14 @@ from google.cloud import storage
 from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 
-from cdislogging import get_logger
+import logging as logger
 from indexclient.client import IndexClient
 
 from errors import APIError
 from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import extract_md5_from_text, get_bucket_name
 
-logger = get_logger("GoogleReplication")
+#logger = get_logger("GoogleReplication")
 
 indexclient = IndexClient(
     INDEXD["host"],
@@ -81,21 +81,21 @@ def update_indexd(fi):
     """
     gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
     gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
-    doc = indexclient.get(fi.get("fileid", ""))
 
-    if doc is not None:
-        url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
-        if url not in doc.urls:
-            doc.urls.append(url)
-            try:
+    try:
+        doc = indexclient.get(fi.get("fileid", ""))
+        if doc is not None:
+            url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
+            if url not in doc.urls:
+                doc.urls.append(url)
                 doc.patch()
-            except Exception as e:
-                raise APIError(
-                    message="INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                        fi.get("fileid", ""), e.message
-                    ),
-                )
-        return
+            return
+    except Exception as e:
+        raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                fi.get("fileid", ""), e.message
+            ),
+        )
+
 
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi["fileid"])]
 
@@ -110,14 +110,12 @@ def update_indexd(fi):
             urls=urls,
         )
         if doc is None:
-            raise APIError(
-                message="INDEX_CLIENT: Fail to create a record with uuid {}".format(
+            raise APIError("INDEX_CLIENT: Fail to create a record with uuid {}".format(
                     fi.get("fileid", "")
                 ),
             )
     except Exception as e:
-        raise APIError(
-            message="INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
+        raise APIError("INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                 fi.get("fileid", ""), e.message
             ),
         )
@@ -130,7 +128,7 @@ def exec_google_copy(fi, global_config):
         fi(dict): a dictionary of a copying file
         global_config(dict): a configuration
     Returns:
-        True/False
+        DataFlowLog
     """
     client = storage.Client()
     blob_name = fi.get("fileid") + "/" + fi.get("filename")
@@ -198,9 +196,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     )
 
     if response.status_code != 200:
-        raise APIError(
-            code=response.status_code, message="GDCPotal: {}".format(response.message)
-        )
+        raise APIError("GDCPotal: {}".format(response.message))
 
     try:
         streaming(
@@ -212,8 +208,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             blob_name,
         )
     except Exception:
-        raise APIError(
-            message="GCSObjectStreamUpload: Can not upload {}".format(
+        raise APIError("GCSObjectStreamUpload: Can not upload {}".format(
                 fi.get("fileid", "")
             ),
         )

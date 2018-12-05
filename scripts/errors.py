@@ -1,1 +1,5 @@
-from cdiserrors import APIError, UserError
+class UserError(Exception):
+    pass
+
+class APIError(Exception):
+    pass
