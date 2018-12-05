@@ -3,6 +3,7 @@ import argparse
 import json
 
 from aws_replicate import AWSBucketReplication
+from object_redacts import delete_objects_from_cloud_resources
 
 
 def parse_arguments():
@@ -16,12 +17,14 @@ def parse_arguments():
 
     redact_cmd = subparsers.add_parser("readact")
     redact_cmd.add_argument("--manifest_file", required=True)
+    redact_cmd.add_argument("--log_file", required=True)
 
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     start = timeit.default_timer()
+    
     args = parse_arguments()
     if args.action == "aws_replicate":
         # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 4}'
@@ -31,6 +34,8 @@ if __name__ == "__main__":
             global_config=json.loads(args.global_config),
         )
         aws.run()
+    elif args.action == "readact":
+        delete_objects_from_cloud_resources(args.manifest, args.log_file)
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))
