@@ -25,6 +25,22 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
 
+    # from google_replicate import exec_google_copy
+
+    # fi = {
+    #     "id": "000ed0fb-d1f4-4b80-8d77-0d134bb4c0d6",
+    #     "filename": "test.py",
+    #     "md5": "dd0022192f447a21f44cf1058e3371de",
+    #     "size": 5880133619,
+    #     "state": "released",
+    #     "acl": "controlled",
+    #     "project_id": "TARGET-CNC",
+    # }
+    # import pdb
+
+    # pdb.set_trace()
+    # exec_google_copy(fi, {})
+
     args = parse_arguments()
     if args.action == "aws_replicate":
         # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 4}'

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import argparse
 import logging
 import re
+import timeit
 
 import apache_beam as beam
 from apache_beam.io import ReadFromText
@@ -20,7 +21,7 @@ try:
 except NameError:
     unicode = str
 
-FILE_HEADERS = ["fileid", "filename", "size", "hash", "acl", "project"]
+FILE_HEADERS = ["id", "filename", "md5", "size", "state", "acl", "project_id"]
 
 # global_config ={"token_path": "./gdc-token.txt",
 #                 "chunk_size_download": 2048000,
@@ -51,12 +52,12 @@ class FileCopyingDoFn(beam.DoFn):
 def format_result(result):
     (fi, datalog) = result
     return "%s %s %d %s %s %s %s %s %s" % (
-        fi.get("fileid"),
+        fi.get("id"),
         fi.get("filename"),
         int(fi.get("size")),
-        fi.get("hash"),
+        fi.get("md5"),
         fi.get("acl"),
-        fi.get("project"),
+        fi.get("project_id"),
         datalog.copy_success,
         datalog.index_success,
         datalog.message
@@ -105,4 +106,7 @@ def run(argv=None):
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
+    start = timeit.default_timer()
     run()
+    end = timeit.default_timer()
+    print("Total time: {} seconds".format(end - start))

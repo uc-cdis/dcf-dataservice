@@ -38,7 +38,8 @@ def _remove_url_from_indexd_record(uuid, urls):
         try:
             doc.patch()
         except Exception as e:
-            raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+            raise APIError(
+                "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
                     uuid, e.message
                 )
             )
@@ -81,7 +82,7 @@ def _remove_object_from_s3(s3, files, target_bucket, log_json):
     """
     bucket = s3.Bucket(target_bucket)
     for f in files:
-        key = join(f.get("fileid"), f.get("filename"))
+        key = join(f.get("id"), f.get("filename"))
         full_path = join("s3://" + target_bucket, key)
         deleting_object = {"Key": key}
 
@@ -94,7 +95,7 @@ def _remove_object_from_s3(s3, files, target_bucket, log_json):
         if res["Deleted"]:
             log_json[full_path] = {"deleted": True, "error": None}
             try:
-                _remove_url_from_indexd_record(f.get("fileid"), [full_path])
+                _remove_url_from_indexd_record(f.get("id"), [full_path])
                 log_json[full_path]["remove_from_indexd"] = True
             except Exception as e:
                 log_json[full_path]["remove_from_indexd"] = False
@@ -114,12 +115,12 @@ def _remove_object_from_gs(client, files, target_bucket, log_json):
     
     """
     for f in files:
-        key = join(f.get("fileid"), f.get("filename"))
+        key = join(f.get("id"), f.get("filename"))
         full_path = join("gs://" + target_bucket, key)
         try:
             bucket = client.get_bucket(target_bucket)
             blob = bucket.blob(key)
             blob.delete()
-            _remove_url_from_indexd_record(f.get("fileid"), [full_path])
+            _remove_url_from_indexd_record(f.get("id"), [full_path])
         except Exception as e:
             log_json[full_path] = {"deleted": False, "error": {"msg": e.message}}

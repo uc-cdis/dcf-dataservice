@@ -1,18 +1,18 @@
-import subprocess
+import base64
 import requests
+import urllib
 
 from google.cloud import storage
 from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
+from google.auth.transport.requests import AuthorizedSession
 
 import logging as logger
 from indexclient.client import IndexClient
 
 from errors import APIError
 from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
-from utils import extract_md5_from_text, get_bucket_name
-
-#logger = get_logger("GoogleReplication")
+from utils import get_bucket_name
 
 indexclient = IndexClient(
     INDEXD["host"],
@@ -53,7 +53,7 @@ def blob_exists(bucket_name, blob_name):
     return False
 
 
-def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
+def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
     """
     check if blob object exists or not
     Args:
@@ -63,12 +63,15 @@ def check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
     Returns:
         bool: indicating value if the blob is exist or not
     """
-    if blob_exists(bucket_name, blob_name):
-        execstr = "gsutil hash -h gs://{}/{}".format(bucket_name, blob_name)
-        result = subprocess.check_output(execstr, shell=True).strip("\n\"'")
-        return extract_md5_from_text(result) == fi.get("hash", "").lower()
-
-    return False
+    url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
+        bucket_name, urllib.quote(blob_name, safe="")
+    )
+    res = sess.request(method="GET", url=url)
+    return (
+        res.status_code == 200
+        and res.json["size"] == fi.get("size")
+        and base64.b64decode(res.json()["md5Hash"]).encode("hex") == fi.get("md5")
+    )
 
 
 def update_indexd(fi):
@@ -80,10 +83,10 @@ def update_indexd(fi):
          None
     """
     gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
-    gs_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+    gs_object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
 
     try:
-        doc = indexclient.get(fi.get("fileid", ""))
+        doc = indexclient.get(fi.get("id", ""))
         if doc is not None:
             url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
             if url not in doc.urls:
@@ -91,11 +94,11 @@ def update_indexd(fi):
                 doc.patch()
             return
     except Exception as e:
-        raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                fi.get("fileid", ""), e.message
-            ),
+        raise APIError(
+            "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                fi.get("id", ""), e.message
+            )
         )
-
 
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi["fileid"])]
 
@@ -104,20 +107,22 @@ def update_indexd(fi):
 
     try:
         doc = indexclient.create(
-            did=fi.get("fileid", ""),
-            hashes={"md5": fi.get("hash", "")},
+            did=fi.get("id", ""),
+            hashes={"md5": fi.get("md5", "")},
             size=fi.get("size", 0),
             urls=urls,
         )
         if doc is None:
-            raise APIError("INDEX_CLIENT: Fail to create a record with uuid {}".format(
-                    fi.get("fileid", "")
-                ),
+            raise APIError(
+                "INDEX_CLIENT: Fail to create a record with uuid {}".format(
+                    fi.get("id", "")
+                )
             )
     except Exception as e:
-        raise APIError("INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
-                fi.get("fileid", ""), e.message
-            ),
+        raise APIError(
+            "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
+                fi.get("id", ""), e.message
+            )
         )
 
 
@@ -131,38 +136,32 @@ def exec_google_copy(fi, global_config):
         DataFlowLog
     """
     client = storage.Client()
-    blob_name = fi.get("fileid") + "/" + fi.get("filename")
+    sess = AuthorizedSession(client._credentials)
+    blob_name = fi.get("id") + "/" + fi.get("filename")
     bucket_name = get_bucket_name(fi, PROJECT_MAP)
 
     if not bucket_exists(bucket_name):
-        msg = "There is no bucket with provided name {}".format(bucket_name)
+        msg = "There is no bucket with provided name {}\n".format(bucket_name)
         logger.error(msg)
         return DataFlowLog(message=msg)
 
-    if check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-        msg = "object {} already exists. Not need to re-copy".format(blob_name)
-        return DataFlowLog(copy_success=True, index_success=True, message=msg)
+    if not check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
+        try:
+            resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+        except APIError as e:
+            logger.error(e.message)
+            return DataFlowLog(message=e.message)
 
-    try:
-        resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-    except APIError as e:
-        logger.error(e.message)
-        return DataFlowLog(message=e.message)
-
-    # check if object is copied correctly by comparing md5 hash
-    if not check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-        # try to re-copy the file
-        resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-        if not check_blob_name_exists_and_match_md5(bucket_name, blob_name, fi):
-            msg = "can not copy {} to GOOGLE bucket".format(blob_name)
-            logger.error(msg)
-            return DataFlowLog(message=msg)
-
-    try:
-        update_indexd(fi)
-    except APIError as e:
-        logger.error(e.message)
-        return DataFlowLog(copy_success=True, message=e.message)
+    if check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
+        try:
+            update_indexd(fi)
+        except APIError as e:
+            logger.error(e.message)
+            return DataFlowLog(copy_success=True, message=e.message)
+    else:
+        msg = "can not copy {} to GOOGLE bucket".format(blob_name)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
     return DataFlowLog(
         copy_success=True,
@@ -186,7 +185,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     chunk_size_upload = global_config.get(
         "chunk_size_upload", DEFAULT_CHUNK_SIZE_UPLOAD
     )
-    data_endpt = DATA_ENDPT + fi.get("fileid", "")
+    data_endpt = DATA_ENDPT + fi.get("id", "")
     token = GDC_TOKEN
 
     response = requests.get(
@@ -196,7 +195,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     )
 
     if response.status_code != 200:
-        raise APIError("GDCPotal: {}".format(response.message))
+        raise APIError("GDCPotal: {}".format(response.text))
 
     try:
         streaming(
@@ -208,9 +207,8 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             blob_name,
         )
     except Exception:
-        raise APIError("GCSObjectStreamUpload: Can not upload {}".format(
-                fi.get("fileid", "")
-            ),
+        raise APIError(
+            "GCSObjectStreamUpload: Can not upload {}".format(fi.get("id", ""))
         )
 
 

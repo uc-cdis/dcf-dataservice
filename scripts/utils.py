@@ -13,8 +13,8 @@ def get_bucket_name(fi, PROJECT_MAP):
     TARGET-controled -> gdc-target-phs000218-controlled
     """
     bucketname = ""
-    project = fi.get("project", "")
-    if fi.get("acl", "") == "*" or fi.get("acl", "") == "open":
+    project = fi.get("project_id", "").split("-")[0]
+    if fi.get("acl", "") == "*" or fi.get("acl", "") == "['open']":
         bucketname = "gdc-" + PROJECT_MAP.get(project, "") + "-open"
     else:
         bucketname = "gdc-" + PROJECT_MAP.get(project, "") + "-controlled"
@@ -130,12 +130,12 @@ def write_fileinfo_list(filepath, files):
         for fi in files:
             writer.write(
                 "{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                    fi.get("fileid", ""),
+                    fi.get("id", ""),
                     fi.get("filename", ""),
                     fi.get("size", 0),
-                    fi.get("hash", ""),
+                    fi.get("md5", ""),
                     fi.get("acl", "*"),
-                    fi.get("project", ""),
+                    fi.get("project_id", ""),
                 )
             )
 
@@ -147,8 +147,8 @@ def exec_files_grouping(files):
     """
     project_acl_set = set()
     for fi in files:
-        if fi.get("project"):
-            project_acl_set.add(fi.get("project") + fi.get("acl"))
+        if fi.get("project_id"):
+            project_acl_set.add(fi.get("project_id") + fi.get("acl"))
 
     file_grp = dict()
     key = 0
@@ -156,7 +156,7 @@ def exec_files_grouping(files):
         project_acl = project_acl_set.pop()
         same_project_files = []
         for fi in files:
-            if fi.get("project") + fi.get("acl") == project_acl:
+            if fi.get("project_id") + fi.get("acl") == project_acl:
                 same_project_files.append(fi)
         if len(same_project_files) > 0:
             if key in file_grp:

@@ -96,10 +96,10 @@ class AWSBucketReplication(object):
         """
         s3 = boto3.resource("s3")
         s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
-        s3_object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+        s3_object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
 
         try:
-            doc = indexclient.get(fi.get("fileid", ""))
+            doc = indexclient.get(fi.get("id", ""))
             if doc is not None:
                 url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
                 if url not in doc.urls:
@@ -107,27 +107,29 @@ class AWSBucketReplication(object):
                     doc.patch()
                 return
         except Exception as e:
-            raise APIError("INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                    fi.get("fileid", ""), e.message
+            raise APIError(
+                "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                    fi.get("id", ""), e.message
                 )
             )
 
-        urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("fileid", ""))]
+        urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("id", ""))]
 
         if object_exists(s3, s3_bucket_name, s3_object_name):
             urls.append("s3://{}/{}".format(s3_bucket_name, s3_object_name))
 
         try:
             doc = indexclient.create(
-                did=fi.get("fileid", ""),
-                hashes={"md5": fi.get("hash", "")},
+                did=fi.get("id", ""),
+                hashes={"md5": fi.get("md5", "")},
                 size=fi.get("size", 0),
                 urls=urls,
             )
         except Exception as e:
-            raise APIError("INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
-                    fi.get("fileid", ""), e.message
-                ),
+            raise APIError(
+                "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
+                    fi.get("id", ""), e.message
+                )
             )
 
     def call_aws_copy(self, s3, files, target_bucket):
@@ -167,7 +169,7 @@ class AWSBucketReplication(object):
 
             execstr = base_cmd
             for fi in files[index : index + chunk_size]:
-                object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+                object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
 
                 if not object_exists(s3, self.bucket, object_name):
                     self.json_log[object_name] = {
@@ -180,21 +182,20 @@ class AWSBucketReplication(object):
                 # only copy ones not exist in target bucket
                 if not object_exists(s3, target_bucket, object_name):
                     execstr += ' --include "{}"'.format(object_name)
-
             if execstr != base_cmd:
                 subprocess.Popen(shlex.split(execstr)).wait()
                 logger.info(execstr)
 
             # Log all failures
             for fi in files[index : index + chunk_size]:
-                object_name = "{}/{}".format(fi.get("fileid"), fi.get("filename"))
+                object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
                 if not object_exists(s3, target_bucket, object_name):
                     self.json_log[object_name] = {
                         "copy_success": False,
                         "index_success": False,
                         "msg": "Can not copy the {} from {} to {} due to AWS CLI error.".format(
                             object_name, self.bucket, target_bucket
-                        )
+                        ),
                     }
                 else:
                     try:
@@ -205,7 +206,7 @@ class AWSBucketReplication(object):
                         self.json_log[object_name] = {
                             "copy_success": True,
                             "index_success": False,
-                            "msg": e.message
+                            "msg": e.message,
                         }
 
                     if self.json_log["success_cases"] % 1000 == 0:
