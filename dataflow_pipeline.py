@@ -60,8 +60,7 @@ def format_result(result):
         fi.get("project_id"),
         datalog.copy_success,
         datalog.index_success,
-        datalog.message
-        
+        datalog.message,
     )
 
 

@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     if args.action == "aws_replicate":
-        # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 4}'
+        # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 100, "log_bucket": "xssxs"}'
         aws = AWSBucketReplication(
             bucket=args.bucket,
             manifest_file=args.manifest_file,

@@ -126,7 +126,7 @@ def split_manifest_file(manifest_file, file_nums=1):
 
 def write_fileinfo_list(filepath, files):
     with open(filepath, "w") as writer:
-        writer.write("fileid\tfilename\tsize\thash\tacl\tproject\n")
+        writer.write("id\tfilename\tsize\md5\tacl\tproject_id\n")
         for fi in files:
             writer.write(
                 "{}\t{}\t{}\t{}\t{}\t{}\n".format(

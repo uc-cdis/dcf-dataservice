@@ -7,10 +7,10 @@ INDEXD = {
 }
 
 PROJECT_MAP = {
-    "TCGA": "tcga-xxx-phs000178",
-    "TARGET": "target-xxx-phs000218",
-    "FM": "fm-xxx-phs000179",
-    "CCLE": "ccle-xxx",
+    "TCGA": "tcga-xxxx-phs000178",
+    "TARGET": "target-xxxx-phs000218",
+    "FM": "fm-xxxx-phs000179",
+    "CCLE": "ccle-xxxx",
 }
 
 GDC_TOKEN = ""

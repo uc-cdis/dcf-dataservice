@@ -42,7 +42,7 @@ class DeletionLog(object):
             "url": self.url,
             "deleted": self.deleted,
             "indexdUpdated": self.indexdUpdated,
-            "message": self.message
+            "message": self.message,
         }
 
 
