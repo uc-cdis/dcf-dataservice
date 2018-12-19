@@ -40,7 +40,7 @@ if __name__ == "__main__":
             manifest_file=args.manifest_file,
             global_config=json.loads(args.global_config),
             thread_num=int(args.thread_num),
-            job_name="copying"
+            job_name="copying",
         )
         aws.prepare()
         aws.run()
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             manifest_file=args.manifest_file,
             global_config=json.loads(args.global_config),
             thread_num=int(args.thread_num),
-            job_name="indexing"
+            job_name="indexing",
         )
         aws.prepare()
         aws.run()

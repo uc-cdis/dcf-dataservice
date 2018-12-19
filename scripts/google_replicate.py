@@ -96,7 +96,7 @@ def update_indexd(fi):
     except Exception as e:
         raise APIError(
             "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e.message
+                fi.get("id", ""), e
             )
         )
 
@@ -156,8 +156,8 @@ def exec_google_copy(fi, global_config):
         try:
             update_indexd(fi)
         except APIError as e:
-            logger.error(e.message)
-            return DataFlowLog(copy_success=True, message=e.message)
+            logger.error(e)
+            return DataFlowLog(copy_success=True, message=e)
     else:
         msg = "can not copy {} to GOOGLE bucket".format(blob_name)
         logger.error(msg)
@@ -195,7 +195,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     )
 
     if response.status_code != 200:
-        raise APIError("GDCPotal: {}".format(response.text))
+        raise APIError("GDCPotal error {}".format(response.status_code))
 
     try:
         streaming(

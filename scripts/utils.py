@@ -1,6 +1,7 @@
 import base64
 import re
 import argparse
+import boto3
 
 # def Base64ToHexHash(base64_hash):
 #    return hexlify(base64.decodestring(base64_hash.strip('\n"\'')))
@@ -47,6 +48,16 @@ def get_headers(manifest_file):
     except IOError:
         print("File {} is not existed".format(manifest_file))
     return []
+
+
+def get_fileinfo_list_from_s3_manifest(url_manifeat):
+
+    s3 = boto3.resource("s3")
+    from urlparse import urlparse
+
+    out = urlparse(url_manifeat)
+    s3.meta.client.download_file(out.netloc, out.path[1:], out.path[1:])
+    return get_fileinfo_list_from_manifest(out.path[1:])
 
 
 def get_fileinfo_list_from_manifest(manifest_file):

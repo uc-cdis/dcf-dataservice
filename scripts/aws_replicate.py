@@ -6,7 +6,6 @@ import time
 import timeit
 import threading
 
-
 import json
 import boto3
 
@@ -15,7 +14,12 @@ from indexclient.client import IndexClient
 
 from errors import APIError
 from settings import PROJECT_MAP, INDEXD
-from utils import get_bucket_name, get_fileinfo_list_from_manifest, exec_files_grouping
+from utils import (
+    get_bucket_name,
+    get_fileinfo_list_from_manifest,
+    get_fileinfo_list_from_s3_manifest,
+    exec_files_grouping,
+)
 
 logger = get_logger("AWSReplication")
 
@@ -36,7 +40,16 @@ indexclient = IndexClient(
 
 
 class singleThread(threading.Thread):
-    def __init__(self, threadID, threadName, source_bucket, copied_objects, global_config, job_name, q):
+    def __init__(
+        self,
+        threadID,
+        threadName,
+        source_bucket,
+        copied_objects,
+        global_config,
+        job_name,
+        q,
+    ):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.threadName = threadName
@@ -50,9 +63,17 @@ class singleThread(threading.Thread):
     def run(self):
         logger.info("Starting " + self.name)
         if self.job_name == "copying":
-            process_data(self.threadName, self.source_bucket, self.global_config, self.copied_objects, self.q)
+            process_data(
+                self.threadName,
+                self.source_bucket,
+                self.global_config,
+                self.copied_objects,
+                self.q,
+            )
         elif self.job_name == "indexing":
-            self.indexing_data(self.threadName, self.global_config, self.copied_objects, self.q)
+            self.indexing_data(
+                self.threadName, self.global_config, self.copied_objects, self.q
+            )
         logger.info("\nExiting " + self.name)
 
     def indexing_data(self, threadName, global_config, copied_objects, q):
@@ -79,10 +100,10 @@ class singleThread(threading.Thread):
                 logger.info(self.json_log)
 
             else:
-                s3 = boto3.client('s3')
+                s3 = boto3.client("s3")
                 self.write_log_file(s3)
                 mutexLock.release()
-    
+
     def write_log_file(self, s3):
         """
         write log file and push to s3 log bucket
@@ -119,49 +140,59 @@ class AWSBucketReplication(object):
 
         copied_objects = self.get_copied_objects()
         for i in xrange(0, self.thread_num):
-            thread = singleThread(str(i), 'thread_{}'.format(
-                i), self.bucket, copied_objects, self.global_config, self.job_name, workQueue)
+            thread = singleThread(
+                str(i),
+                "thread_{}".format(i),
+                self.bucket,
+                copied_objects,
+                self.global_config,
+                self.job_name,
+                workQueue,
+            )
             self.thread_list.append(thread)
 
     def get_copied_objects(self):
         """
         get all copied objects so that we don't have to re-copy them
         """
-        s3 = boto3.resource('s3')
+        s3 = boto3.resource("s3")
         existed_keys = set()
         for _, value in PROJECT_MAP.iteritems():
             for label in ["-open", "-controlled"]:
-                bucket_name = "gdc-"+value+label
+                bucket_name = "gdc-" + value + label
                 bucket = s3.Bucket(bucket_name)
                 try:
                     for file in bucket.objects.all():
-                        existed_keys.add(bucket_name+"/"+file.key)
+                        existed_keys.add(bucket_name + "/" + file.key)
                 except Exception:
                     pass
         return existed_keys
-    
+
     def prepare(self):
         """
         Read data file info from manifest and organize them into  groups.
         Each group contains files should be copied to same bucket
         The groups will be push to the queue
         """
-        submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
+        if self.manifest_file.startswith("s3://"):
+            submitting_files, _ = get_fileinfo_list_from_s3_manifest(self.manifest_file)
+        else:
+            submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
+
         file_grps = exec_files_grouping(submitting_files)
         mutexLock.acquire()
         for _, files in file_grps.iteritems():
             chunk_size = self.global_config.get("chunk_size", 1)
             idx = 0
             while idx < len(files):
-                workQueue.put(files[idx:idx+chunk_size])
-                idx = idx+chunk_size
+                workQueue.put(files[idx : idx + chunk_size])
+                idx = idx + chunk_size
         mutexLock.release()
 
         for th in self.thread_list:
             th.start()
-    
-  
-    def run(self, ):
+
+    def run(self,):
         global TOTAL_PROCESSED_FILES
 
         start = timeit.default_timer()
@@ -175,7 +206,6 @@ class AWSBucketReplication(object):
             logger.info("Total files processed {}".format(TOTAL_PROCESSED_FILES))
             logger.info("Times in second {}".format(current - start))
 
-        
         # Notify threads it's time to exit
         global EXIT_FLAG
         EXIT_FLAG = 1
@@ -187,7 +217,9 @@ class AWSBucketReplication(object):
         logger.info("Done")
 
 
-def exec_aws_copy(threadName, files, source_bucket, target_bucket, global_config, copied_keys):
+def exec_aws_copy(
+    threadName, files, source_bucket, target_bucket, global_config, copied_keys
+):
     """
     Call AWS SLI to copy a chunk of  files from a bucket to another bucket.
     Intergrity check: After each chunk copy, check the returned md5 hashes
@@ -205,7 +237,7 @@ def exec_aws_copy(threadName, files, source_bucket, target_bucket, global_config
     Returns:
         None
     """
- 
+
     config_chunk_size = global_config.get("chunk_size", 1)
 
     index = 0
@@ -253,8 +285,17 @@ def process_data(threadName, source_bucket, global_config, copied_objects, q):
             files = q.get()
             mutexLock.release()
             target_bucket = get_bucket_name(files[0], PROJECT_MAP)
-            logger.info("%s processing %d to %s" % (threadName, len(files), target_bucket))
-            exec_aws_copy(threadName, files, source_bucket, target_bucket, global_config, copied_objects)
+            logger.info(
+                "%s processing %d to %s" % (threadName, len(files), target_bucket)
+            )
+            exec_aws_copy(
+                threadName,
+                files,
+                source_bucket,
+                target_bucket,
+                global_config,
+                copied_objects,
+            )
         else:
             mutexLock.release()
 
@@ -266,18 +307,17 @@ def check_and_index_the_data(files, copied_objects, json_log):
     """
 
     for fi in files:
-        object_path = "{}/{}/{}".format(get_bucket_name(fi, PROJECT_MAP), fi.get("id"), fi.get("filename"))
+        object_path = "{}/{}/{}".format(
+            get_bucket_name(fi, PROJECT_MAP), fi.get("id"), fi.get("filename")
+        )
         logger.info("start to index {}".format(object_path))
         if object_path not in copied_objects:
-            json_log[object_path] = {
-                "copy_success": False,
-                "index_success": False,
-            }
+            json_log[object_path] = {"copy_success": False, "index_success": False}
         else:
             try:
                 json_log[object_path] = {
                     "copy_success": True,
-                    "index_success":  update_indexd(fi),
+                    "index_success": update_indexd(fi),
                 }
             except Exception as e:
                 logger.error(e.message)
@@ -333,4 +373,4 @@ def update_indexd(fi):
             "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                 fi.get("id", ""), e.message
             )
-        )  
+        )
