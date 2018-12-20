@@ -23,14 +23,6 @@ from indexd_utils import update_url
 
 logger = get_logger("AWSReplication")
 
-global TOTAL_PROCESSED_FILES
-TOTAL_PROCESSED_FILES = 0
-
-global TOTAL_INDEXED_FILES
-TOTAL_INDEXED_FILES = 0
-
-mutexLock = threading.Lock()
-
 
 class AWSBucketReplication(object):
     def __init__(self, global_config, manifest_file, thread_num, job_name, bucket=None):
@@ -57,6 +49,10 @@ class AWSBucketReplication(object):
         )
         self.copied_objects = self.get_copied_objects()
         self.source_objects = self.build_source_bucket_dataset()
+
+        self.mutexLock = threading.Lock()
+        self.total_processed_files = 0
+        self.total_indexed_files = 0
 
     def prepare_data(self):
         """
@@ -133,7 +129,6 @@ class AWSBucketReplication(object):
             # cmd_for_old_files = 'aws s3 cp s3://{} s3://{}
 
             chunk_size = min(config_chunk_size, len(files) - index)
-
             execstr = base_cmd
             for fi in files[index : index + chunk_size]:
                 object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
@@ -145,7 +140,7 @@ class AWSBucketReplication(object):
                     elif fi.get("id") in self.source_objects:
                         # This is an old file, just single copy
                         cmd = "aws s3 cp s3://{}/{} s3://{}/{}".format(
-                            self.bucket, fi.get(id), target_bucket, object_name
+                            self.bucket, fi.get("id"), target_bucket, object_name
                         )
                         # should wait for safety
                         subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
@@ -155,11 +150,10 @@ class AWSBucketReplication(object):
 
             index = index + chunk_size
 
-        global TOTAL_PROCESSED_FILES
-        mutexLock.acquire()
-        TOTAL_PROCESSED_FILES += len(files)
-        logger.info("{} object are processed/copying ".format(TOTAL_PROCESSED_FILES))
-        mutexLock.release()
+        self.mutexLock.acquire()
+        self.total_processed_files += len(files)
+        logger.info("{} object are processed/copying ".format(self.total_processed_files))
+        self.mutexLock.release()
 
         return len(files)
 
@@ -190,11 +184,11 @@ class AWSBucketReplication(object):
                         "msg": e.message,
                     }
 
-        global TOTAL_INDEXED_FILES
-        mutexLock.acquire()
-        TOTAL_INDEXED_FILES += len(files)
-        logger.info("{} object are processed/indexed ".format(TOTAL_INDEXED_FILES))
-        mutexLock.release()
+        global total_indexed_files
+        self.mutexLock.acquire()
+        self.total_indexed_files += len(files)
+        logger.info("{} object are processed/indexed ".format(self.total_indexed_files))
+        self.mutexLock.release()
 
         return json_log
 
