@@ -105,6 +105,7 @@ class AWSBucketReplication(object):
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
         self.copied_objects = self.get_copied_objects()
+        self.source_objects = self.build_source_bucket_dataset()
 
     def prepare_data(self):
         """
@@ -146,6 +147,15 @@ class AWSBucketReplication(object):
                     pass
         return existed_keys
 
+    def build_source_bucket_dataset(self):
+        """
+        build source bucket dataset for lookup
+        to avoid list object operations
+        """
+        s3 = boto3.resource("s3")
+        bucket = s3.Bucket(self.bucket)
+        return set(bucket.objects.all())
+
     def exec_aws_copy(self, files):
         """
         Call AWS SLI to copy a chunk of  files from a bucket to another bucket.
@@ -170,6 +180,8 @@ class AWSBucketReplication(object):
             base_cmd = 'aws s3 cp s3://{} s3://{} --recursive --exclude "*"'.format(
                 self.bucket, target_bucket
             )
+            # Some files are stored as s3://bucket/uuid
+            # cmd_for_old_files = 'aws s3 cp s3://{} s3://{}
 
             chunk_size = min(config_chunk_size, len(files) - index)
 
@@ -179,7 +191,15 @@ class AWSBucketReplication(object):
 
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
-                    execstr += ' --include "{}"'.format(object_name)
+                    if object in self.source_objects:
+                        execstr += ' --include "{}"'.format(object_name)
+                    elif fi.get("id") in self.source_objects:
+                        # This is an old file, just single copy
+                        cmd = "aws s3 cp s3://{}/{} s3://{}/{}".format(
+                            self.bucket, fi.get(id), target_bucket, object_name
+                        )
+                        # should wait for safety
+                        subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
 
             if execstr != base_cmd:
                 subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
@@ -249,6 +269,9 @@ class AWSBucketReplication(object):
         filename = self.global_config.get(
             "log_file", "{}_log.json".format(self.job_name)
         )
+
+        if self.job_name == "copying":
+            results = [{"data": results}]
 
         json_log = {}
         for result in results:

@@ -49,6 +49,7 @@ def update_url(fi, indexclient, provider="s3"):
             )
         )
 
+
 def remove_url_from_indexd_record(uuid, urls, indexclient):
     """
     remove url from indexd record
@@ -69,6 +70,6 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
         except Exception as e:
             raise APIError(
                 "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                    uuid, e.message
+                    uuid, e
                 )
             )

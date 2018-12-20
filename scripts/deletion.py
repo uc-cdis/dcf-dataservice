@@ -54,7 +54,12 @@ def delete_objects_from_cloud_resources(manifest, log_filename):
         INDEXD["version"],
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
-    file_info = get_fileinfo_list_from_manifest(manifest)
+
+    if self.manifest_file.startswith("s3://"):
+        file_info, _ = get_fileinfo_list_from_s3_manifest(self.manifest_file)
+    else:
+        file_info, _ = get_fileinfo_list_from_manifest(self.manifest_file)
+
     file_grp = exec_files_grouping(file_info)
 
     s3 = boto3.resource("s3")
@@ -63,8 +68,12 @@ def delete_objects_from_cloud_resources(manifest, log_filename):
     deletion_logs = []
     for _, files in file_grp.iteritems():
         target_bucket = get_bucket_name(files[0], PROJECT_MAP)
-        deletion_logs.append(_remove_object_from_s3(s3, indexclient, files, target_bucket))
-        deletion_logs.append(_remove_object_from_gs(gs_client, indexclient, files, target_bucket))
+        deletion_logs.append(
+            _remove_object_from_s3(s3, indexclient, files, target_bucket)
+        )
+        deletion_logs.append(
+            _remove_object_from_gs(gs_client, indexclient, files, target_bucket)
+        )
 
     log_json = {}
     log_json["data"] = deletion_logs

@@ -22,7 +22,7 @@ def parse_arguments():
     aws_indexing_cmd.add_argument("--thread_num", required=True)
 
     redact_cmd = subparsers.add_parser("readact")
-    redact_cmd.add_argument("--manifest_file", required=True)
+    redact_cmd.add_argument("--redact_file", required=True)
     redact_cmd.add_argument("--log_file", required=True)
 
     return parser.parse_args()
@@ -51,7 +51,6 @@ if __name__ == "__main__":
             thread_num=int(args.thread_num),
             job_name="indexing",
         )
-        aws.prepare()
         aws.run()
 
     elif args.action == "readact":
