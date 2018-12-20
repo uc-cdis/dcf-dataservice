@@ -13,12 +13,8 @@ from indexclient.client import IndexClient
 from errors import APIError
 from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
 from utils import get_bucket_name
+from indexd_utils import update_url
 
-indexclient = IndexClient(
-    INDEXD["host"],
-    INDEXD["version"],
-    (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-)
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
@@ -74,58 +70,6 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
     )
 
 
-def update_indexd(fi):
-    """
-    update a record to indexd
-    Args:
-        fi(dict): file info
-    Returns:
-         None
-    """
-    gs_bucket_name = get_bucket_name(fi, PROJECT_MAP)
-    gs_object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
-
-    try:
-        doc = indexclient.get(fi.get("id", ""))
-        if doc is not None:
-            url = "gs://{}/{}".format(gs_bucket_name, gs_object_name)
-            if url not in doc.urls:
-                doc.urls.append(url)
-                doc.patch()
-            return
-    except Exception as e:
-        raise APIError(
-            "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e
-            )
-        )
-
-    urls = ["https://api.gdc.cancer.gov/data/{}".format(fi["fileid"])]
-
-    if blob_exists(gs_bucket_name, gs_object_name):
-        urls.append("gs://{}/{}".format(gs_bucket_name, gs_object_name))
-
-    try:
-        doc = indexclient.create(
-            did=fi.get("id", ""),
-            hashes={"md5": fi.get("md5", "")},
-            size=fi.get("size", 0),
-            urls=urls,
-        )
-        if doc is None:
-            raise APIError(
-                "INDEX_CLIENT: Fail to create a record with uuid {}".format(
-                    fi.get("id", "")
-                )
-            )
-    except Exception as e:
-        raise APIError(
-            "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e.message
-            )
-        )
-
-
 def exec_google_copy(fi, global_config):
     """
     copy a file to google bucket.
@@ -135,6 +79,11 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
+    indexclient = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
     blob_name = fi.get("id") + "/" + fi.get("filename")
@@ -154,7 +103,7 @@ def exec_google_copy(fi, global_config):
 
     if check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         try:
-            update_indexd(fi)
+            update_url(fi, indexclient, "gs")
         except APIError as e:
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)

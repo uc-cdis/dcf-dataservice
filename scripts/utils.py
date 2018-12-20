@@ -1,6 +1,4 @@
-import base64
 import re
-import argparse
 import boto3
 
 # def Base64ToHexHash(base64_hash):
@@ -38,6 +36,9 @@ def extract_md5_from_text(text):
 
 
 def get_headers(manifest_file):
+    """
+    Get headers of the manifest file
+    """
     try:
         with open(manifest_file, "r") as f:
             content = f.readlines()
@@ -51,6 +52,11 @@ def get_headers(manifest_file):
 
 
 def get_fileinfo_list_from_s3_manifest(url_manifeat):
+    """
+    Get the manifest from s3
+    pass to get_fileinfo_list_from_manifest to get 
+    list of file info dictionary (size, md5, etc.)
+    """
 
     s3 = boto3.resource("s3")
     from urlparse import urlparse
@@ -63,7 +69,7 @@ def get_fileinfo_list_from_s3_manifest(url_manifeat):
 def get_fileinfo_list_from_manifest(manifest_file):
     """
     get list of dictionaries from manifest file.
-    Temporaly ignore this function until the officical manifest file come out
+    Temporaly ignore this function until the officical manifest file comes out
     [
         {
             'did':'11111111111111111',
@@ -76,79 +82,22 @@ def get_fileinfo_list_from_manifest(manifest_file):
     ]
     """
     l = []
-    try:
-        with open(manifest_file, "r") as f:
-            content = f.readlines()
-            if len(content) <= 1:
-                return l, []
-            headers = content[0].replace("\r", "").replace("\n", "").split("\t")
-            for row in content[1:]:
-                dictionary = dict()
-                values = row.replace("\r", "").replace("\n", "").split("\t")
-                dictionary = dict(zip(headers, values))
-                dictionary["size"] = int(dictionary["size"])
-                l.append(dictionary)
 
-            return l, headers
+    with open(manifest_file, "r") as f:
+        content = f.readlines()
+        if len(content) <= 1:
+            return l, []
+        headers = content[0].replace("\r", "").replace("\n", "").split("\t")
+        for row in content[1:]:
+            dictionary = dict()
+            values = row.replace("\r", "").replace("\n", "").split("\t")
+            dictionary = dict(zip(headers, values))
+            dictionary["size"] = int(dictionary["size"])
+            l.append(dictionary)
 
-    except IOError:
-        print("File {} is not existed".format(manifest_file))
+        return l, headers
+
     return l, []
-
-
-def split_manifest_file(manifest_file, file_nums=1):
-    headers = get_headers(manifest_file)
-    rows = get_fileinfo_list_from_manifest(manifest_file)
-    nrow_in_subfile = len(rows) / file_nums
-    file_index = 0
-    for file_index in xrange(0, file_nums):
-        sub_rows = []
-        if file_index < file_nums - 1:
-            sub_rows = rows[
-                file_index * nrow_in_subfile : (file_index + 1) * nrow_in_subfile
-            ]
-        else:
-            sub_rows = rows[file_index * nrow_in_subfile :]
-
-        new_filename = "{}_{}".format(manifest_file, file_index)
-        with open(new_filename, "w") as writer:
-            writer.write(
-                "{}\t{}\t{}\t{}\t{}\t{}".format(
-                    headers[0],
-                    headers[1],
-                    headers[2],
-                    headers[3],
-                    headers[4],
-                    headers[5],
-                )
-            )
-            for row in sub_rows:
-                writer.write(
-                    "{}\t{}\t{}\t{}\t{}\t{}".format(
-                        row.get(headers[0]),
-                        row.get(headers[1]),
-                        row.get(headers[2]),
-                        row.get(headers[3]),
-                        row.get(headers[4]),
-                        row.get(headers[5]),
-                    )
-                )
-
-
-def write_fileinfo_list(filepath, files):
-    with open(filepath, "w") as writer:
-        writer.write("id\tfilename\tsize\md5\tacl\tproject_id\n")
-        for fi in files:
-            writer.write(
-                "{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                    fi.get("id", ""),
-                    fi.get("filename", ""),
-                    fi.get("size", 0),
-                    fi.get("md5", ""),
-                    fi.get("acl", "*"),
-                    fi.get("project_id", ""),
-                )
-            )
 
 
 def exec_files_grouping(files):

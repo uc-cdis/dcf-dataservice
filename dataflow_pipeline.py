@@ -2,14 +2,11 @@ from __future__ import absolute_import
 
 import argparse
 import logging
-import re
 import timeit
 
 import apache_beam as beam
 from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
-from apache_beam.metrics import Metrics
-from apache_beam.metrics.metric import MetricsFilter
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 import json
@@ -22,10 +19,6 @@ except NameError:
     unicode = str
 
 FILE_HEADERS = ["id", "filename", "md5", "size", "state", "acl", "project_id"]
-
-# global_config ={"token_path": "./gdc-token.txt",
-#                 "chunk_size_download": 2048000,
-#                 "chunk_size_upload": 20971520}
 
 
 class FileCopyingDoFn(beam.DoFn):

@@ -42,7 +42,6 @@ if __name__ == "__main__":
             thread_num=int(args.thread_num),
             job_name="copying",
         )
-        aws.prepare()
         aws.run()
 
     elif args.action == "indexing":
