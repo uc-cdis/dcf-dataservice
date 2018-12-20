@@ -72,6 +72,11 @@ def run(argv=None):
         required=True,
         help="Output file to write results to.",
     )
+    # config the upload and download in global_config dictioanry
+    # {
+    #     "chunk_size_download": 1024,
+    #     "chunk_size_upload": 1024
+    # }
     parser.add_argument(
         "--global_config", dest="global_config", help="global configuration"
     )

@@ -101,7 +101,7 @@ class AWSBucketReplication(object):
         """
         s3 = boto3.resource("s3")
         bucket = s3.Bucket(self.bucket)
-        return set([file.key for file in bucket.objects.all()])
+        return {f.key for f in bucket.objects.all()}
 
     def exec_aws_copy(self, files):
         """
@@ -184,7 +184,6 @@ class AWSBucketReplication(object):
                         "msg": e.message,
                     }
 
-        global total_indexed_files
         self.mutexLock.acquire()
         self.total_indexed_files += len(files)
         logger.info("{} object are processed/indexed ".format(self.total_indexed_files))

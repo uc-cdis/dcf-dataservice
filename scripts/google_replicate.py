@@ -76,6 +76,10 @@ def exec_google_copy(fi, global_config):
     Args:
         fi(dict): a dictionary of a copying file
         global_config(dict): a configuration
+            {
+                "chunk_size_download": 1024,
+                "chunk_size_upload": 1024
+            }
     Returns:
         DataFlowLog
     """
@@ -125,6 +129,10 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     Args:
         fi(dict): file information
         global_config(dict): configurations
+            {
+                "chunk_size_download": 1024,
+                "chunk_size_upload": 1024
+            }
     Returns: None
     """
 

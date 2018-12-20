@@ -17,6 +17,8 @@ def parse_arguments():
     aws_replicate_cmd.add_argument("--thread_num", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
+    # set config in dictionary.
+    # Ex. {"log_file": "filename", "log_bucket": "bucketname"}
     aws_indexing_cmd.add_argument("--global_config", required=True)
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
     aws_indexing_cmd.add_argument("--thread_num", required=True)
