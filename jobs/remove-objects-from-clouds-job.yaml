@@ -1,0 +1,47 @@
+# run with 
+# g3k runjob
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: remove-objects-from-clouds
+spec:
+  # not yet supported - backOffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: gen3job
+    spec:
+      volumes:
+        - name: cred-volume
+          secret:
+            secretName: "aws-creds-secret"
+        - name: google-cred-volume
+          secret:
+            secretName: "google-creds-secret"
+      containers:
+      - name: awsreplicate
+        image: quay.io/cdis/dcf-dataservice:master
+        imagePullPolicy: Always
+        env:
+          - name: LOG_FILE
+            GEN3_LOG_FILE
+          - name: MANIFEST_S3
+            GEN3_MANIFEST_S3
+        volumeMounts:
+          - name: cred-volume
+            mountPath: "/root/.aws/credentials"
+            subPath: credentials
+          - name: google-cred-volume
+            mountPath: "/secrets/google_service_account_creds"
+            subPath: google_service_account_creds
+        command: ["/bin/bash" ]
+        args: 
+          - "-c"
+          - |
+            echo """
+            [default]
+            region: us-east-1
+            """ > ~/.aws/config
+            gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
+            python scripts/replicate.py readact --redact_file $MANIFEST_S3 --log_file $LOG_FILE
+      restartPolicy: Never

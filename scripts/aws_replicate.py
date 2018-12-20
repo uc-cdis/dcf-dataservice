@@ -11,7 +11,6 @@ import boto3
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from errors import APIError
 from settings import PROJECT_MAP, INDEXD
 from utils import (
     get_bucket_name,
@@ -31,54 +30,6 @@ global TOTAL_INDEXED_FILES
 TOTAL_INDEXED_FILES = 0
 
 mutexLock = threading.Lock()
-
-
-def update_indexd(fi, indexclient):
-    """
-    update a record to indexd
-    Args:
-        fi(dict): file info
-    Returns:
-        None
-    """
-
-    s3_bucket_name = get_bucket_name(fi, PROJECT_MAP)
-    s3_object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
-
-    try:
-        doc = indexclient.get(fi.get("id", ""))
-        if doc is not None:
-            url = "s3://{}/{}".format(s3_bucket_name, s3_object_name)
-            if url not in doc.urls:
-                doc.urls.append(url)
-                doc.patch()
-            return doc is not None
-    except Exception as e:
-        raise APIError(
-            "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e.message
-            )
-        )
-
-    urls = [
-        "https://api.gdc.cancer.gov/data/{}".format(fi.get("id", "")),
-        "s3://{}/{}".format(s3_bucket_name, s3_object_name),
-    ]
-
-    try:
-        doc = indexclient.create(
-            did=fi.get("id"),
-            hashes={"md5": fi.get("md5")},
-            size=fi.get("size", 0),
-            urls=urls,
-        )
-        return doc is not None
-    except Exception as e:
-        raise APIError(
-            "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e.message
-            )
-        )
 
 
 class AWSBucketReplication(object):
@@ -154,7 +105,7 @@ class AWSBucketReplication(object):
         """
         s3 = boto3.resource("s3")
         bucket = s3.Bucket(self.bucket)
-        return set(bucket.objects.all())
+        return set([file.key for file in bucket.objects.all()])
 
     def exec_aws_copy(self, files):
         """
@@ -171,11 +122,9 @@ class AWSBucketReplication(object):
         """
 
         config_chunk_size = self.global_config.get("chunk_size", 1)
-
         target_bucket = get_bucket_name(files[0], PROJECT_MAP)
 
         index = 0
-
         while index < len(files):
             base_cmd = 'aws s3 cp s3://{} s3://{} --recursive --exclude "*"'.format(
                 self.bucket, target_bucket
@@ -191,7 +140,7 @@ class AWSBucketReplication(object):
 
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
-                    if object in self.source_objects:
+                    if object_name in self.source_objects:
                         execstr += ' --include "{}"'.format(object_name)
                     elif fi.get("id") in self.source_objects:
                         # This is an old file, just single copy
@@ -250,9 +199,11 @@ class AWSBucketReplication(object):
         return json_log
 
     def run(self):
+        """
+        start threads and log after they finish
+        """
 
         tasks, _ = self.prepare_data()
-
         # Make the Pool of workers
         pool = ThreadPool(self.thread_num)
 
@@ -280,7 +231,6 @@ class AWSBucketReplication(object):
         s3 = boto3.client("s3")
         with open(filename, "w") as outfile:
             json.dump(json_log, outfile)
-
         s3.upload_file(
             filename, self.global_config.get("log_bucket"), os.path.basename(filename)
         )
