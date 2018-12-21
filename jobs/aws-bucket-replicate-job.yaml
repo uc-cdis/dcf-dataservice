@@ -5,42 +5,9 @@
 # MANIFEST manifest_file \
 # THREAD_NUM number of threads \
 # LOG_BUCKET log buckets
-#
-# folow the below link  to setup bucket owner grant access to other aws account 
-# https://docs.aws.amazon.com/AmazonS3/latest/dev/example-walkthroughs-managing-access-example2.html
-#
-# setup bucket policy so that the user test can access to the bucket (GDC bucket)
-# {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#         {
-#             "Sid": "Example permissions",
-#             "Effect": "Allow",
-#             "Principal": {
-#                 "AWS": "arn:aws:iam::xxxxxxxxxxx:user/test"
-#             },
-#             "Action": [
-#                 "s3:GetBucketLocation",
-#                 "s3:ListBucket"
-#             ],
-#             "Resource": "arn:aws:s3:::gdc_bucket"
-#         },
-#         {
-#             "Sid": "bucket permissions",
-#             "Effect": "Allow",
-#             "Principal": {
-#                 "AWS": "arn:aws:iam::xxxxxxxxxxx:user/test"
-#             },
-#             "Action": [
-#                 "s3:GetObject"
-#             ],
-#             "Resource": "arn:aws:s3:::gdc_bucket/*"
-#         }
-#     ]
-# }
 # 
 # HOW TO RUN
-# Ex. gen3 runjob jobs/aws-bucket-replicate-job.yaml GDC_BUCKET_NAME mybucket20018 MANIFEST_S3 s3://giang816test/manifest_random2 THREAD_NUM 10 LOG_BUCKET xssxs CHUNK_SIZE 4
+# Ex. gen3 runjob jobs/aws-bucket-replicate-job.yaml GDC_BUCKET_NAME testqueue2018 MANIFEST_S3 s3://giang816test/manifest_random THREAD_NUM 100 LOG_BUCKET xssxs CHUNK_SIZE 50
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -56,9 +23,9 @@ spec:
         - name: cred-volume
           secret:
             secretName: "aws-creds-secret"
-        - name: manifest-volume
+        - name: project-acl-volume
           configMap:
-            name: data-service-manifest
+            name: project-acl-manifest
         - name: creds-json-volume
           secret:
             secretName: "dcf-dataservice-json-secret"
@@ -81,9 +48,9 @@ spec:
           - name: cred-volume
             mountPath: "/root/.aws/credentials"
             subPath: credentials
-          - name: "manifest-volume"
-            mountPath: "/dcf-dataservice/manifest"
-            subPath: "manifest"
+          - name: "project-acl-volume"
+            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
+            subPath: "GDC_datasets_access_control.csv"
           - name: "creds-json-volume"
             mountPath: "/secrets/dcf_dataservice_credentials.json"
             subPath: "dcf_dataservice_credentials.json"
@@ -96,5 +63,5 @@ spec:
             region: us-east-1
             """ > ~/.aws/config
             python scripts/replicate.py aws_replicate --bucket $GDC_BUCKET_NAME --thread_num $THREAD_NUM --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": $CHUNK_SIZE, \"log_bucket\": \"$LOG_BUCKET\"}"
-            python scripts/replicate.py indexing  --thread_num $THREAD_NUM 10 --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": 3, \"log_bucket\": \"$LOG_BUCKET\"}"
+            python scripts/replicate.py indexing  --thread_num 20 --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": 3, \"log_bucket\": \"$LOG_BUCKET\"}"
       restartPolicy: Never

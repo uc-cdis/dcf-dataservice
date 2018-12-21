@@ -1,4 +1,5 @@
 from multiprocessing.dummy import Pool as ThreadPool
+import time
 import os
 import subprocess
 import shlex
@@ -11,15 +12,16 @@ import boto3
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from settings import PROJECT_MAP, INDEXD
+from settings import PROJECT_ACL, INDEXD
+import utils
 from utils import (
-    get_bucket_name,
-    get_fileinfo_list_from_manifest,
+    get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
     exec_files_grouping,
 )
 
 from indexd_utils import update_url
+from errors import UserError
 
 logger = get_logger("AWSReplication")
 
@@ -47,12 +49,16 @@ class AWSBucketReplication(object):
             INDEXD["version"],
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
-        self.copied_objects = self.get_copied_objects()
-        self.source_objects = self.build_source_bucket_dataset()
+        self.copied_objects = AWSBucketReplication.get_copied_objects()
+        if self.bucket:
+            self.source_objects = self.build_source_bucket_dataset()
+        else:
+            self.source_objects = []
 
         self.mutexLock = threading.Lock()
         self.total_processed_files = 0
         self.total_indexed_files = 0
+        self.total_files = 0
 
     def prepare_data(self):
         """
@@ -61,9 +67,11 @@ class AWSBucketReplication(object):
         The groups will be push to the queue
         """
         if self.manifest_file.startswith("s3://"):
-            submitting_files, _ = get_fileinfo_list_from_s3_manifest(self.manifest_file)
+            submitting_files = get_fileinfo_list_from_s3_manifest(self.manifest_file)
         else:
-            submitting_files, _ = get_fileinfo_list_from_manifest(self.manifest_file)
+            submitting_files = get_fileinfo_list_from_csv_manifest(self.manifest_file)
+
+        self.total_files = len(submitting_files)
 
         tasks = []
         file_grps = exec_files_grouping(submitting_files)
@@ -77,21 +85,26 @@ class AWSBucketReplication(object):
 
         return tasks, len(submitting_files)
 
-    def get_copied_objects(self):
+    @staticmethod
+    def get_copied_objects():
         """
         get all copied objects so that we don't have to re-copy them
         """
         s3 = boto3.resource("s3")
         existed_keys = set()
-        for _, value in PROJECT_MAP.iteritems():
+
+        for _, bucket_info in PROJECT_ACL.iteritems():
             for label in ["-open", "-controlled"]:
-                bucket_name = "gdc-" + value + label
+                bucket_name = bucket_info["aws_bucket_prefix"] + label
                 bucket = s3.Bucket(bucket_name)
                 try:
                     for file in bucket.objects.all():
-                        existed_keys.add(bucket_name + "/" + file.key)
-                except Exception:
-                    pass
+                        existed_keys.add(file.key)
+                except Exception as e:
+                    raise Exception(
+                        "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
+                    )
+
         return existed_keys
 
     def build_source_bucket_dataset(self):
@@ -99,9 +112,20 @@ class AWSBucketReplication(object):
         build source bucket dataset for lookup
         to avoid list object operations
         """
-        s3 = boto3.resource("s3")
-        bucket = s3.Bucket(self.bucket)
-        return {f.key for f in bucket.objects.all()}
+        client = boto3.client("s3")
+
+        try:
+            paginator = client.get_paginator("list_objects")
+            pages = paginator.paginate(Bucket=self.bucket, RequestPayer="requester")
+        except Exception as e:
+            raise UserError(
+                "Can not detect the bucket {}. Detail {}".format(self.bucket, e)
+            )
+        dataset = set()
+        for page in pages:
+            for obj in page["Contents"]:
+                dataset.add(obj["Key"])
+        return dataset
 
     def exec_aws_copy(self, files):
         """
@@ -116,22 +140,24 @@ class AWSBucketReplication(object):
         Returns:
             None
         """
-
         config_chunk_size = self.global_config.get("chunk_size", 1)
-        target_bucket = get_bucket_name(files[0], PROJECT_MAP)
+        try:
+            target_bucket = utils.get_aws_bucket_name(files[0], PROJECT_ACL)
+        except UserError as e:
+            # Detail error message from called function
+            logger.error(e)
+            return len(files)
 
         index = 0
         while index < len(files):
             base_cmd = 'aws s3 cp s3://{} s3://{} --recursive --exclude "*"'.format(
                 self.bucket, target_bucket
             )
-            # Some files are stored as s3://bucket/uuid
-            # cmd_for_old_files = 'aws s3 cp s3://{} s3://{}
 
             chunk_size = min(config_chunk_size, len(files) - index)
             execstr = base_cmd
             for fi in files[index : index + chunk_size]:
-                object_name = "{}/{}".format(fi.get("id"), fi.get("filename"))
+                object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
@@ -144,6 +170,9 @@ class AWSBucketReplication(object):
                         )
                         # should wait for safety
                         subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+                else:
+                    pass
+                    # logger.info("object is copied")
 
             if execstr != base_cmd:
                 subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
@@ -152,7 +181,11 @@ class AWSBucketReplication(object):
 
         self.mutexLock.acquire()
         self.total_processed_files += len(files)
-        logger.info("{} object are processed/copying ".format(self.total_processed_files))
+        logger.info(
+            "{}/{} object are processed/copying ".format(
+                self.total_processed_files, self.total_files
+            )
+        )
         self.mutexLock.release()
 
         return len(files)
@@ -164,9 +197,7 @@ class AWSBucketReplication(object):
         """
         json_log = {}
         for fi in files:
-            object_path = "{}/{}/{}".format(
-                get_bucket_name(fi, PROJECT_MAP), fi.get("id"), fi.get("filename")
-            )
+            object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
             if object_path not in self.copied_objects:
                 json_log[object_path] = {"copy_success": False, "index_success": False}
@@ -213,6 +244,9 @@ class AWSBucketReplication(object):
         filename = self.global_config.get(
             "log_file", "{}_log.json".format(self.job_name)
         )
+
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        filename = timestr + "_" + filename
 
         if self.job_name == "copying":
             results = [{"data": results}]

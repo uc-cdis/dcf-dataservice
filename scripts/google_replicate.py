@@ -10,9 +10,9 @@ from google.auth.transport.requests import AuthorizedSession
 import logging as logger
 from indexclient.client import IndexClient
 
+import utils
 from errors import APIError
-from settings import PROJECT_MAP, INDEXD, GDC_TOKEN
-from utils import get_bucket_name
+from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 from indexd_utils import update_url
 
 
@@ -90,8 +90,8 @@ def exec_google_copy(fi, global_config):
     )
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
-    blob_name = fi.get("id") + "/" + fi.get("filename")
-    bucket_name = get_bucket_name(fi, PROJECT_MAP)
+    blob_name = fi.get("id") + "/" + fi.get("file_name")
+    bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
 
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)

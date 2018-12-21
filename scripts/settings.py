@@ -1,4 +1,5 @@
 import json
+import csv
 
 INDEXD = {
     "host": "http://localhost:8000",
@@ -6,19 +7,25 @@ INDEXD = {
     "auth": {"username": "test", "password": "test"},
 }
 
-PROJECT_MAP = {
-    "TCGA": "tcga-xxxx-phs000178",
-    "TARGET": "target-xxxx-phs000218",
-    "FM": "fm-xxxx-phs000179",
-    "CCLE": "ccle-xxxx",
-}
-
 GDC_TOKEN = ""
+
 try:
     with open("/secrets/dcf_dataservice_credentials.json", "r") as f:
         data = json.loads(f.read())
-        PROJECT_MAP = data.get("PROJECT_MAP", {})
         INDEXD = data.get("INDEXD", {})
         GDC_TOKEN = data.get("GDC_TOKEN", "")
-except Exception:
-    pass
+except Exception as e:
+    print(
+        "Can not read dcf_dataservice_credentials.json file (only required for google data flow). Detail {}".format(
+            e
+        )
+    )
+
+PROJECT_ACL = {}
+try:
+    with open("/Users/giangbui/Projects/TESTS/dcf-replication/GDC_datasets_access_control_test.csv", "rt") as f:
+        csvReader = csv.DictReader(f, delimiter=",")
+        for line in csvReader:
+            PROJECT_ACL[line["project_id"]] = line
+except Exception as e:
+    print("Can not read GDC_datasets_access_control.csv file. Detail {}".format(e))

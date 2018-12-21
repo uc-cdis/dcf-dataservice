@@ -13,6 +13,7 @@
 Following the below steps to setup
 - Create a directory in `$vpc_name/apis_configs` and named as `dcf_dataservice`.
 - Put the `creds.json`, `aws_creds_secret` and `gcloud-creds-secret` into `dcf_dataservice` folder. While `aws_creds_secret` contains AWS key `gcloud-creds-secret` contains google cloud service account.
+- Also put the `GDC_datasets_access_control.csv` into `dcf_dataservice` folder. This file contains GDC project access control level.
 - Upload the `manifest` in S3 for AWS sync. For GOOLE sync, put the file into `gs://INPUT_BUCKET//input/`. We also need to have `LOG_BUCKET` to store the log and the output outcome. Please see the yaml job file for more detail.
 - Run `jobs/kube-script-setup.sh`.
 - See jobs/*.yaml file for more details how to run the jobs.

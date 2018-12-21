@@ -16,9 +16,15 @@ spec:
         - name: cred-volume
           secret:
             secretName: "google-creds-secret"
-        - name: creds-json-volume
+        - name: setting-volume
           secret:
             secretName: "dcf-dataservice-settings-secrets"
+        - name: project-acl-volume
+          configMap:
+            name: project-acl-manifest
+        - name: creds-json-volume
+          secret:
+            secretName: "dcf-dataservice-json-secret"
       containers:
       - name: googlereplicate
         image: quay.io/cdis/dcf-dataservice:master
@@ -34,9 +40,15 @@ spec:
           - name: cred-volume
             mountPath: "/secrets/google_service_account_creds"
             subPath: google_service_account_creds
-          - name: "creds-json-volume"
+          - name: "setting-volume"
             mountPath: "/secrets/dcf_dataservice_settings"
             subPath: "dcf_dataservice_settings"
+          - name: "project-acl-volume"
+            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
+            subPath: "GDC_datasets_access_control.csv"
+          - name: "creds-json-volume"
+            mountPath: "/secrets/dcf_dataservice_credentials.json"
+            subPath: "dcf_dataservice_credentials.json"
         command: ["/bin/bash" ]
         args: 
           - "-c"

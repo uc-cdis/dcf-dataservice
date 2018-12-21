@@ -1,23 +1,49 @@
 import re
 import boto3
+import csv
+
+from errors import UserError
 
 # def Base64ToHexHash(base64_hash):
 #    return hexlify(base64.decodestring(base64_hash.strip('\n"\'')))
 
 
-def get_bucket_name(fi, PROJECT_MAP):
-    """
-    TCGA-open -> gdc-tcga-phs000178-open
-    TCGA-controled -> gdc-tcga-phs000178-controled
-    TARGET-controled -> gdc-target-phs000218-controlled
-    """
-    bucketname = ""
-    project = fi.get("project_id", "").split("-")[0]
-    if fi.get("acl", "") == "*" or fi.get("acl", "") == "['open']":
-        bucketname = "gdc-" + PROJECT_MAP.get(project, "") + "-open"
-    else:
-        bucketname = "gdc-" + PROJECT_MAP.get(project, "") + "-controlled"
-    return bucketname
+def get_aws_bucket_name(fi, PROJECT_ACL):
+    try:
+        project_info = PROJECT_ACL[fi.get("project_id")]
+    except KeyError:
+        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+    return project_info["aws_bucket_prefix"] + (
+        "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
+    )
+
+
+def get_google_bucket_name(fi, PROJECT_ACL):
+    try:
+        project_info = PROJECT_ACL[fi.get("project_id")]
+    except KeyError:
+        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+    return project_info["gs_bucket_prefix"] + (
+        "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
+    )
+
+
+def get_google_bucket_name_auto(fi, project_acl):
+    project_info = project_acl[fi.get("project_id")]
+
+    if project_info["access_control_level"] == "program":
+        return "gdc-{}-{}-{}".format(
+            project_info["program_name"].lower(),
+            project_info["program_phsid"].lower(),
+            "open" if fi.get("acl") in {"[u'open']", "['open']"} else "controlled",
+        )
+    if project_info["access_control_level"] == "project":
+        return "gdc-{}-{}-{}".format(
+            project_info["program_id"].lower(),
+            project_info["project_phsid"].lower(),
+            "open" if fi.get("acl") in {"[u'open']", "['open']"} else "controlled",
+        )
+    return None
 
 
 def extract_md5_from_text(text):
@@ -63,7 +89,7 @@ def get_fileinfo_list_from_s3_manifest(url_manifeat):
 
     out = urlparse(url_manifeat)
     s3.meta.client.download_file(out.netloc, out.path[1:], out.path[1:])
-    return get_fileinfo_list_from_manifest(out.path[1:])
+    return get_fileinfo_list_from_csv_manifest(out.path[1:])
 
 
 def get_fileinfo_list_from_manifest(manifest_file):
@@ -95,9 +121,21 @@ def get_fileinfo_list_from_manifest(manifest_file):
             dictionary["size"] = int(dictionary["size"])
             l.append(dictionary)
 
-        return l, headers
+    return l
 
-    return l, []
+
+def get_fileinfo_list_from_csv_manifest(manifest_file):
+    """
+    get file info from csv manifest
+    """
+    files = []
+    with open(manifest_file, "rt") as csvfile:
+        csvReader = csv.DictReader(csvfile, delimiter=";")
+        for row in csvReader:
+            row["size"] = int(row["size"])
+            files.append(row)
+
+    return files
 
 
 def exec_files_grouping(files):

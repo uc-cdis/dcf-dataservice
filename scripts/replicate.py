@@ -25,7 +25,7 @@ def parse_arguments():
 
     redact_cmd = subparsers.add_parser("readact")
     redact_cmd.add_argument("--redact_file", required=True)
-    redact_cmd.add_argument("--log_file", required=True)
+    redact_cmd.add_argument("--log_bucket", required=True)
 
     return parser.parse_args()
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         aws.run()
 
     elif args.action == "readact":
-        delete_objects_from_cloud_resources(args.manifest, args.log_file)
+        delete_objects_from_cloud_resources(args.redact_file, args.log_bucket)
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))

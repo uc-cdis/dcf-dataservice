@@ -18,7 +18,7 @@ try:
 except NameError:
     unicode = str
 
-FILE_HEADERS = ["id", "filename", "md5", "size", "state", "acl", "project_id"]
+FILE_HEADERS = ["id", "file_name", "md5", "size", "state", "acl", "project_id"]
 
 
 class FileCopyingDoFn(beam.DoFn):
@@ -46,7 +46,7 @@ def format_result(result):
     (fi, datalog) = result
     return "%s %s %d %s %s %s %s %s %s" % (
         fi.get("id"),
-        fi.get("filename"),
+        fi.get("file_name"),
         int(fi.get("size")),
         fi.get("md5"),
         fi.get("acl"),

@@ -8,7 +8,6 @@ except ImportError:
     from mock import MagicMock
     from mock import patch
 
-import boto3
 import pytest
 import google
 import scripts.aws_replicate
@@ -16,6 +15,7 @@ from scripts.aws_replicate import AWSBucketReplication
 from scripts.google_replicate import exec_google_copy, resumable_streaming_copy
 
 from scripts.errors import APIError
+from scripts import utils
 
 TEST_UUID = "11111111111111111111111111111111"
 TEST_FILENAME = "test"
@@ -25,7 +25,7 @@ TEST_URL = ["test_url1", "test_url2"]
 def gen_mock_manifest_data():
     fake = {
         "id": "11111111111111111",
-        "filename": "abc.bam",
+        "file_name": "abc.bam",
         "size": 1,
         "md5": "1223344543t34mt43tb43ofh",
         "acl": "tgca",
@@ -47,7 +47,11 @@ def test_resumable_streaming_copy_called(
     mock_bucket_exists.return_value = True
     mock_check_blob.return_value = False
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    exec_google_copy({"id": "test_file_id", "filename": "test file name"}, {})
+    scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.utils.get_google_bucket_name.side_effect = ["test", "test"]
+    exec_google_copy(
+        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+    )
     assert scripts.google_replicate.resumable_streaming_copy.called == True
 
 
@@ -63,7 +67,11 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
     mock_bucket_exists.return_value = True
     mock_check_blob.return_value = True
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    exec_google_copy({"id": "test_file_id", "filename": "test file name"}, {})
+    scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.utils.get_google_bucket_name.return_value = "test"
+    exec_google_copy(
+        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+    )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
 
 
@@ -77,7 +85,11 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
     mock_bucket_exists.return_value = False
     google.cloud.storage.Client = MagicMock()
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    exec_google_copy({"id": "test_file_id", "filename": "test file name"}, {})
+    scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.utils.get_google_bucket_name.return_value = "test"
+    exec_google_copy(
+        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+    )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
 
 
@@ -95,7 +107,11 @@ def test_resumable_streaming_copy_called_one_time(
     mock_check_blob.side_effect = [False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.google_replicate.update_url = MagicMock()
-    exec_google_copy({"id": "test_file_id", "filename": "test file name"}, {})
+    scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.utils.get_google_bucket_name.return_value = "test"
+    exec_google_copy(
+        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+    )
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
     assert scripts.google_replicate.update_url.call_count == 1
 
@@ -112,7 +128,11 @@ def test_resumable_streaming_copy_called_two_time(
     mock_bucket_exists.return_value = True
     mock_check_blob.side_effect = [False, False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    exec_google_copy({"id": "test_file_id", "filename": "test file name"}, {})
+    scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.utils.get_google_bucket_name.return_value = "test"
+    exec_google_copy(
+        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+    )
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
 
 
@@ -131,7 +151,7 @@ def test_streamUpload_called(mock_requests_get, mock_client):
     mock_requests_get.return_value = mock_value
     scripts.google_replicate.streaming = MagicMock()
     resumable_streaming_copy(
-        {"fileid": "test_file_id", "filename": "test file name"},
+        {"fileid": "test_file_id", "file_name": "test file name"},
         mock_client,
         "bucket_test",
         "blob_test",
@@ -156,7 +176,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
     scripts.google_replicate.streaming = MagicMock()
     with pytest.raises(APIError):
         resumable_streaming_copy(
-            {"id": "test_file_id", "filename": "test file name"},
+            {"id": "test_file_id", "file_name": "test file name"},
             mock_client,
             "bucket_test",
             "blob_test",
@@ -171,9 +191,10 @@ def test_call_aws_copy_cli_called():
     """
 
     subprocess.Popen = MagicMock()
+    utils.get_aws_bucket_name = MagicMock()
+    utils.get_aws_bucket_name.return_value = "TCGA-open"
     AWSBucketReplication.build_source_bucket_dataset = MagicMock()
     AWSBucketReplication.get_copied_objects = MagicMock()
-
     AWSBucketReplication.build_source_bucket_dataset.return_value = set(
         ["11111111111111111/abc.bam"]
     )
