@@ -1,0 +1,60 @@
+# run with 
+# gen3 runjob google-bucket-replicate-job.yaml PROJECT google_project INPUT_BUCKET input_bucket LOG_BUCKET log_bucket
+# Ex. gen3 runjob dcf-dataservice/jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 INPUT_BUCKET data-flow-code LOG_BUCKET data-flow-code
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: google-bucket-replicate
+spec:
+  # not yet supported - backOffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: gen3job
+    spec:
+      volumes:
+        - name: cred-volume
+          secret:
+            secretName: "google-creds-secret"
+        - name: setting-volume
+          secret:
+            secretName: "dcf-dataservice-settings-secrets"
+        - name: project-acl-volume
+          configMap:
+            name: project-acl-manifest
+        - name: creds-json-volume
+          secret:
+            secretName: "dcf-dataservice-json-secret"
+      containers:
+      - name: googlereplicate
+        image: quay.io/cdis/dcf-dataservice:master
+        imagePullPolicy: Always
+        env:
+          - name: PROJECT
+            GEN3_PROJECT
+          - name: INPUT_BUCKET
+            GEN3_INPUT_BUCKET
+          - name: LOG_BUCKET
+            GEN3_LOG_BUCKET
+        volumeMounts:
+          - name: cred-volume
+            mountPath: "/secrets/google_service_account_creds"
+            subPath: google_service_account_creds
+          - name: "setting-volume"
+            mountPath: "/secrets/dcf_dataservice_settings"
+            subPath: "dcf_dataservice_settings"
+          - name: "project-acl-volume"
+            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
+            subPath: "GDC_datasets_access_control.csv"
+          - name: "creds-json-volume"
+            mountPath: "/secrets/dcf_dataservice_credentials.json"
+            subPath: "dcf_dataservice_credentials.json"
+        command: ["/bin/bash" ]
+        args: 
+          - "-c"
+          - |
+            cat /secrets/dcf_dataservice_settings > ./scripts/settings.py
+            gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
+            export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
+            python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --staging_location gs://$LOG_BUCKET/staging --temp_location gs://$LOG_BUCKET/temp --output gs://$LOG_BUCKET/output --setup_file ./setup.py --input gs://$INPUT_BUCKET/input/manifest --extra_package indexclient-1.5.2.zip
+      restartPolicy: Never
