@@ -84,7 +84,7 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
     if doc is not None:
         for url in urls:
             if url in doc.urls:
-                doc.urls.remove(url) 
+                doc.urls.remove(url)
             if url in doc.urls_metadata:
                 del doc.urls_metadata[url]
         try:

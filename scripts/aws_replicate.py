@@ -3,6 +3,8 @@ import time
 import os
 import subprocess
 import shlex
+import hashlib
+import requests
 
 import threading
 
@@ -12,7 +14,7 @@ import boto3
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from settings import PROJECT_ACL, INDEXD
+from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 import utils
 from utils import (
     get_fileinfo_list_from_csv_manifest,
@@ -53,7 +55,7 @@ class AWSBucketReplication(object):
         if self.bucket:
             self.source_objects = self.build_source_bucket_dataset()
         else:
-            self.source_objects = []
+            self.source_objects = {}
 
         self.mutexLock = threading.Lock()
         self.total_processed_files = 0
@@ -121,10 +123,10 @@ class AWSBucketReplication(object):
             raise UserError(
                 "Can not detect the bucket {}. Detail {}".format(self.bucket, e)
             )
-        dataset = set()
+        dataset = {}
         for page in pages:
             for obj in page["Contents"]:
-                dataset.add(obj["Key"])
+                dataset[obj["Key"]] = obj["StorageClass"]
         return dataset
 
     def exec_aws_copy(self, files):
@@ -136,7 +138,7 @@ class AWSBucketReplication(object):
 
         Args:
             files(list): a list of files which should be copied to the same bucket
-        
+
         Returns:
             None
         """
@@ -148,6 +150,7 @@ class AWSBucketReplication(object):
             logger.error(e)
             return len(files)
 
+        s3 = boto3.client("s3")
         index = 0
         while index < len(files):
             base_cmd = 'aws s3 cp s3://{} s3://{} --request-payer requester --recursive --exclude "*"'.format(
@@ -161,6 +164,21 @@ class AWSBucketReplication(object):
 
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
+                    # GDC key is either uuid/file_name or uuid
+                    key = self.source_objects.get(
+                        object_name
+                    ) or self.source_objects.get(fi.get("id"))
+
+                    # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
+                    if key and self.source_objects[key] not in {
+                        "STANDARD",
+                        "REDUCED_REDUNDANCY",
+                    }:
+                        self.stream_object_from_gdc_api(
+                            s3, fi, target_bucket
+                        )
+                        continue
+
                     if object_name in self.source_objects:
                         execstr += ' --include "{}"'.format(object_name)
                     elif fi.get("id") in self.source_objects:
@@ -172,7 +190,7 @@ class AWSBucketReplication(object):
                         subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
                 else:
                     pass
-                    # logger.info("object is copied")
+                    # logger.info("object is already copied")
 
             if execstr != base_cmd:
                 subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
@@ -190,10 +208,74 @@ class AWSBucketReplication(object):
 
         return len(files)
 
+    def stream_object_from_gdc_api(self, s3, fi, target_bucket):
+        """
+        Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from 
+        gdc api and compute its local etag since aws only provides etag for uploaded object.
+
+        Args:
+            s3: s3.client session
+            fi(dict): object info
+            target_bucket(str): target bucket
+        
+        Returns:
+            None
+        """
+
+        data_endpoint = "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
+        response = requests.get(
+            data_endpoint,
+            stream=True,
+            headers={"Content-Type": "application/json", "X-Auth-Token": GDC_TOKEN},
+        )
+
+        multipart_upload = s3.create_multipart_upload(
+            Bucket=target_bucket, Key=fi.get("id")
+        )
+        sig = hashlib.md5()
+
+        md5_digests = []
+        parts = []
+
+        object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+        part_number = 0
+        for chunk in response.iter_content(chunk_size=1024 * 1024 * 32):
+            part_number += 1
+            sig.update(chunk)
+            res = s3.upload_part(
+                Body=chunk,
+                Bucket=target_bucket,
+                Key=object_path,
+                PartNumber=part_number,
+                UploadId=multipart_upload["UploadId"],
+            )
+
+            parts.append({"ETag": res["ETag"], "PartNumber": part_number})
+            md5_digests.append(hashlib.md5(chunk).digest())
+
+        response = s3.complete_multipart_upload(
+            Bucket=target_bucket,
+            Key=object_path,
+            MultipartUpload={"Parts": parts},
+            UploadId=multipart_upload["UploadId"],
+            RequestPayer="requester",
+        )
+
+        # compute local etag from list of md5s
+        etags = (
+            hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
+        )
+
+        meta_data = s3.head_object(Bucket=target_bucket, Key=object_path)
+
+        if sig.hexdigest() != fi.get("md5") or meta_data["ETag"].replace(
+            '"', ""
+        ) not in {fi.get("md5"), etags}:
+            s3.delete_object(Bucket=target_bucket, Key=object_path)
+
     def check_and_index_the_data(self, files):
         """
-        batch list all the objects and check if file in manifest is copied or not.
-        Index data and log
+        Check if files in manifest are copied or not. Index data and log
         """
         json_log = {}
         for fi in files:
