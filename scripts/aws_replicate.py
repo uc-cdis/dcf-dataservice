@@ -10,6 +10,7 @@ import threading
 
 import json
 import boto3
+import botocore
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
@@ -174,9 +175,7 @@ class AWSBucketReplication(object):
                         "STANDARD",
                         "REDUCED_REDUNDANCY",
                     }:
-                        self.stream_object_from_gdc_api(
-                            s3, fi, target_bucket
-                        )
+                        self.stream_object_from_gdc_api(s3, fi, target_bucket)
                         continue
 
                     if object_name in self.source_objects:
@@ -228,10 +227,25 @@ class AWSBucketReplication(object):
             stream=True,
             headers={"Content-Type": "application/json", "X-Auth-Token": GDC_TOKEN},
         )
+        if response.status_code != 200:
+            logger.error(
+                "GDCPotal: Error when streaming object with id {}. Detail {}".format(
+                    fi.get("id"), response.status_code
+                )
+            )
+            return
 
-        multipart_upload = s3.create_multipart_upload(
-            Bucket=target_bucket, Key=fi.get("id")
-        )
+        try:
+            multipart_upload = s3.create_multipart_upload(
+                Bucket=target_bucket, Key=fi.get("id")
+            )
+        except botocore.exceptions.ClientError as error:
+            logger.warn(
+                "Error when create multiple part upload for object with uuid{}. Detail {}".format(
+                    fi.get("Id"), error
+                )
+            )
+            return
         sig = hashlib.md5()
 
         md5_digests = []
@@ -242,36 +256,66 @@ class AWSBucketReplication(object):
         for chunk in response.iter_content(chunk_size=1024 * 1024 * 32):
             part_number += 1
             sig.update(chunk)
-            res = s3.upload_part(
-                Body=chunk,
-                Bucket=target_bucket,
-                Key=object_path,
-                PartNumber=part_number,
-                UploadId=multipart_upload["UploadId"],
-            )
+            try:
+                res = s3.upload_part(
+                    Body=chunk,
+                    Bucket=target_bucket,
+                    Key=object_path,
+                    PartNumber=part_number,
+                    UploadId=multipart_upload.get("UploadId"),
+                )
+            except botocore.exceptions.ClientError as error:
+                logger.warn(error)
+                return
 
             parts.append({"ETag": res["ETag"], "PartNumber": part_number})
             md5_digests.append(hashlib.md5(chunk).digest())
 
-        response = s3.complete_multipart_upload(
-            Bucket=target_bucket,
-            Key=object_path,
-            MultipartUpload={"Parts": parts},
-            UploadId=multipart_upload["UploadId"],
-            RequestPayer="requester",
-        )
+        try:
+            response = s3.complete_multipart_upload(
+                Bucket=target_bucket,
+                Key=object_path,
+                MultipartUpload={"Parts": parts},
+                UploadId=multipart_upload["UploadId"],
+                RequestPayer="requester",
+            )
+        except botocore.exceptions.ClientError as error:
+            logger.warn(
+                "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
+                    fi.get("Id"), error
+                )
+            )
+            return
 
         # compute local etag from list of md5s
         etags = (
             hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
         )
 
-        meta_data = s3.head_object(Bucket=target_bucket, Key=object_path)
+        try:
+            meta_data = s3.head_object(Bucket=target_bucket, Key=object_path)
+        except botocore.exceptions.ClientError as error:
+            logger.warn(
+                "Can not get meta data of {}. Detail {}".format(fi.get("id"), error)
+            )
+            return
 
-        if sig.hexdigest() != fi.get("md5") or meta_data["ETag"].replace(
+        if meta_data.get("ETag") is None:
+            logger.warn("Can not get etag of {}".format(fi.get("id")))
+            return
+
+        if sig.hexdigest() != fi.get("md5") or meta_data.get["ETag"].replace(
             '"', ""
         ) not in {fi.get("md5"), etags}:
-            s3.delete_object(Bucket=target_bucket, Key=object_path)
+            logger.warn(
+                "Can not stream the object {}. Intergrity check fails".format(
+                    format(fi.get("id"))
+                )
+            )
+            try:
+                s3.delete_object(Bucket=target_bucket, Key=object_path)
+            except botocore.exceptions.ClientError as error:
+                logger.warn(error)
 
     def check_and_index_the_data(self, files):
         """
