@@ -166,10 +166,15 @@ class AWSBucketReplication(object):
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
                     # GDC key is either uuid/file_name or uuid
-                    key = self.source_objects.get(
-                        object_name
-                    ) or self.source_objects.get(fi.get("id"))
-
+                    key = ""
+                    if object_name in self.source_objects:
+                        key = object_name
+                    elif fi.get("id") in self.source_objects:
+                        key = fi.get("id")
+                    else:
+                        logger.error("object with id {} does not exist in source bucket {}".format(fi["id"], self.bucket))
+                        continue
+                    
                     # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
                     if key and self.source_objects[key] not in {
                         "STANDARD",

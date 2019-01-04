@@ -195,9 +195,9 @@ def test_call_aws_copy_cli_called():
     utils.get_aws_bucket_name.return_value = "TCGA-open"
     AWSBucketReplication.build_source_bucket_dataset = MagicMock()
     AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = set(
-        ["11111111111111111/abc.bam"]
-    )
+    AWSBucketReplication.build_source_bucket_dataset.return_value = {
+        "11111111111111111/abc.bam": "STANDARD"
+    }
     instance = AWSBucketReplication(
         bucket="test_bucket",
         manifest_file="test_manifest",
@@ -238,9 +238,10 @@ def test_call_aws_copy_cli_no_called2():
 
     AWSBucketReplication.get_copied_objects = MagicMock()
     AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = set(
-        ["11111111111111111/abc.bam", "2222222222222222222/b.bam"]
-    )
+    AWSBucketReplication.build_source_bucket_dataset.return_value = {
+        "11111111111111111/abc.bam": "STANDARD",
+        "22222222222222222/abc2.bam": "STANDARD",
+    }
     AWSBucketReplication.get_copied_objects.return_value = set(
         ["11111111111111111/abc.bam"]
     )
