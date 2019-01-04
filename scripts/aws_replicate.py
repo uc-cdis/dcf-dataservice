@@ -150,7 +150,7 @@ class AWSBucketReplication(object):
 
         index = 0
         while index < len(files):
-            base_cmd = 'aws s3 cp s3://{} s3://{} --recursive --exclude "*"'.format(
+            base_cmd = 'aws s3 cp s3://{} s3://{} --request-payer requester --recursive --exclude "*"'.format(
                 self.bucket, target_bucket
             )
 

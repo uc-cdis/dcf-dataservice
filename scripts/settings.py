@@ -23,7 +23,7 @@ except Exception as e:
 
 PROJECT_ACL = {}
 try:
-    with open("/Users/giangbui/Projects/TESTS/dcf-replication/GDC_datasets_access_control_test.csv", "rt") as f:
+    with open("/dcf-replication/GDC_datasets_access_control.csv", "rt") as f:
         csvReader = csv.DictReader(f, delimiter=",")
         for line in csvReader:
             PROJECT_ACL[line["project_id"]] = line
