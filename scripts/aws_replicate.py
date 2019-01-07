@@ -11,6 +11,7 @@ import threading
 import json
 import boto3
 import botocore
+import timeit
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
@@ -21,6 +22,8 @@ from utils import (
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
     exec_files_grouping,
+    get_storage_class,
+    is_first_level_object,
 )
 
 from indexd_utils import update_url
@@ -53,10 +56,15 @@ class AWSBucketReplication(object):
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
         self.copied_objects = AWSBucketReplication.get_copied_objects()
+
+        start = timeit.default_timer()
         if self.bucket:
             self.source_objects = self.build_source_bucket_dataset()
         else:
             self.source_objects = {}
+        end = timeit.default_timer()
+
+        logger.info("Time to build source object dataset: {}".format(end - start))
 
         self.mutexLock = threading.Lock()
         self.total_processed_files = 0
@@ -77,7 +85,9 @@ class AWSBucketReplication(object):
         self.total_files = len(submitting_files)
 
         tasks = []
-        file_grps = exec_files_grouping(submitting_files)
+        file_grps = exec_files_grouping(
+            submitting_files, self.source_objects, PROJECT_ACL
+        )
 
         for _, files in file_grps.iteritems():
             chunk_size = self.global_config.get("chunk_size", 1)
@@ -118,7 +128,7 @@ class AWSBucketReplication(object):
         client = boto3.client("s3")
 
         try:
-            paginator = client.get_paginator("list_objects")
+            paginator = client.get_paginator("list_objects_v2")
             pages = paginator.paginate(Bucket=self.bucket, RequestPayer="requester")
         except Exception as e:
             raise UserError(
@@ -165,33 +175,36 @@ class AWSBucketReplication(object):
 
                 # only copy ones not exist in target bucket
                 if object_name not in self.copied_objects:
-                    # GDC key is either uuid/file_name or uuid
-                    key = ""
-                    if object_name in self.source_objects:
-                        key = object_name
-                    elif fi.get("id") in self.source_objects:
-                        key = fi.get("id")
-                    else:
-                        logger.error("object with id {} does not exist in source bucket {}".format(fi["id"], self.bucket))
+                    storage_class = get_storage_class(fi, self.source_objects)
+                    if storage_class is None:
+                        logger.warn(
+                            "object with id {} does not exist in source bucket {}".format(
+                                fi["id"], self.bucket
+                            )
+                        )
                         continue
-                    
+
                     # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
-                    if key and self.source_objects[key] not in {
-                        "STANDARD",
-                        "REDUCED_REDUNDANCY",
-                    }:
+                    if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
+                        logger.info(
+                            "Streaming: {}. Size {} (MB)".format(
+                                object_name, int(fi["size"] * 1.0 / 1024 / 1024)
+                            )
+                        )
                         self.stream_object_from_gdc_api(s3, fi, target_bucket)
+                        continue
+
+                    # If it is a first level object, just single copy
+                    if is_first_level_object(fi, self.source_objects):
+                        cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
+                            self.bucket, fi.get("id"), target_bucket, object_name
+                        )
+                        # wait untill finish
+                        subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
                         continue
 
                     if object_name in self.source_objects:
                         execstr += ' --include "{}"'.format(object_name)
-                    elif fi.get("id") in self.source_objects:
-                        # This is an old file, just single copy
-                        cmd = "aws s3 cp s3://{}/{} s3://{}/{}".format(
-                            self.bucket, fi.get("id"), target_bucket, object_name
-                        )
-                        # should wait for safety
-                        subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
                 else:
                     pass
                     # logger.info("object is already copied")
@@ -240,14 +253,16 @@ class AWSBucketReplication(object):
             )
             return
 
+        object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+
         try:
             multipart_upload = s3.create_multipart_upload(
-                Bucket=target_bucket, Key=fi.get("id")
+                Bucket=target_bucket, Key=object_path
             )
         except botocore.exceptions.ClientError as error:
             logger.warn(
                 "Error when create multiple part upload for object with uuid{}. Detail {}".format(
-                    fi.get("Id"), error
+                    object_path, error
                 )
             )
             return
@@ -256,7 +271,6 @@ class AWSBucketReplication(object):
         md5_digests = []
         parts = []
 
-        object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
         part_number = 0
         for chunk in response.iter_content(chunk_size=1024 * 1024 * 32):
             part_number += 1
@@ -309,7 +323,7 @@ class AWSBucketReplication(object):
             logger.warn("Can not get etag of {}".format(fi.get("id")))
             return
 
-        if sig.hexdigest() != fi.get("md5") or meta_data.get["ETag"].replace(
+        if sig.hexdigest() != fi.get("md5") or meta_data.get("ETag", "").replace(
             '"', ""
         ) not in {fi.get("md5"), etags}:
             logger.warn(
@@ -359,6 +373,7 @@ class AWSBucketReplication(object):
         """
 
         tasks, _ = self.prepare_data()
+
         # Make the Pool of workers
         pool = ThreadPool(self.thread_num)
 
