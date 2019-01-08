@@ -104,21 +104,23 @@ class AWSBucketReplication(object):
         get all copied objects so that we don't have to re-copy them
         """
         s3 = boto3.resource("s3")
-        existed_keys = set()
+        # existed_keys = set()
+        existed_objects = {}
 
         for _, bucket_info in PROJECT_ACL.iteritems():
-            for label in ["-open", "-controlled"]:
-                bucket_name = bucket_info["aws_bucket_prefix"] + label
+            for label in ["open", "controlled"]:
+                bucket_name = bucket_info["aws_bucket_prefix"] + "-" + label
                 bucket = s3.Bucket(bucket_name)
                 try:
                     for file in bucket.objects.all():
-                        existed_keys.add(file.key)
+                        # existed_keys.add(file.key)
+                        existed_objects["file.key"] = bucket_name
                 except Exception as e:
                     raise Exception(
                         "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
                     )
 
-        return existed_keys
+        return existed_objects
 
     def build_source_bucket_dataset(self):
         """
@@ -205,9 +207,19 @@ class AWSBucketReplication(object):
 
                     if object_name in self.source_objects:
                         execstr += ' --include "{}"'.format(object_name)
-                else:
-                    pass
-                    # logger.info("object is already copied")
+
+                elif self.is_changed_acl_object(fi):
+                    logger.info(
+                        "acl object is changed. Move object to the right bucket"
+                    )
+                    cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
+                        self.copied_objects[object_name],
+                        object_name,
+                        target_bucket,
+                        object_name,
+                    )
+                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+                    continue
 
             if execstr != base_cmd:
                 subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
@@ -228,7 +240,7 @@ class AWSBucketReplication(object):
     def stream_object_from_gdc_api(self, s3, fi, target_bucket):
         """
         Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from 
-        gdc api and compute its local etag since aws only provides etag for uploaded object.
+        gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
 
         Args:
             s3: s3.client session
@@ -335,6 +347,18 @@ class AWSBucketReplication(object):
                 s3.delete_object(Bucket=target_bucket, Key=object_path)
             except botocore.exceptions.ClientError as error:
                 logger.warn(error)
+
+    def is_changed_acl_object(self, fi):
+        object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+        if (
+            fi.get("acl") == "[u'open']"
+            and self.copied_objects.get(object_path, "").endswith("controlled")
+        ) or (
+            fi.get("acl") != "[u'open']"
+            and self.copied_objects.get(object_path, "").endswith("open")
+        ):
+            return True
+        return False
 
     def check_and_index_the_data(self, files):
         """

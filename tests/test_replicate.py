@@ -216,9 +216,12 @@ def test_call_aws_copy_cli_no_called():
 
     AWSBucketReplication.get_copied_objects = MagicMock()
     AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.get_copied_objects.return_value = set(
-        ["11111111111111111/abc.bam"]
-    )
+    AWSBucketReplication.get_copied_objects.return_value = {
+        "11111111111111111/abc.bam": "gdc-tcga-open"
+    }
+    AWSBucketReplication.is_changed_acl_object = MagicMock()
+    AWSBucketReplication.is_changed_acl_object.return_value = False
+
     subprocess.Popen = MagicMock()
     instance = AWSBucketReplication(
         bucket="test_bucket",
@@ -233,7 +236,7 @@ def test_call_aws_copy_cli_no_called():
 
 def test_call_aws_copy_cli_no_called2():
     """
-    test that the aws cli is not called due to 
+    test that the aws cli is not called due to object already exists 
     """
 
     AWSBucketReplication.get_copied_objects = MagicMock()
@@ -242,9 +245,12 @@ def test_call_aws_copy_cli_no_called2():
         "11111111111111111/abc.bam": "STANDARD",
         "22222222222222222/abc2.bam": "STANDARD",
     }
-    AWSBucketReplication.get_copied_objects.return_value = set(
-        ["11111111111111111/abc.bam"]
-    )
+    AWSBucketReplication.get_copied_objects.return_value = {
+        "11111111111111111/abc.bam": "gdc-tcga-open"
+    }
+    AWSBucketReplication.is_changed_acl_object = MagicMock()
+    AWSBucketReplication.is_changed_acl_object.return_value = False
+
     subprocess.Popen = MagicMock()
     instance = AWSBucketReplication(
         bucket="test_bucket",
