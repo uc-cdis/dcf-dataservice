@@ -18,7 +18,7 @@ try:
 except NameError:
     unicode = str
 
-FILE_HEADERS = ["id", "file_name", "md5", "size", "state", "acl", "project_id"]
+FILE_HEADERS = ["id", "file_name", "size", "md5", "acl", "project_id"]
 
 
 class FileCopyingDoFn(beam.DoFn):

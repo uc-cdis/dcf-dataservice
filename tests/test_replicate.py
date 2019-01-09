@@ -193,11 +193,11 @@ def test_call_aws_copy_cli_called():
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
     utils.get_aws_bucket_name.return_value = "TCGA-open"
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = {
-        "11111111111111111/abc.bam": "STANDARD"
-    }
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {},
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+    )
     instance = AWSBucketReplication(
         bucket="test_bucket",
         manifest_file="test_manifest",
@@ -214,11 +214,11 @@ def test_call_aws_copy_cli_no_called():
     Test that aws cli is not called due to object already exists 
     """
 
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.get_copied_objects.return_value = {
-        "11111111111111111/abc.bam": "gdc-tcga-open"
-    }
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+    )
     AWSBucketReplication.is_changed_acl_object = MagicMock()
     AWSBucketReplication.is_changed_acl_object.return_value = False
 
@@ -239,15 +239,15 @@ def test_call_aws_copy_cli_no_called2():
     test that the aws cli is not called due to object already exists 
     """
 
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = {
-        "11111111111111111/abc.bam": "STANDARD",
-        "22222222222222222/abc2.bam": "STANDARD",
-    }
-    AWSBucketReplication.get_copied_objects.return_value = {
-        "11111111111111111/abc.bam": "gdc-tcga-open"
-    }
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+        {
+            "11111111111111111/abc.bam": {"StorageClass": "STANDARD"},
+            "22222222222222222/abc2.bam": {"StorageClass": "STANDARD"},
+        },
+    )
+
     AWSBucketReplication.is_changed_acl_object = MagicMock()
     AWSBucketReplication.is_changed_acl_object.return_value = False
 

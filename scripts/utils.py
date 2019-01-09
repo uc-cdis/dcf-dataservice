@@ -153,7 +153,6 @@ def exec_files_grouping(files, source_objects, PROJECT_ACL):
     project_acl_dict = {}
     file_grp = {}
     n = 0
-
     for fi in files:
         if get_storage_class(fi, source_objects) not in {
             "STANDARD",
@@ -211,7 +210,9 @@ def get_storage_class(fi, source_objects):
     elif fi.get("id") in source_objects:
         key = fi.get("id")
 
-    return source_objects.get(key)
+    if key == "":
+        return ""
+    return source_objects.get(key)["StorageClass"]
 
 
 def is_first_level_object(fi, source_objects):

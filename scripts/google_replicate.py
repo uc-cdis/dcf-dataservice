@@ -65,7 +65,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
     res = sess.request(method="GET", url=url)
     return (
         res.status_code == 200
-        and res.json["size"] == fi.get("size")
+        and int(res.json()["size"]) == fi.get("size")
         and base64.b64decode(res.json()["md5Hash"]).encode("hex") == fi.get("md5")
     )
 

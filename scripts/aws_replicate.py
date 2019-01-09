@@ -7,6 +7,7 @@ import hashlib
 import requests
 
 import threading
+from threading import Thread
 
 import json
 import boto3
@@ -50,18 +51,26 @@ class AWSBucketReplication(object):
         self.global_config = global_config
         self.job_name = job_name
         self.thread_num = thread_num
-        self.indexclient = IndexClient(
-            INDEXD["host"],
-            INDEXD["version"],
-            (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+        self.indexclient = (
+            IndexClient(
+                INDEXD["host"],
+                INDEXD["version"],
+                (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+            ),
         )
-        self.copied_objects = AWSBucketReplication.get_copied_objects()
+        self.s3 = boto3.client("s3")
 
         start = timeit.default_timer()
-        if self.bucket:
-            self.source_objects = self.build_source_bucket_dataset()
+
+        if global_config.get("from_local"):
+            self.copied_objects, self.source_objects = AWSBucketReplication.build_object_dataset_from_file(
+                global_config.get("copied_objects"), global_config.get("source_objects")
+            )
         else:
-            self.source_objects = {}
+            self.copied_objects, self.source_objects = AWSBucketReplication.build_object_dataset(
+                PROJECT_ACL, self.bucket
+            )
+
         end = timeit.default_timer()
 
         logger.info("Time to build source object dataset: {}".format(end - start))
@@ -73,21 +82,19 @@ class AWSBucketReplication(object):
 
     def prepare_data(self):
         """
-        Read data file info from manifest and organize them into  groups.
-        Each group contains files should be copied to same bucket
-        The groups will be push to the queue
+        Read data file info from manifest and organize them into groups.
+        Each group contains files which should be copied to the same bucket
+        The groups will be push to the queue consumed by threads
         """
         if self.manifest_file.startswith("s3://"):
-            submitting_files = get_fileinfo_list_from_s3_manifest(self.manifest_file)
+            copying_files = get_fileinfo_list_from_s3_manifest(self.manifest_file)
         else:
-            submitting_files = get_fileinfo_list_from_csv_manifest(self.manifest_file)
+            copying_files = get_fileinfo_list_from_csv_manifest(self.manifest_file)
 
-        self.total_files = len(submitting_files)
+        self.total_files = len(copying_files)
 
         tasks = []
-        file_grps = exec_files_grouping(
-            submitting_files, self.source_objects, PROJECT_ACL
-        )
+        file_grps = exec_files_grouping(copying_files, self.source_objects, PROJECT_ACL)
 
         for _, files in file_grps.iteritems():
             chunk_size = self.global_config.get("chunk_size", 1)
@@ -96,58 +103,115 @@ class AWSBucketReplication(object):
                 tasks.append(files[idx : idx + chunk_size])
                 idx = idx + chunk_size
 
-        return tasks, len(submitting_files)
+        return tasks, len(copying_files)
 
     @staticmethod
-    def get_copied_objects():
+    def build_object_dataset_from_file(copied_objects_file, source_objects_file):
         """
-        get all copied objects so that we don't have to re-copy them
+        Load copied objects and source objects in local files
         """
-        s3 = boto3.resource("s3")
-        # existed_keys = set()
-        existed_objects = {}
+        with open(copied_objects_file, "r") as outfile:
+            copied_objects = json.loads(outfile.read())
 
-        for _, bucket_info in PROJECT_ACL.iteritems():
-            for label in ["open", "controlled"]:
-                bucket_name = bucket_info["aws_bucket_prefix"] + "-" + label
-                bucket = s3.Bucket(bucket_name)
-                try:
-                    for file in bucket.objects.all():
-                        # existed_keys.add(file.key)
-                        existed_objects["file.key"] = bucket_name
-                except Exception as e:
-                    raise Exception(
-                        "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
-                    )
+        with open(source_objects_file, "r") as outfile:
+            source_objects = json.loads(outfile.read())
 
-        return existed_objects
+        return copied_objects, source_objects
 
-    def build_source_bucket_dataset(self):
+    @staticmethod
+    def build_object_dataset(project_acl, awsbucket):
         """
-        build source bucket dataset for lookup
-        to avoid list object operations
-        """
-        client = boto3.client("s3")
+        Load copied objects and source objects. The copied objects are obtained by
+        listing the target buckets (derived from project_acl). The source objects are
+        obtained by listing the objects in source bucket (GDC bucket)
+        
+        Args:
+            project_acl(dict): project access control lever. It contains target bucket infos:
+                - project_id(str): map with project_id in manifest
+                - bucket prefix name: to derive the target bucket name (ex gdc-tcga-open|controlled)
+            awsbucket(str): the source bucket
 
-        try:
+        Returns:
+            copied_objects(dict): contains copied objects already
+            source_objects(dict): contains source objects
+        """
+        mutexLock = threading.Lock()
+        copied_objects = {}
+        source_objects = {}
+
+        def list_objects(bucket_name, objects):
+            """
+            build object dataset for lookup with key is s3 object key and value contains
+            storage class, size and md5
+            to avoid list object operations
+            """
+            client = boto3.client("s3")
+            result = {}
+
             paginator = client.get_paginator("list_objects_v2")
-            pages = paginator.paginate(Bucket=self.bucket, RequestPayer="requester")
-        except Exception as e:
-            raise UserError(
-                "Can not detect the bucket {}. Detail {}".format(self.bucket, e)
+            pages = paginator.paginate(Bucket=bucket_name, RequestPayer="requester")
+
+            try:
+                for page in pages:
+                    for obj in page["Contents"]:
+                        result[obj["Key"]] = {
+                            "StorageClass": obj["StorageClass"],
+                            "Size": obj["Size"],
+                        }
+            except KeyError:
+                logger.info("There is no object in {}".format(bucket_name))
+            except botocore.exceptions.ClientError as e:
+                logger.error(
+                    "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
+                )
+
+            mutexLock.acquire()
+            objects.update(result)
+            mutexLock.release()
+
+        threads = []
+        target_bucket_names = set()
+        for _, bucket_info in project_acl.iteritems():
+            # bad hash code to support ccle bucket name
+            if "ccle" in bucket_info["aws_bucket_prefix"]:
+                target_bucket_names.add("ccle-open-access")
+                target_bucket_names.add("gdc-ccle-controlled")
+                continue
+            for label in ["open", "controlled"]:
+                target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
+
+        for target_bucket_name in target_bucket_names:
+            threads.append(
+                Thread(target=list_objects, args=(target_bucket_name, copied_objects))
             )
-        dataset = {}
-        for page in pages:
-            for obj in page["Contents"]:
-                dataset[obj["Key"]] = obj["StorageClass"]
-        return dataset
+
+        threads.append(Thread(target=list_objects, args=(awsbucket, source_objects)))
+
+        logger.info("Start threads to list aws objects")
+        for th in threads:
+            th.start()
+        logger.info("Wait for threads to finish the jobs")
+        for th in threads:
+            th.join()
+
+        return copied_objects, source_objects
 
     def exec_aws_copy(self, files):
         """
-        Call AWS SLI to copy a chunk of  files from a bucket to another bucket.
-        Intergrity check: After each chunk copy, check the returned md5 hashes
-                            with the ones provided in manifest.
-        If not match, re-copy. Log all the success and failure cases
+        Exec copy a chunk of  files from the source bucket to the target buckets.
+        The target buckets are infered from PROJECT_ACL and project_id in the file
+        
+        There are some scenarios:
+            - Object classes are "STANDARD", "REDUCED_REDUNDANCY": using aws cli
+            - Object classes are not "STANDARD", "REDUCED_REDUNDANCY", using gdcapi
+            - Object acl is changed, move objects to right bucket
+
+        Intergrity check: 
+            - Using awscli: We rely on aws 
+            - Streaming: Compute local etag and match with one provided by aws, compute md5 on 
+            the fly to check the intergrity of streaming data from gdcapi to local machine
+
+        Log all the success and failure cases
 
         Args:
             files(list): a list of files which should be copied to the same bucket
@@ -163,7 +227,6 @@ class AWSBucketReplication(object):
             logger.error(e)
             return len(files)
 
-        s3 = boto3.client("s3")
         index = 0
         while index < len(files):
             base_cmd = 'aws s3 cp s3://{} s3://{} --request-payer requester --recursive --exclude "*"'.format(
@@ -175,28 +238,31 @@ class AWSBucketReplication(object):
             for fi in files[index : index + chunk_size]:
                 object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
-                # only copy ones not exist in target bucket
+                # only copy ones not exist in target buckets
                 if object_name not in self.copied_objects:
                     storage_class = get_storage_class(fi, self.source_objects)
                     if storage_class is None:
                         logger.warn(
-                            "object with id {} does not exist in source bucket {}".format(
+                            "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
                                 fi["id"], self.bucket
                             )
                         )
+                        self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
                         continue
 
                     # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
                     if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
                         logger.info(
-                            "Streaming: {}. Size {} (MB)".format(
-                                object_name, int(fi["size"] * 1.0 / 1024 / 1024)
+                            "Streaming: {}. Size {} (MB). Class {}".format(
+                                object_name,
+                                int(fi["size"] * 1.0 / 1024 / 1024),
+                                storage_class,
                             )
                         )
-                        self.stream_object_from_gdc_api(s3, fi, target_bucket)
+                        self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
                         continue
 
-                    # If it is a first level object, just single copy
+                    # If it is a first level object (does not have parent folder), just single copy
                     if is_first_level_object(fi, self.source_objects):
                         cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
                             self.bucket, fi.get("id"), target_bucket, object_name
@@ -207,7 +273,7 @@ class AWSBucketReplication(object):
 
                     if object_name in self.source_objects:
                         execstr += ' --include "{}"'.format(object_name)
-
+                # object already exists in dcf but acl is changed
                 elif self.is_changed_acl_object(fi):
                     logger.info(
                         "acl object is changed. Move object to the right bucket"
@@ -218,10 +284,13 @@ class AWSBucketReplication(object):
                         target_bucket,
                         object_name,
                     )
+                    logger.info(cmd)
                     subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
                     continue
 
             if execstr != base_cmd:
+                # just show truncated command in log since it is very long
+                logger.info(execstr[:500])
                 subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
 
             index = index + chunk_size
@@ -237,7 +306,7 @@ class AWSBucketReplication(object):
 
         return len(files)
 
-    def stream_object_from_gdc_api(self, s3, fi, target_bucket):
+    def stream_object_from_gdc_api(self, s3, fi, target_bucket, endpoint=None):
         """
         Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from 
         gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
@@ -251,7 +320,9 @@ class AWSBucketReplication(object):
             None
         """
 
-        data_endpoint = "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
+        data_endpoint = endpoint or "https://api.gdc.cancer.gov/data/{}".format(
+            fi.get("id")
+        )
         response = requests.get(
             data_endpoint,
             stream=True,
@@ -278,13 +349,18 @@ class AWSBucketReplication(object):
                 )
             )
             return
+
+        # prepare to compute md5 in the fly
         sig = hashlib.md5()
 
+        # prepare to compute local etag
         md5_digests = []
         parts = []
 
         part_number = 0
-        for chunk in response.iter_content(chunk_size=1024 * 1024 * 32):
+        for chunk in response.iter_content(
+            chunk_size=self.global_config.get("stream_chunk_size", 1024 * 1024 * 32)
+        ):
             part_number += 1
             sig.update(chunk)
             try:
@@ -349,6 +425,10 @@ class AWSBucketReplication(object):
                 logger.warn(error)
 
     def is_changed_acl_object(self, fi):
+        """
+        check if the object has acl changed or not
+        """
+
         object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
         if (
             fi.get("acl") == "[u'open']"
@@ -362,7 +442,7 @@ class AWSBucketReplication(object):
 
     def check_and_index_the_data(self, files):
         """
-        Check if files in manifest are copied or not. Index data and log
+        Check if files are in manifest are copied or not. Index the files if they exists in target buckets and log
         """
         json_log = {}
         for fi in files:
@@ -386,7 +466,11 @@ class AWSBucketReplication(object):
 
         self.mutexLock.acquire()
         self.total_indexed_files += len(files)
-        logger.info("{} object are processed/indexed ".format(self.total_indexed_files))
+        logger.info(
+            "{}/{} object are processed/indexed ".format(
+                self.total_indexed_files, self.total_files
+            )
+        )
         self.mutexLock.release()
 
         return json_log
@@ -402,6 +486,7 @@ class AWSBucketReplication(object):
         pool = ThreadPool(self.thread_num)
 
         results = []
+
         if self.job_name == "copying":
             results = pool.map(self.exec_aws_copy, tasks)
         elif self.job_name == "indexing":
