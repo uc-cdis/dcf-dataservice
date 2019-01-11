@@ -8,12 +8,14 @@ from google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
 import logging as logger
-from indexclient.client import IndexClient
+
+# from indexclient.client import IndexClient
+import indexclient
 
 import utils
 from errors import APIError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
-from indexd_utils import update_url
+import indexd_utils
 
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
@@ -83,7 +85,7 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
-    indexclient = IndexClient(
+    indexd_client = indexclient.client.IndexClient(
         INDEXD["host"],
         INDEXD["version"],
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
@@ -107,7 +109,7 @@ def exec_google_copy(fi, global_config):
 
     if check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         try:
-            update_url(fi, indexclient, "gs")
+            indexd_utils.update_url(fi, indexd_client, "gs")
         except APIError as e:
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)

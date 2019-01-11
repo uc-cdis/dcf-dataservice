@@ -15,11 +15,7 @@ try:
         INDEXD = data.get("INDEXD", {})
         GDC_TOKEN = data.get("GDC_TOKEN", "")
 except Exception as e:
-    print(
-        "Can not read dcf_dataservice_credentials.json file (only required for google data flow). Detail {}".format(
-            e
-        )
-    )
+    print("Can not read dcf_dataservice_credentials.json file. Detail {}".format(e))
 
 PROJECT_ACL = {}
 try:

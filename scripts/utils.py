@@ -4,15 +4,21 @@ import csv
 
 from errors import UserError
 
-# def Base64ToHexHash(base64_hash):
-#    return hexlify(base64.decodestring(base64_hash.strip('\n"\'')))
-
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
         raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+
+    # bad hard code to support ccle buckets
+    if "ccle" in project_info["aws_bucket_prefix"]:
+        return (
+            "ccle-open-access"
+            if fi.get("acl") in {"[u'open']", "['open']"}
+            else "gdc-ccle-controlled"
+        )
+
     return project_info["aws_bucket_prefix"] + (
         "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
@@ -88,8 +94,8 @@ def get_fileinfo_list_from_s3_manifest(url_manifeat):
     from urlparse import urlparse
 
     out = urlparse(url_manifeat)
-    s3.meta.client.download_file(out.netloc, out.path[1:], out.path[1:])
-    return get_fileinfo_list_from_csv_manifest(out.path[1:])
+    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest")
+    return get_fileinfo_list_from_csv_manifest("./manifest")
 
 
 def get_fileinfo_list_from_manifest(manifest_file):

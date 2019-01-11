@@ -22,13 +22,11 @@ import utils
 from utils import (
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
-    exec_files_grouping,
     get_storage_class,
     is_first_level_object,
 )
 
 from indexd_utils import update_url
-from errors import UserError
 
 logger = get_logger("AWSReplication")
 
@@ -51,13 +49,12 @@ class AWSBucketReplication(object):
         self.global_config = global_config
         self.job_name = job_name
         self.thread_num = thread_num
-        self.indexclient = (
-            IndexClient(
-                INDEXD["host"],
-                INDEXD["version"],
-                (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-            ),
+        self.indexclient = IndexClient(
+            INDEXD["host"],
+            INDEXD["version"],
+            (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
+
         self.s3 = boto3.client("s3")
 
         start = timeit.default_timer()
@@ -93,15 +90,13 @@ class AWSBucketReplication(object):
 
         self.total_files = len(copying_files)
 
+        chunk_size = self.global_config.get("chunk_size", 1)
         tasks = []
-        file_grps = exec_files_grouping(copying_files, self.source_objects, PROJECT_ACL)
 
-        for _, files in file_grps.iteritems():
-            chunk_size = self.global_config.get("chunk_size", 1)
-            idx = 0
-            while idx < len(files):
-                tasks.append(files[idx : idx + chunk_size])
-                idx = idx + chunk_size
+        idx = 0
+        while idx < len(copying_files):
+            tasks.append(copying_files[idx : idx + chunk_size])
+            idx = idx + chunk_size
 
         return tasks, len(copying_files)
 
@@ -110,6 +105,23 @@ class AWSBucketReplication(object):
         """
         Load copied objects and source objects in local files
         """
+        s3 = boto3.resource("s3")
+        from urlparse import urlparse
+
+        if copied_objects_file.startswith("s3://"):
+            out = urlparse(copied_objects_file)
+            s3.meta.client.download_file(
+                out.netloc, out.path[1:], "./copied_objects_file.json"
+            )
+            copied_objects_file = "./copied_objects_file.json"
+
+        if source_objects_file.startswith("s3://"):
+            out = urlparse(source_objects_file)
+            s3.meta.client.download_file(
+                out.netloc, out.path[1:], "./source_objects_file.json"
+            )
+            source_objects_file = "./source_objects_file.json"
+
         with open(copied_objects_file, "r") as outfile:
             copied_objects = json.loads(outfile.read())
 
@@ -164,7 +176,6 @@ class AWSBucketReplication(object):
                 logger.error(
                     "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
                 )
-
             mutexLock.acquire()
             objects.update(result)
             mutexLock.release()
@@ -172,7 +183,7 @@ class AWSBucketReplication(object):
         threads = []
         target_bucket_names = set()
         for _, bucket_info in project_acl.iteritems():
-            # bad hash code to support ccle bucket name
+            # bad hard code to support ccle bucket name
             if "ccle" in bucket_info["aws_bucket_prefix"]:
                 target_bucket_names.add("ccle-open-access")
                 target_bucket_names.add("gdc-ccle-controlled")
@@ -185,7 +196,8 @@ class AWSBucketReplication(object):
                 Thread(target=list_objects, args=(target_bucket_name, copied_objects))
             )
 
-        threads.append(Thread(target=list_objects, args=(awsbucket, source_objects)))
+        if awsbucket:
+            threads.append(Thread(target=list_objects, args=(awsbucket, source_objects)))
 
         logger.info("Start threads to list aws objects")
         for th in threads:
@@ -219,39 +231,26 @@ class AWSBucketReplication(object):
         Returns:
             None
         """
-        config_chunk_size = self.global_config.get("chunk_size", 1)
-        try:
-            target_bucket = utils.get_aws_bucket_name(files[0], PROJECT_ACL)
-        except UserError as e:
-            # Detail error message from called function
-            logger.error(e)
-            return len(files)
 
-        index = 0
-        while index < len(files):
-            base_cmd = 'aws s3 cp s3://{} s3://{} --request-payer requester --recursive --exclude "*"'.format(
-                self.bucket, target_bucket
-            )
+        for fi in files:
+            target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+            object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
-            chunk_size = min(config_chunk_size, len(files) - index)
-            execstr = base_cmd
-            for fi in files[index : index + chunk_size]:
-                object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
-                # only copy ones not exist in target buckets
-                if object_name not in self.copied_objects:
-                    storage_class = get_storage_class(fi, self.source_objects)
-                    if storage_class is None:
-                        logger.warn(
-                            "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
-                                fi["id"], self.bucket
-                            )
+            # only copy ones not exist in target buckets
+            if object_name not in self.copied_objects:
+                storage_class = get_storage_class(fi, self.source_objects)
+                if storage_class is None:
+                    logger.warn(
+                        "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
+                            fi["id"], self.bucket
                         )
-                        self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
-                        continue
+                    )
+                    self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
+                    continue
 
-                    # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
-                    if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
+                # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
+                if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
+                    if not self.global_config.get("quite", False):
                         logger.info(
                             "Streaming: {}. Size {} (MB). Class {}".format(
                                 object_name,
@@ -259,41 +258,36 @@ class AWSBucketReplication(object):
                                 storage_class,
                             )
                         )
-                        self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
-                        continue
-
-                    # If it is a first level object (does not have parent folder), just single copy
-                    if is_first_level_object(fi, self.source_objects):
-                        cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
-                            self.bucket, fi.get("id"), target_bucket, object_name
-                        )
-                        # wait untill finish
-                        subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
-                        continue
-
-                    if object_name in self.source_objects:
-                        execstr += ' --include "{}"'.format(object_name)
-                # object already exists in dcf but acl is changed
-                elif self.is_changed_acl_object(fi):
-                    logger.info(
-                        "acl object is changed. Move object to the right bucket"
-                    )
-                    cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
-                        self.copied_objects[object_name],
-                        object_name,
-                        target_bucket,
-                        object_name,
-                    )
-                    logger.info(cmd)
-                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+                    self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
                     continue
 
-            if execstr != base_cmd:
-                # just show truncated command in log since it is very long
-                logger.info(execstr[:500])
-                subprocess.Popen(shlex.split(execstr + " --quiet")).wait()
+                key = None
+                if object_name in self.source_objects:
+                    key = object_name
+                elif is_first_level_object(fi, self.source_objects):
+                    key = fi.get("id")
 
-            index = index + chunk_size
+                if key:
+                    cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
+                        self.bucket, key, target_bucket, object_name
+                    )
+                    if not self.global_config.get("quite", False):
+                        logger.info(cmd)
+                    # wait untill finish
+                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+
+            # object already exists in dcf but acl is changed
+            elif self.is_changed_acl_object(fi):
+                logger.info("acl object is changed. Move object to the right bucket")
+                cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
+                    self.copied_objects[object_name],
+                    object_name,
+                    target_bucket,
+                    object_name,
+                )
+                if not self.global_config.get("quite", False):
+                    logger.info(cmd)
+                subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
 
         self.mutexLock.acquire()
         self.total_processed_files += len(files)
@@ -320,6 +314,8 @@ class AWSBucketReplication(object):
             None
         """
 
+        thread_s3 = boto3.client("s3")
+
         data_endpoint = endpoint or "https://api.gdc.cancer.gov/data/{}".format(
             fi.get("id")
         )
@@ -339,7 +335,7 @@ class AWSBucketReplication(object):
         object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
         try:
-            multipart_upload = s3.create_multipart_upload(
+            multipart_upload = thread_s3.create_multipart_upload(
                 Bucket=target_bucket, Key=object_path
             )
         except botocore.exceptions.ClientError as error:
@@ -364,7 +360,7 @@ class AWSBucketReplication(object):
             part_number += 1
             sig.update(chunk)
             try:
-                res = s3.upload_part(
+                res = thread_s3.upload_part(
                     Body=chunk,
                     Bucket=target_bucket,
                     Key=object_path,
@@ -379,7 +375,7 @@ class AWSBucketReplication(object):
             md5_digests.append(hashlib.md5(chunk).digest())
 
         try:
-            response = s3.complete_multipart_upload(
+            response = thread_s3.complete_multipart_upload(
                 Bucket=target_bucket,
                 Key=object_path,
                 MultipartUpload={"Parts": parts},
@@ -400,7 +396,7 @@ class AWSBucketReplication(object):
         )
 
         try:
-            meta_data = s3.head_object(Bucket=target_bucket, Key=object_path)
+            meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
         except botocore.exceptions.ClientError as error:
             logger.warn(
                 "Can not get meta data of {}. Detail {}".format(fi.get("id"), error)
@@ -420,7 +416,7 @@ class AWSBucketReplication(object):
                 )
             )
             try:
-                s3.delete_object(Bucket=target_bucket, Key=object_path)
+                thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
             except botocore.exceptions.ClientError as error:
                 logger.warn(error)
 
@@ -447,7 +443,6 @@ class AWSBucketReplication(object):
         json_log = {}
         for fi in files:
             object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
             if object_path not in self.copied_objects:
                 json_log[object_path] = {"copy_success": False, "index_success": False}
             else:
