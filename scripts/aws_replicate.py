@@ -5,6 +5,7 @@ import subprocess
 import shlex
 import hashlib
 import requests
+import re
 
 import threading
 from threading import Thread
@@ -22,8 +23,6 @@ import utils
 from utils import (
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
-    get_storage_class,
-    is_first_level_object,
 )
 
 from indexd_utils import update_url
@@ -54,8 +53,6 @@ class AWSBucketReplication(object):
             INDEXD["version"],
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
-
-        self.s3 = boto3.client("s3")
 
         start = timeit.default_timer()
 
@@ -197,7 +194,9 @@ class AWSBucketReplication(object):
             )
 
         if awsbucket:
-            threads.append(Thread(target=list_objects, args=(awsbucket, source_objects)))
+            threads.append(
+                Thread(target=list_objects, args=(awsbucket, source_objects))
+            )
 
         logger.info("Start threads to list aws objects")
         for th in threads:
@@ -210,8 +209,13 @@ class AWSBucketReplication(object):
 
     def exec_aws_copy(self, files):
         """
-        Exec copy a chunk of  files from the source bucket to the target buckets.
+        Copy a chunk of files from the source bucket to the target buckets.
         The target buckets are infered from PROJECT_ACL and project_id in the file
+
+        To locate the key of the file in the source bucket. Follow the below rule:
+            - uuid/fname if not:
+                extract key from url if not:
+                    uuid if not None
         
         There are some scenarios:
             - Object classes are "STANDARD", "REDUCED_REDUNDANCY": using aws cli
@@ -220,10 +224,10 @@ class AWSBucketReplication(object):
 
         Intergrity check: 
             - Using awscli: We rely on aws 
-            - Streaming: Compute local etag and match with one provided by aws, compute md5 on 
-            the fly to check the intergrity of streaming data from gdcapi to local machine
-
-        Log all the success and failure cases
+            - Streaming: 
+                +) Compute local etag and match with the one provided by aws
+                +) Compute md5 on the fly to check the intergrity of streaming data
+                   from gdcapi to local machine
 
         Args:
             files(list): a list of files which should be copied to the same bucket
@@ -238,15 +242,31 @@ class AWSBucketReplication(object):
 
             # only copy ones not exist in target buckets
             if object_name not in self.copied_objects:
-                storage_class = get_storage_class(fi, self.source_objects)
-                if storage_class is None:
+                source_key = object_name
+                if source_key not in self.source_objects:
+                    try:
+                        source_key = re.search(
+                            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
+                            fi["url"],
+                        ).group(0)
+                        if source_key not in self.source_objects:
+                            source_key = None
+                    except (AttributeError, TypeError):
+                        source_key = None
+
+                    if source_key is None and fi["id"] in self.source_objects:
+                        source_key = fi["id"]
+
+                if not source_key:
                     logger.warn(
                         "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
                             fi["id"], self.bucket
                         )
                     )
-                    self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
+                    self.stream_object_from_gdc_api(fi, target_bucket)
                     continue
+
+                storage_class = self.source_objects[source_key]["StorageClass"]
 
                 # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
                 if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
@@ -258,18 +278,10 @@ class AWSBucketReplication(object):
                                 storage_class,
                             )
                         )
-                    self.stream_object_from_gdc_api(self.s3, fi, target_bucket)
-                    continue
-
-                key = None
-                if object_name in self.source_objects:
-                    key = object_name
-                elif is_first_level_object(fi, self.source_objects):
-                    key = fi.get("id")
-
-                if key:
+                    self.stream_object_from_gdc_api(fi, target_bucket)
+                else:
                     cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
-                        self.bucket, key, target_bucket, object_name
+                        self.bucket, source_key, target_bucket, object_name
                     )
                     if not self.global_config.get("quite", False):
                         logger.info(cmd)
@@ -300,13 +312,12 @@ class AWSBucketReplication(object):
 
         return len(files)
 
-    def stream_object_from_gdc_api(self, s3, fi, target_bucket, endpoint=None):
+    def stream_object_from_gdc_api(self, fi, target_bucket, endpoint=None):
         """
         Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from 
         gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
 
         Args:
-            s3: s3.client session
             fi(dict): object info
             target_bucket(str): target bucket
         
@@ -438,7 +449,8 @@ class AWSBucketReplication(object):
 
     def check_and_index_the_data(self, files):
         """
-        Check if files are in manifest are copied or not. Index the files if they exists in target buckets and log
+        Check if files are in manifest are copied or not.
+        Index the files if they exists in target buckets and log
         """
         json_log = {}
         for fi in files:
