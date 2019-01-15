@@ -16,6 +16,7 @@ from utils import (
     get_fileinfo_list_from_s3_manifest,
 )
 from indexd_utils import remove_url_from_indexd_record
+from errors import APIError, UserError
 
 logger = get_logger("DCFRedacts")
 
@@ -72,11 +73,23 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
 
     deletion_logs = []
     for fi in file_infos:
-        aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
-        deletion_logs.append(
-            _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
-        )
-        google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
+        try:
+            aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
+        except UserError as e:
+            deletion_logs.append(DeletionLog(url=fi.get("id") + "/" + fi.get("filename"), message=e.message))
+            aws_target_bucket = None
+        
+        if aws_target_bucket:
+            deletion_logs.append(
+                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
+            )
+
+        try:
+            google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
+        except UserError as e:
+            deletion_logs.append(DeletionLog(url=fi.get("id") + "/" + fi.get("filename"), message=e.message))
+            continue
+
         deletion_logs.append(
             _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket)
         )

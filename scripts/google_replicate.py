@@ -13,7 +13,7 @@ import logging as logger
 import indexclient
 
 import utils
-from errors import APIError
+from errors import APIError, UserError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 import indexd_utils
 
@@ -93,7 +93,12 @@ def exec_google_copy(fi, global_config):
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
     blob_name = fi.get("id") + "/" + fi.get("file_name")
-    bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    try:
+        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    except UserError as e:
+        msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)

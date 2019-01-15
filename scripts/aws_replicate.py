@@ -24,7 +24,7 @@ from utils import (
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
 )
-
+from errors import UserError
 from indexd_utils import update_url
 
 logger = get_logger("AWSReplication")
@@ -81,19 +81,17 @@ class AWSBucketReplication(object):
         The groups will be push to the queue consumed by threads
         """
         if self.manifest_file.startswith("s3://"):
-            copying_files = get_fileinfo_list_from_s3_manifest(self.manifest_file)
+            copying_files = get_fileinfo_list_from_s3_manifest(url_manifest=self.manifest_file, start=self.global_config.get("start"), end=self.global_config.get("end"))
         else:
-            copying_files = get_fileinfo_list_from_csv_manifest(self.manifest_file)
+            copying_files = get_fileinfo_list_from_csv_manifest(manifest_file=self.manifest_file, start=self.global_config.get("start"), end=self.global_config.get("end"))
 
         self.total_files = len(copying_files)
 
         chunk_size = self.global_config.get("chunk_size", 1)
         tasks = []
 
-        idx = 0
-        while idx < len(copying_files):
+        for idx in range(0, len(copying_files), chunk_size):
             tasks.append(copying_files[idx : idx + chunk_size])
-            idx = idx + chunk_size
 
         return tasks, len(copying_files)
 
@@ -237,7 +235,12 @@ class AWSBucketReplication(object):
         """
 
         for fi in files:
-            target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+            try:
+                target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+            except UserError as e:
+                logger.info(e)
+                continue
+
             object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
             # only copy ones not exist in target buckets
@@ -366,7 +369,7 @@ class AWSBucketReplication(object):
 
         part_number = 0
         for chunk in response.iter_content(
-            chunk_size=self.global_config.get("stream_chunk_size", 1024 * 1024 * 32)
+            chunk_size=self.global_config.get("stream_chunk_size", 1024 * 1024 * 64)
         ):
             part_number += 1
             sig.update(chunk)

@@ -33,7 +33,7 @@ def get_google_bucket_name(fi, PROJECT_ACL):
     )
 
 
-def get_fileinfo_list_from_s3_manifest(url_manifeat):
+def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
     Get the manifest from s3
     pass to get_fileinfo_list_from_manifest to get 
@@ -43,12 +43,12 @@ def get_fileinfo_list_from_s3_manifest(url_manifeat):
     s3 = boto3.resource("s3")
     from urlparse import urlparse
 
-    out = urlparse(url_manifeat)
+    out = urlparse(url_manifest)
     s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest")
-    return get_fileinfo_list_from_csv_manifest("./manifest")
+    return get_fileinfo_list_from_csv_manifest("./manifest", start, end)
 
 
-def get_fileinfo_list_from_csv_manifest(manifest_file):
+def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
     """
     get file info from csv manifest
     """
@@ -59,4 +59,7 @@ def get_fileinfo_list_from_csv_manifest(manifest_file):
             row["size"] = int(row["size"])
             files.append(row)
 
-    return files
+    start_idx = start if start else 0
+    end_idx = end if end else len(files)
+
+    return files[start_idx:end_idx]
