@@ -442,10 +442,10 @@ class AWSBucketReplication(object):
         object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
         if (
             fi.get("acl") == "[u'open']"
-            and self.copied_objects.get(object_path, "").endswith("controlled")
+            and self.copied_objects.get(object_path, "")["Bucket"].endswith("controlled")
         ) or (
             fi.get("acl") != "[u'open']"
-            and self.copied_objects.get(object_path, "").endswith("open")
+            and self.copied_objects.get(object_path, "")["Bucket"].endswith("open")
         ):
             return True
         return False
