@@ -22,7 +22,7 @@ spec:
       volumes:
         - name: cred-volume
           secret:
-            secretName: "aws-creds-secret"
+            secretName: "dcf-aws-creds-secret"
         - name: project-acl-volume
           configMap:
             name: project-acl-manifest

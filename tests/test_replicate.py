@@ -50,29 +50,43 @@ def test_resumable_streaming_copy_called(
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.side_effect = ["test", "test"]
     exec_google_copy(
-        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == True
 
 
 @patch("google.cloud.storage.Client")
+@patch("scripts.indexd_utils.update_url")
 @patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_not_called_due_to_existed_blob(
-    mock_bucket_exists, mock_check_blob, mock_client
+    mock_bucket_exists, mock_check_blob, mock_update_url, mock_client
 ):
     """
     test that streaming function is not called due to the existed object
     """
     mock_bucket_exists.return_value = True
-    mock_check_blob.return_value = True
+    mock_check_blob.return_value = test_resumable_streaming_copy_called
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
     exec_google_copy(
-        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
+    assert scripts.indexd_utils.update_url.called == True
 
 
 @patch("scripts.google_replicate.bucket_exists")
@@ -88,16 +102,23 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
     exec_google_copy(
-        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
 
 
 @patch("google.cloud.storage.Client")
+@patch("scripts.indexd_utils.update_url")
 @patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called_one_time(
-    mock_bucket_exists, mock_check_blob, mock_client
+    mock_bucket_exists, mock_check_blob, mock_update_url, mock_client
 ):
     """
     test that the streaming called only one time
@@ -106,34 +127,19 @@ def test_resumable_streaming_copy_called_one_time(
     mock_bucket_exists.return_value = True
     mock_check_blob.side_effect = [False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    scripts.google_replicate.update_url = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
     exec_google_copy(
-        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
-    assert scripts.google_replicate.update_url.call_count == 1
-
-
-@patch("google.cloud.storage.Client")
-@patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
-@patch("scripts.google_replicate.bucket_exists")
-def test_resumable_streaming_copy_called_two_time(
-    mock_bucket_exists, mock_check_blob, mock_client
-):
-    """
-    Test that the streamming called upto 2 times (the first time fails)
-    """
-    mock_bucket_exists.return_value = True
-    mock_check_blob.side_effect = [False, False, True]
-    scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    scripts.utils.get_google_bucket_name = MagicMock()
-    scripts.utils.get_google_bucket_name.return_value = "test"
-    exec_google_copy(
-        {"id": "test_file_id", "file_name": "test file name", "project_id": "TCGA"}, {}
-    )
-    assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
+    assert scripts.indexd_utils.update_url.call_count == 1
 
 
 @patch("google.cloud.storage.Client")
@@ -193,10 +199,10 @@ def test_call_aws_copy_cli_called():
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
     utils.get_aws_bucket_name.return_value = "TCGA-open"
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = set(
-        ["11111111111111111/abc.bam"]
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {},
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
     )
     instance = AWSBucketReplication(
         bucket="test_bucket",
@@ -214,11 +220,14 @@ def test_call_aws_copy_cli_no_called():
     Test that aws cli is not called due to object already exists 
     """
 
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.get_copied_objects.return_value = set(
-        ["11111111111111111/abc.bam"]
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
     )
+    AWSBucketReplication.is_changed_acl_object = MagicMock()
+    AWSBucketReplication.is_changed_acl_object.return_value = False
+
     subprocess.Popen = MagicMock()
     instance = AWSBucketReplication(
         bucket="test_bucket",
@@ -233,17 +242,21 @@ def test_call_aws_copy_cli_no_called():
 
 def test_call_aws_copy_cli_no_called2():
     """
-    test that the aws cli is not called due to 
+    test that the aws cli is not called due to object already exists 
     """
 
-    AWSBucketReplication.get_copied_objects = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset = MagicMock()
-    AWSBucketReplication.build_source_bucket_dataset.return_value = set(
-        ["11111111111111111/abc.bam", "2222222222222222222/b.bam"]
+    AWSBucketReplication.build_object_dataset = MagicMock()
+    AWSBucketReplication.build_object_dataset.return_value = (
+        {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
+        {
+            "11111111111111111/abc.bam": {"StorageClass": "STANDARD"},
+            "22222222222222222/abc2.bam": {"StorageClass": "STANDARD"},
+        },
     )
-    AWSBucketReplication.get_copied_objects.return_value = set(
-        ["11111111111111111/abc.bam"]
-    )
+
+    AWSBucketReplication.is_changed_acl_object = MagicMock()
+    AWSBucketReplication.is_changed_acl_object.return_value = False
+
     subprocess.Popen = MagicMock()
     instance = AWSBucketReplication(
         bucket="test_bucket",

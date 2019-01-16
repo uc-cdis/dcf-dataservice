@@ -8,12 +8,14 @@ from google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
 import logging as logger
-from indexclient.client import IndexClient
+
+# from indexclient.client import IndexClient
+import indexclient
 
 import utils
-from errors import APIError
+from errors import APIError, UserError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
-from indexd_utils import update_url
+import indexd_utils
 
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
@@ -65,7 +67,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
     res = sess.request(method="GET", url=url)
     return (
         res.status_code == 200
-        and res.json["size"] == fi.get("size")
+        and int(res.json()["size"]) == fi.get("size")
         and base64.b64decode(res.json()["md5Hash"]).encode("hex") == fi.get("md5")
     )
 
@@ -83,7 +85,7 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
-    indexclient = IndexClient(
+    indexd_client = indexclient.client.IndexClient(
         INDEXD["host"],
         INDEXD["version"],
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
@@ -91,7 +93,12 @@ def exec_google_copy(fi, global_config):
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
     blob_name = fi.get("id") + "/" + fi.get("file_name")
-    bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    try:
+        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    except UserError as e:
+        msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)
@@ -107,7 +114,7 @@ def exec_google_copy(fi, global_config):
 
     if check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         try:
-            update_url(fi, indexclient, "gs")
+            indexd_utils.update_url(fi, indexd_client, "gs")
         except APIError as e:
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)

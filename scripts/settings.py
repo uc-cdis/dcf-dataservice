@@ -10,20 +10,18 @@ INDEXD = {
 GDC_TOKEN = ""
 
 try:
-    with open("/secrets/dcf_dataservice_credentials.json", "r") as f:
+    #with open("/secrets/dcf_dataservice_credentials.json", "r") as f:
+    with open("/Users/giangbui/Projects/dcf-dataservice/scripts/dcf_dataservice_credentials.json", "r") as f:
         data = json.loads(f.read())
         INDEXD = data.get("INDEXD", {})
         GDC_TOKEN = data.get("GDC_TOKEN", "")
 except Exception as e:
-    print(
-        "Can not read dcf_dataservice_credentials.json file (only required for google data flow). Detail {}".format(
-            e
-        )
-    )
+    print("Can not read dcf_dataservice_credentials.json file. Detail {}".format(e))
 
 PROJECT_ACL = {}
 try:
-    with open("/dcf-replication/GDC_datasets_access_control.csv", "rt") as f:
+    #with open("/dcf-dataservice/GDC_datasets_access_control.csv", "rt") as f:
+    with open("/Users/giangbui/Projects/dcf-dataservice/manifest/Data/GDC_datasets_access_control.csv", "rt") as f:
         csvReader = csv.DictReader(f, delimiter=",")
         for line in csvReader:
             PROJECT_ACL[line["project_id"]] = line

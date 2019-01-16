@@ -8,8 +8,8 @@ source "${GEN3_HOME}/gen3/lib/utils.sh"
 gen3_load "gen3/lib/kube-setup-init"
 
 if [[ -d ${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice ]]; then
-  if ! g3kubectl get secret aws-creds-secret > /dev/null 2>&1; then
-     g3kubectl create secret generic aws-creds-secret --from-file=credentials=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/aws_creds_secret
+  if ! g3kubectl get secret dcf-aws-creds-secret > /dev/null 2>&1; then
+     g3kubectl create secret generic dcf-aws-creds-secret --from-file=credentials=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/aws_creds_secret
   fi
 
   if ! g3kubectl get secret google-creds-secret > /dev/null 2>&1; then

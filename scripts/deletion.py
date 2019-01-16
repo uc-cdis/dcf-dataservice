@@ -14,9 +14,9 @@ from utils import (
     get_google_bucket_name,
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
-    exec_files_grouping,
 )
 from indexd_utils import remove_url_from_indexd_record
+from errors import APIError, UserError
 
 logger = get_logger("DCFRedacts")
 
@@ -64,24 +64,34 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     )
 
     if manifest.startswith("s3://"):
-        file_info = get_fileinfo_list_from_s3_manifest(manifest)
+        file_infos = get_fileinfo_list_from_s3_manifest(manifest)
     else:
-        file_info = get_fileinfo_list_from_csv_manifest(manifest)
-
-    file_grp = exec_files_grouping(file_info)
+        file_infos = get_fileinfo_list_from_csv_manifest(manifest)
 
     s3 = boto3.resource("s3")
     gs_client = storage.Client()
 
     deletion_logs = []
-    for _, files in file_grp.iteritems():
-        aws_target_bucket = get_aws_bucket_name(files[0], PROJECT_ACL)
-        deletion_logs += _remove_object_from_s3(
-            s3, indexclient, files, aws_target_bucket
-        )
-        google_target_bucket = get_google_bucket_name(files[0], PROJECT_ACL)
-        deletion_logs += _remove_object_from_gs(
-            gs_client, indexclient, files, google_target_bucket
+    for fi in file_infos:
+        try:
+            aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
+        except UserError as e:
+            deletion_logs.append(DeletionLog(url=fi.get("id") + "/" + fi.get("filename"), message=e.message))
+            aws_target_bucket = None
+        
+        if aws_target_bucket:
+            deletion_logs.append(
+                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
+            )
+
+        try:
+            google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
+        except UserError as e:
+            deletion_logs.append(DeletionLog(url=fi.get("id") + "/" + fi.get("filename"), message=e.message))
+            continue
+
+        deletion_logs.append(
+            _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket)
         )
 
     log_list = []
@@ -99,54 +109,50 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     s3.upload_file(filename, log_bucket, basename(filename))
 
 
-def _remove_object_from_s3(s3, indexclient, files, target_bucket):
+def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     """
     remove object from s3
 
     Args:
         s3(resource): session resource
-        files(list): the list of files
+        f(dict): file info
         target_bucket(str): aws bucket
 
     Returns:
         list(DeletionLog): list of deletion logs
     """
     bucket = s3.Bucket(target_bucket)
-    deletion_logs = []
-    for f in files:
-        key = join(f.get("id"), f.get("filename"))
-        full_path = join("s3://" + target_bucket, key)
-        deleting_object = {"Key": key}
-        deletion_log = DeletionLog(url=full_path)
 
+    key = join(f.get("id"), f.get("filename"))
+    full_path = join("s3://" + target_bucket, key)
+    deleting_object = {"Key": key}
+    deletion_log = DeletionLog(url=full_path)
+
+    try:
+        res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
+    except Exception as e:
+        deletion_log.message = str(e)
+        return deletion_log
+
+    if res["Deleted"]:
         try:
-            res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
+            remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+            deletion_log.indexdUpdated = True
         except Exception as e:
             deletion_log.message = str(e)
-            deletion_logs.append(deletion_log)
-            continue
+    else:
+        deletion_log.message = str(res.Errors)
 
-        if res["Deleted"]:
-            try:
-                remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
-                deletion_log.indexdUpdated = True
-            except Exception as e:
-                deletion_log.message = str(e)
-        else:
-            deletion_log.message = str(res.Errors)
-
-        deletion_logs.append(deletion_log)
-
-    return deletion_logs
+    return deletion_log
 
 
-def _remove_object_from_gs(client, indexclient, files, target_bucket):
+def _remove_object_from_gs(client, indexclient, f, target_bucket):
     """
     remove object from gs
 
     Args:
         client(storage.client): Google storage client session
-        files(list): list of files
+        f(dict): file info
         target_bucket(str): google bucket name
         log_json(dict): json log
 
@@ -154,24 +160,22 @@ def _remove_object_from_gs(client, indexclient, files, target_bucket):
         list(DeletionLog)
 
     """
-    deletion_logs = []
-    for f in files:
-        key = join(f.get("id"), f.get("filename"))
-        full_path = join("gs://" + target_bucket, key)
-        deletion_log = DeletionLog(url=full_path)
-        bucket = client.get_bucket(target_bucket)
 
-        try:
-            blob = bucket.blob(key)
-            blob.delete()
-        except Exception as e:
-            deletion_log.message = str(e)
-        try:
-            remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
-        except Exception as e:
-            deletion_log.deleted = True
-            deletion_log.message = str(e)
+    key = join(f.get("id"), f.get("filename"))
+    full_path = join("gs://" + target_bucket, key)
+    deletion_log = DeletionLog(url=full_path)
+    bucket = client.get_bucket(target_bucket)
 
-        deletion_logs.append(deletion_log)
+    try:
+        blob = bucket.blob(key)
+        blob.delete()
+    except Exception as e:
+        deletion_log.message = str(e)
+        return deletion_log
+    try:
+        remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+    except Exception as e:
+        deletion_log.deleted = True
+        deletion_log.message = str(e)
 
-    return deletion_logs
+    return deletion_log
