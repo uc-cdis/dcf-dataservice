@@ -238,7 +238,7 @@ class AWSBucketReplication(object):
             try:
                 target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             except UserError as e:
-                logger.info(e)
+                logger.warn(e)
                 continue
 
             object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
