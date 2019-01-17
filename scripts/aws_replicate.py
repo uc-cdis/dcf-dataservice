@@ -164,6 +164,7 @@ class AWSBucketReplication(object):
                         result[obj["Key"]] = {
                             "StorageClass": obj["StorageClass"],
                             "Size": obj["Size"],
+                            "Bucket": bucket_name,
                         }
             except KeyError:
                 logger.info("There is no object in {}".format(bucket_name))
