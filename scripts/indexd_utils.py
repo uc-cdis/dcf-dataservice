@@ -5,6 +5,9 @@ from urlparse import urlparse
 
 
 def _remove_changed_url(doc, url):
+    """
+    due to acl change, we need to update indexd to point to the right bucket
+    """
     res1 = urlparse(url)
     modified = False
     for element in doc.urls:
@@ -24,9 +27,9 @@ def _remove_changed_url(doc, url):
             doc.urls.remove(element)
             doc.urls_metadata.pop(element, None)
             modified = True
-    
+
     return doc, modified
-        
+
 
 def update_url(fi, indexclient, provider="s3"):
     """
@@ -74,6 +77,7 @@ def update_url(fi, indexclient, provider="s3"):
                 doc.patch()
             return doc is not None
     except Exception as e:
+        # Don't break for any reason
         raise APIError(
             "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
                 fi.get("id", ""), e
@@ -96,6 +100,7 @@ def update_url(fi, indexclient, provider="s3"):
         )
         return doc is not None
     except Exception as e:
+        # Don't break for any reason
         raise APIError(
             "INDEX_CLIENT: Can not create the record with uuid {}. Detail {}".format(
                 fi.get("id", ""), e

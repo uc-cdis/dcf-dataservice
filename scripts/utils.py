@@ -63,3 +63,13 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
     end_idx = end if end else len(files)
 
     return files[start_idx:end_idx]
+
+
+def generate_chunk_data_list(size, data_size):
+    L = []
+    idx = 0
+    while idx < size:
+        L.append((idx, min(idx + data_size - 1, size - 1)))
+        idx += data_size
+
+    return L

@@ -2,7 +2,7 @@ import timeit
 import argparse
 import json
 
-from aws_replicate import AWSBucketReplication
+import aws_replicate
 from deletion import delete_objects_from_cloud_resources
 
 
@@ -40,25 +40,13 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     if args.action == "aws_replicate":
-        # bucket, global_config, manifest_file, thread_num
-        # eg. python replicate.py aws_replicate --bucket mybucket20018 --manifest_file ./manifest --global_config '{"chunk_size": 100, "log_bucket": "xssxs"}' --thread_num 4
-        aws = AWSBucketReplication(
-            bucket=args.bucket,
-            manifest_file=args.manifest_file,
-            global_config=json.loads(args.global_config),
-            thread_num=int(args.thread_num),
-            job_name="copying",
+        aws_replicate.run(
+            int(args.thread_num),
+            json.loads(args.global_config),
+            "copying",
+            args.manifest_file,
+            args.bucket,
         )
-        aws.run()
-
-    elif args.action == "indexing":
-        aws = AWSBucketReplication(
-            manifest_file=args.manifest_file,
-            global_config=json.loads(args.global_config),
-            thread_num=int(args.thread_num),
-            job_name="indexing",
-        )
-        aws.run()
 
     elif args.action == "readact":
         delete_objects_from_cloud_resources(args.redact_file, args.log_bucket)
