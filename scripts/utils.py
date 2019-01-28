@@ -54,7 +54,7 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
     """
     files = []
     with open(manifest_file, "rt") as csvfile:
-        csvReader = csv.DictReader(csvfile, delimiter=";")
+        csvReader = csv.DictReader(csvfile, delimiter="\t")
         for row in csvReader:
             row["size"] = int(row["size"])
             files.append(row)

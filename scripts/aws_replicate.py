@@ -240,12 +240,6 @@ class JobInfo(object):
         )
 
 
-mutexLock = threading.Lock()
-
-global total_processed_files
-total_processed_files = 0
-
-
 def exec_aws_copy(jobinfo):
     """
     Copy a chunk of files from the source bucket to the target buckets.
@@ -705,7 +699,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
         global_config["copied_objects"], global_config["source_objects"]
     )
 
-    tasks, _ = prepare_data(manifest_file, global_config)
+    tasks, total_files = prepare_data(manifest_file, global_config)
 
     manager = Manager()
     manager_ns = manager.Namespace()
@@ -716,7 +710,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
         job = JobInfo(
             global_config,
             task,
-            len(tasks),
+            total_files,
             job_name,
             copied_objects,
             source_objects,
@@ -726,10 +720,12 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
         jobInfos.append(job)
 
     # Make the Pool of workers
-    pool = Pool(thread_num)
+    if global_config.get("mode") == "process":
+        pool = Pool(thread_num)
+    else:
+        pool = ThreadPool(thread_num)
 
     results = []
-
     if job_name == "copying":
         results = pool.map(exec_aws_copy, jobInfos)
     elif job_name == "indexing":
