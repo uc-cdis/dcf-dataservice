@@ -39,13 +39,15 @@ if __name__ == "__main__":
     start = timeit.default_timer()
 
     args = parse_arguments()
-    if args.action == "aws_replicate":
+    if args.action == "aws_replicate" or args.action == "indexing":
+        job_name = "copying" if args.action == "aws_replicate" else "indexing"
+        source_bucket = args.bucket if job_name == "copying" else None
         aws_replicate.run(
             int(args.thread_num),
             json.loads(args.global_config),
-            "copying",
+            job_name,
             args.manifest_file,
-            args.bucket,
+            source_bucket,
         )
 
     elif args.action == "readact":

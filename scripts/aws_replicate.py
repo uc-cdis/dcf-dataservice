@@ -33,6 +33,8 @@ from indexd_utils import update_url
 
 logger = get_logger("AWSReplication")
 
+RETRIES_NUM = 5
+
 
 def build_object_dataset_from_file(copied_objects_file, source_objects_file):
     """
@@ -211,7 +213,11 @@ class JobInfo(object):
         Class constructor
 
         Args:
-            global_config(dict): configuration dictionary
+            global_config(dict): a configuration
+            {
+                "multi_part_upload_threads": 10,
+                "data_chunk_size": 1024*1024*5
+            }
             manifest_file(str): manifest file
             thread_num(int): number of threads
             job_name(str): copying|indexing
@@ -372,12 +378,22 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     Args:
         fi(dict): object info
         target_bucket(str): target bucket
+        global_config(dict): a configuration
+            {
+                "multi_part_upload_threads": 10,
+                "data_chunk_size": 1024*1024*5
+            }
+        endpoint(str): gdcapi
     
     Returns:
         None
     """
 
     class ThreadControl(object):
+        """
+        Class for thread synchronization 
+        """
+
         def __init__(self):
             self.mutexLock = threading.Lock()
             self.sig_update_turn = 1
@@ -387,7 +403,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         request_success = False
 
         chunk = None
-        while tries < 10 and not request_success:
+        while tries < RETRIES_NUM and not request_success:
             try:
                 req = urllib2.Request(
                     data_endpoint,
@@ -423,7 +439,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 time.sleep(5)
                 tries += 1
 
-        if tries == 10:
+        if tries == RETRIES_NUM:
             raise Exception(
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
@@ -431,7 +447,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         md5 = hashlib.md5(chunk).digest()
 
         tries = 0
-        while tries < 3:
+        while tries < RETRIES_NUM:
             try:
                 res = thread_s3.upload_part(
                     Body=chunk,
@@ -453,12 +469,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     "quite"
                 ):
                     logger.info(
-                        "Received {} MB".format(
+                        "Downloading {}. Received {} MB".format(
+                            fi.get("id"),
                             thead_control.sig_update_turn
                             * 1.0
                             / 1024
                             / 1024
-                            * chunk_data_size
+                            * chunk_data_size,
                         )
                     )
 
@@ -473,7 +490,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 time.sleep(5)
                 tries += 1
 
-        if tries == 3:
+        if tries == RETRIES_NUM:
             raise botocore.exceptions.ClientError(
                 "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
             )
@@ -501,7 +518,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         )
         return None
 
-    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
+    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 5)
 
     tasks = []
     for part_number, data_range in enumerate(
@@ -510,7 +527,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         start, end = data_range
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
 
-    pool = ThreadPool(global_config.get("multi_part_upload_thread", 10))
+    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
     results = pool.map(_handler, tasks)
     pool.close()
     pool.join()
@@ -680,7 +697,7 @@ def check_and_index_the_data(jobinfo):
     return json_log
 
 
-def run(thread_num, global_config, job_name, manifest_file, bucket):
+def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start processes and log after they finish
     """

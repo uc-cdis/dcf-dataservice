@@ -189,6 +189,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
         )
     assert not scripts.google_replicate.streaming.called
 
+
 # def test_call_aws_copy_cli_called():
 #     """
 #     Test that the aws cli called
@@ -218,7 +219,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
 
 # def test_call_aws_copy_cli_no_called():
 #     """
-#     Test that aws cli is not called due to object already exists 
+#     Test that aws cli is not called due to object already exists
 #     """
 
 #     scripts.aws_replicate.build_object_dataset = MagicMock()
@@ -236,7 +237,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
 
 # def test_call_aws_copy_cli_no_called2():
 #     """
-#     test that the aws cli is not called due to object already exists 
+#     test that the aws cli is not called due to object already exists
 #     """
 
 #     scripts.aws_replicate.build_object_dataset = MagicMock()

@@ -44,8 +44,8 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     from urlparse import urlparse
 
     out = urlparse(url_manifest)
-    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest")
-    return get_fileinfo_list_from_csv_manifest("./manifest", start, end)
+    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
+    return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
 
 
 def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
