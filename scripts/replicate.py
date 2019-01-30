@@ -19,13 +19,17 @@ def parse_arguments():
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
     # set config in dictionary. Only for AWS replicate:
-    #   {
-    #       "chunk_size": 100,
-    #       "log_bucket": "bucketname".
-    #       "mode": "process|thread", # multiple process or multiple thread. Default: thread
-    #       ""
-    #   }
-    #
+    # {
+    #     "chunk_size": 100, # number of objects will be processed in single process/thread
+    #     "log_bucket": "bucketname".
+    #     "mode": "process|thread", # multiple process or multiple thread. Default: thread
+    #     "quite": 1|0, # specify if we want to print all the logs or not. Default: 0
+    #     "from_local": 1|0, # specify how we want to check if object exist or not (*). On the fly or from json dictionary. Deault 0
+    #     "copied_objects": "path_to_the_file", # specify json file containing all copied objects
+    #     "source_objects": "path_to_the_file", # specify json file containing all source objects (gdcbackup),
+    #     "data_chunk_size": 1024 * 1024 * 128, # chunk size with multipart download and upload. Default 1024 * 1024 * 128
+    #     "multi_part_upload_threads": 10, # Number of threads for multiple download and upload. Default 10
+    # }
     aws_indexing_cmd.add_argument("--global_config", required=True)
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
     aws_indexing_cmd.add_argument("--thread_num", required=True)

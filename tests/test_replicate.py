@@ -8,6 +8,8 @@ except ImportError:
     from mock import MagicMock
     from mock import patch
 
+from multiprocessing import Manager
+
 import pytest
 import google
 import scripts.aws_replicate
@@ -27,6 +29,7 @@ def gen_mock_manifest_data():
         "file_name": "abc.bam",
         "size": 1,
         "md5": "1223344543t34mt43tb43ofh",
+        "url": "s3://s3-external-1.amazonaws.com/gdcbackup/2127dca2-e6b7-4e8a-859d-0d7093bd91e6/abc",
         "acl": "tgca",
         "project_id": "TGCA",
     }
@@ -190,68 +193,61 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
     assert not scripts.google_replicate.streaming.called
 
 
-# def test_call_aws_copy_cli_called():
-#     """
-#     Test that the aws cli called
-#     """
+def test_call_aws_cli_called():
+    """
+    Test that the aws cli is called since the object storage class is standard
+    """
 
-#     subprocess.Popen = MagicMock()
-#     utils.get_aws_bucket_name = MagicMock()
-#     utils.get_aws_bucket_name.return_value = "TCGA-open"
-#     scripts.aws_replicate.build_object_dataset = MagicMock()
-#     scripts.aws_replicate.build_object_dataset.return_value = (
-#         {},
-#         {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
-#     )
-#     job = JobInfo(
-#             {},
-#             task,
-#             len(tasks),
-#             "",
-#             {},
-#             source_objects,
-#             manager_ns,
-#             bucket,
-#         )
-#     scripts.aws_replicate.exec_aws_copy(gen_mock_manifest_data()[0:1])
-#     assert subprocess.Popen.call_count == 1
+    subprocess.Popen = MagicMock()
+    utils.get_aws_bucket_name = MagicMock()
+    utils.get_aws_bucket_name.return_value = "TCGA-open"
+    
+    source_objects = {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}}
+    copied_objects = {}
+    manager = Manager()
+    manager_ns = manager.Namespace()
+    manager_ns.total_processed_files = 0
 
-
-# def test_call_aws_copy_cli_no_called():
-#     """
-#     Test that aws cli is not called due to object already exists
-#     """
-
-#     scripts.aws_replicate.build_object_dataset = MagicMock()
-#     scripts.aws_replicate.build_object_dataset.return_value = (
-#         {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
-#         {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
-#     )
-#     scripts.aws_replicate.is_changed_acl_object = MagicMock()
-#     scripts.aws_replicate.is_changed_acl_object.return_value = False
-
-#     subprocess.Popen = MagicMock()
-#     scripts.aws_replicate.exec_aws_copy(gen_mock_manifest_data()[0:1])
-#     assert subprocess.Popen.call_count == 0
+    job_info = scripts.aws_replicate.JobInfo(
+            {},
+            gen_mock_manifest_data()[0:1],
+            1,
+            "",
+            copied_objects,
+            source_objects,
+            manager_ns,
+            "bucket",
+        )
+    scripts.aws_replicate.exec_aws_copy(job_info)
+    assert subprocess.Popen.call_count == 1
 
 
-# def test_call_aws_copy_cli_no_called2():
-#     """
-#     test that the aws cli is not called due to object already exists
-#     """
+def test_call_streamming_method_called():
+    """
+    Test that the streamming method is called since the object is Glacier
+    """
 
-#     scripts.aws_replicate.build_object_dataset = MagicMock()
-#     scripts.aws_replicate.build_object_dataset.return_value = (
-#         {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}},
-#         {
-#             "11111111111111111/abc.bam": {"StorageClass": "STANDARD"},
-#             "22222222222222222/abc2.bam": {"StorageClass": "STANDARD"},
-#         },
-#     )
+    subprocess.Popen = MagicMock()
+    scripts.aws_replicate.stream_object_from_gdc_api = MagicMock()
+    utils.get_aws_bucket_name = MagicMock()
+    utils.get_aws_bucket_name.return_value = "TCGA-open"
+    
+    source_objects = {"11111111111111111/abc.bam": {"StorageClass": "GLACIER"}}
+    copied_objects = {}
+    manager = Manager()
+    manager_ns = manager.Namespace()
+    manager_ns.total_processed_files = 0
 
-#     scripts.aws_replicate.is_changed_acl_object = MagicMock()
-#     scripts.aws_replicate.is_changed_acl_object.return_value = False
-
-#     subprocess.Popen = MagicMock()
-#     scripts.aws_replicate.exec_aws_copy(gen_mock_manifest_data()[0:1])
-#     assert subprocess.Popen.call_count == 0
+    job_info = scripts.aws_replicate.JobInfo(
+            {},
+            gen_mock_manifest_data()[0:1],
+            1,
+            "",
+            copied_objects,
+            source_objects,
+            manager_ns,
+            "bucket",
+        )
+    scripts.aws_replicate.exec_aws_copy(job_info)
+    assert subprocess.Popen.call_count == 0
+    assert scripts.aws_replicate.stream_object_from_gdc_api.call_count == 1
