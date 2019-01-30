@@ -393,6 +393,17 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             self.sig_update_turn = 1
 
     def _handler(chunk_info):
+        """
+        streamming chunk data from api to aws bucket
+
+        Args:
+            chunk_info(dict):
+                {
+                    "start": start,
+                    "end": end,
+                    "part_number": part_number
+                }
+        """
         tries = 0
         request_success = False
 
@@ -512,7 +523,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         )
         return None
 
-    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 5)
+    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
 
     tasks = []
     for part_number, data_range in enumerate(

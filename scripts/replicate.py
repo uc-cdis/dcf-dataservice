@@ -21,7 +21,9 @@ def parse_arguments():
     # set config in dictionary. Only for AWS replicate:
     #   {
     #       "chunk_size": 100,
-    #       "log_bucket": "bucketname"
+    #       "log_bucket": "bucketname".
+    #       "mode": "process|thread", # multiple process or multiple thread. Default: thread
+    #       ""
     #   }
     #
     aws_indexing_cmd.add_argument("--global_config", required=True)
