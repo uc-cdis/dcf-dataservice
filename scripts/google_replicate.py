@@ -9,8 +9,7 @@ from google.auth.transport.requests import AuthorizedSession
 
 import logging as logger
 
-# from indexclient.client import IndexClient
-import indexclient
+from indexclient.client import IndexClient
 
 import utils
 from errors import APIError, UserError
@@ -19,8 +18,8 @@ import indexd_utils
 
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
-DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
-DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 20 * 1024
+DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 64
+DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 64 * 1024
 
 
 class DataFlowLog(object):
@@ -85,7 +84,7 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
-    indexd_client = indexclient.client.IndexClient(
+    indexd_client = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
@@ -96,7 +95,7 @@ def exec_google_copy(fi, global_config):
     try:
         bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
     except UserError as e:
-        msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
+        msg = "can not copy {} to GOOGLE bucket. Detail {}. AAA {}".format(blob_name, e, PROJECT_ACL)
         logger.error(msg)
         return DataFlowLog(message=msg)
 

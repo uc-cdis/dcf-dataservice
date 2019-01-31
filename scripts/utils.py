@@ -25,7 +25,7 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
 
 def get_google_bucket_name(fi, PROJECT_ACL):
     try:
-        project_info = PROJECT_ACL[fi.get("project_id")]
+        project_info = PROJECT_ACL[fi.get("project_id").split("-")[0]]
     except KeyError:
         raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
     return project_info["gs_bucket_prefix"] + (

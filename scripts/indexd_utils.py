@@ -59,6 +59,9 @@ def update_url(fi, indexclient, provider="s3"):
 
         if doc is not None:
             need_update = False
+            if doc.file_name != fi.get("file_name"):
+                doc.file_name = fi.get("file_name")
+                need_update = True
             if url not in doc.urls:
                 doc, _ = _remove_changed_url(doc, url)
                 doc.urls.append(url)
@@ -99,6 +102,7 @@ def update_url(fi, indexclient, provider="s3"):
     try:
         doc = indexclient.create(
             did=fi.get("id"),
+            file_name=fi.get("file_name"),
             hashes={"md5": fi.get("md5")},
             size=fi.get("size", 0),
             acl=acl,
