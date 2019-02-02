@@ -610,9 +610,7 @@ def validate_uploaded_data(fi, thread_s3, target_bucket, sig, sorted_results):
 
     if total_bytes_received != fi.get("size"):
         logger.warn(
-            "Can not stream the object {}. Size does not match".format(
-                format(fi.get("id"))
-            )
+            "Can not stream the object {}. Size does not match".format(fi.get("id"))
         )
         sig_check_pass = False
 
@@ -633,9 +631,7 @@ def validate_uploaded_data(fi, thread_s3, target_bucket, sig, sorted_results):
     if sig_check_pass:
         if sig.hexdigest() != fi.get("md5"):
             logger.warn(
-                "Can not stream the object {}. md5 check fails".format(
-                    format(fi.get("id"))
-                )
+                "Can not stream the object {}. md5 check fails".format(fi.get("id"))
             )
             sig_check_pass = False
 
@@ -643,7 +639,7 @@ def validate_uploaded_data(fi, thread_s3, target_bucket, sig, sorted_results):
         if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
             logger.warn(
                 "Can not stream the object {} to {}. Etag check fails".format(
-                    format(fi.get("id"), target_bucket)
+                    fi.get("id"), target_bucket
                 )
             )
             sig_check_pass = False
