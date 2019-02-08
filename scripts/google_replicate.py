@@ -170,6 +170,8 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             if response.status_code == 429:
                 time.sleep(60)
                 tries += 1
+            else:
+                break
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             time.sleep(5)
             tries += 1
