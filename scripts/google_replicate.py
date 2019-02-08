@@ -1,6 +1,7 @@
 import base64
 import requests
 import urllib
+import time
 
 from google.cloud import storage
 from google.cloud.storage import Blob
@@ -21,6 +22,7 @@ import indexd_utils
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 2048000
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 20 * 1024
+NUM_TRIES = 10
 
 
 class DataFlowLog(object):
@@ -111,6 +113,10 @@ def exec_google_copy(fi, global_config):
         except APIError as e:
             logger.error(e.message)
             return DataFlowLog(message=e.message)
+        except Exception as e:
+            # Don't break (Not expected)
+            logger.error(e.message)
+            return DataFlowLog(message=e.message)
 
     if check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         try:
@@ -152,11 +158,26 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     data_endpt = DATA_ENDPT + fi.get("id", "")
     token = GDC_TOKEN
 
-    response = requests.get(
-        data_endpt,
-        stream=True,
-        headers={"Content-Type": "application/json", "X-Auth-Token": token},
-    )
+    tries = 0
+    while tries < NUM_TRIES:
+        try:
+            response = requests.get(
+                data_endpt,
+                stream=True,
+                headers={"Content-Type": "application/json", "X-Auth-Token": token},
+            )
+            # Too many requests
+            if response.status_code == 429:
+                time.sleep(60)
+                tries += 1
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            time.sleep(5)
+            tries += 1
+        except Exception as e:
+            raise APIError("Can not setup connection to gdcapi for {}. Detail {}".format(fi["id"]), e)
+
+    if tries == NUM_TRIES:
+        raise APIError("Can not setup connection to gdcapi for {}".format(fi["id"]))
 
     if response.status_code != 200:
         raise APIError("GDCPotal error {}".format(response.status_code))
