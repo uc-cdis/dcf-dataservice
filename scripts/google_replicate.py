@@ -291,10 +291,13 @@ def _is_ignored_object(fi, IGNORED_FILES):
     """
 
     for element in IGNORED_FILES:
-        if fi["id"]==element["gdc_uuid"] and fi["size"] == element["gcs_object_size"] and fi["md5"]==element["md5sum"]:
+        if (
+            fi["id"] == element["gdc_uuid"]
+            and fi["size"] == element["gcs_object_size"]
+            and fi["md5"] == element["md5sum"]
+        ):
             return True
     return False
-    
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
