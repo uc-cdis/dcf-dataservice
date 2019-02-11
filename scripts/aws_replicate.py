@@ -81,9 +81,17 @@ class AWSBucketReplication(object):
         The groups will be push to the queue consumed by threads
         """
         if self.manifest_file.startswith("s3://"):
-            copying_files = get_fileinfo_list_from_s3_manifest(url_manifest=self.manifest_file, start=self.global_config.get("start"), end=self.global_config.get("end"))
+            copying_files = get_fileinfo_list_from_s3_manifest(
+                url_manifest=self.manifest_file,
+                start=self.global_config.get("start"),
+                end=self.global_config.get("end"),
+            )
         else:
-            copying_files = get_fileinfo_list_from_csv_manifest(manifest_file=self.manifest_file, start=self.global_config.get("start"), end=self.global_config.get("end"))
+            copying_files = get_fileinfo_list_from_csv_manifest(
+                manifest_file=self.manifest_file,
+                start=self.global_config.get("start"),
+                end=self.global_config.get("end"),
+            )
 
         self.total_files = len(copying_files)
 

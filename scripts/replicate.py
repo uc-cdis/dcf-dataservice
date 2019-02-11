@@ -16,6 +16,11 @@ def parse_arguments():
     aws_replicate_cmd.add_argument("--manifest_file", required=True)
     aws_replicate_cmd.add_argument("--thread_num", required=True)
 
+    google_replicate_cmd = subparsers.add_parser("google_replicate")
+    google_replicate_cmd.add_argument("--global_config", required=True)
+    google_replicate_cmd.add_argument("--manifest_file", required=True)
+    google_replicate_cmd.add_argument("--thread_num", required=True)
+
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
     # set config in dictionary. Only for AWS replicate:
@@ -50,7 +55,17 @@ if __name__ == "__main__":
             job_name="copying",
         )
         aws.run()
+    elif args.action == "google_replicate":
+        job_name = "copying"
+        import google_replicate
 
+        google_replicate.run(
+            int(args.thread_num),
+            json.loads(args.global_config),
+            job_name,
+            args.manifest_file,
+            None,
+        )
     elif args.action == "indexing":
         aws = AWSBucketReplication(
             manifest_file=args.manifest_file,
