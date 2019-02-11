@@ -38,7 +38,7 @@ except Exception as e:
 IGNORED_FILES = []
 try:
     with open("/dcf-dataservice/ignored_files_manifest.csv", "rt") as f:
-        csvReader = csv.DictReader(f, ",")
+        csvReader = csv.DictReader(f, delimiter=",")
         for row in csvReader:
             row["gcs_object_size"] = int(row["gcs_object_size"])
             IGNORED_FILES.append(row)
