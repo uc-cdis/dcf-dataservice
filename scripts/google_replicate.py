@@ -14,10 +14,10 @@ from indexclient.client import IndexClient
 
 import utils
 from errors import APIError, UserError
-from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
 import indexd_utils
 
-#logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
+# logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
@@ -25,6 +25,7 @@ DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
 NUM_TRIES = 10
 
 logger = get_logger("GoogleReplication")
+
 
 class DataFlowLog(object):
     def __init__(self, copy_success=False, index_success=False, message=""):
@@ -121,6 +122,10 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
+    if _is_ignored_object(fi, IGNORED_FILES):
+        logger.info("{} is ignored".format(fi["id"]))
+        return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
+
     indexd_client = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
@@ -152,13 +157,19 @@ def exec_google_copy(fi, global_config):
             )
 
             resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-    
+
             if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 res = delete_object(sess, bucket_name, blob_name)
                 if res.status_code in (200, 204):
-                    logger.info("Successfully delete fail upload object {}".format(fi["id"]))
+                    logger.info(
+                        "Successfully delete fail upload object {}".format(fi["id"])
+                    )
                 else:
-                    logger.info("Can not delete fail uploaded object {}. Satus code {}".format(fi["id"], res.status_code))
+                    logger.info(
+                        "Can not delete fail uploaded object {}. Satus code {}".format(
+                            fi["id"], res.status_code
+                        )
+                    )
             else:
                 logger.info(
                     "Finish streaming {}. Size {} (MB)".format(
@@ -213,6 +224,11 @@ def exec_google_cmd(jobinfo):
     sess = AuthorizedSession(client._credentials)
 
     for fi in jobinfo.files:
+        # ignore object if they are in IGNORED_FILES
+        if _is_ignored_object(fi, IGNORED_FILES):
+            logger.info("{} is ignored".format(fi["id"]))
+            continue
+
         blob_name = fi.get("id") + "/" + fi.get("file_name")
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
@@ -270,6 +286,22 @@ def exec_google_cmd(jobinfo):
     )
 
     return len(jobinfo.files)
+
+
+def _is_ignored_object(fi, IGNORED_FILES):
+    """
+    check if an object is ignored object or not. 
+    An ignored object is the one in the IGNORED_FILES list and match md5, size
+    """
+
+    for element in IGNORED_FILES:
+        if (
+            fi["id"] == element["gdc_uuid"]
+            and fi["size"] == element["gcs_object_size"]
+            and fi["md5"] == element["md5sum"]
+        ):
+            return True
+    return False
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
@@ -375,7 +407,9 @@ def streaming(
                 if number_upload % 500 == 0:
                     logger.info(
                         "Uploading {}. Size {} (MB). Progress {}".format(
-                            blob_name, total_size*1.0/1000/1000, 100.0 * progress / total_size
+                            blob_name,
+                            total_size * 1.0 / 1000 / 1000,
+                            100.0 * progress / total_size,
                         )
                     )
 

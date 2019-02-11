@@ -49,7 +49,7 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     return get_fileinfo_list_from_csv_manifest("./manifest", start, end)
 
 
-def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem = "\t"):
+def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
     """
     get file info from csv manifest
     """
