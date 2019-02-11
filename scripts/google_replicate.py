@@ -122,6 +122,10 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
+    if _is_ignored_object(fi, IGNORED_FILES):
+        logger.info("{} is ignored".format(fi["id"]))
+        return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
+
     indexd_client = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
