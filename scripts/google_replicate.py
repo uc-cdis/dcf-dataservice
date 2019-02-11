@@ -14,7 +14,7 @@ from indexclient.client import IndexClient
 
 import utils
 from errors import APIError, UserError
-from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
 import indexd_utils
 
 # logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
@@ -220,6 +220,11 @@ def exec_google_cmd(jobinfo):
     sess = AuthorizedSession(client._credentials)
 
     for fi in jobinfo.files:
+        # ignore object if they are in IGNORED_FILES
+        if _is_ignored_object(fi, IGNORED_FILES):
+            logger.info("{} is ignored".format(fi["id"]))
+            continue
+
         blob_name = fi.get("id") + "/" + fi.get("file_name")
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
@@ -277,6 +282,19 @@ def exec_google_cmd(jobinfo):
     )
 
     return len(jobinfo.files)
+
+
+def _is_ignored_object(fi, IGNORED_FILES):
+    """
+    check if an object is ignored object or not. 
+    An ignored object is the one in the IGNORED_FILES list and match md5, size
+    """
+
+    for element in IGNORED_FILES:
+        if fi["id"]==element["gdc_uuid"] and fi["size"] == element["gcs_object_size"] and fi["md5"]==element["md5sum"]:
+            return True
+    return False
+    
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
