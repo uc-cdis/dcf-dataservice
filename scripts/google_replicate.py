@@ -17,7 +17,7 @@ from errors import APIError, UserError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 import indexd_utils
 
-#logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
+# logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
@@ -25,6 +25,7 @@ DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
 NUM_TRIES = 10
 
 logger = get_logger("GoogleReplication")
+
 
 class DataFlowLog(object):
     def __init__(self, copy_success=False, index_success=False, message=""):
@@ -152,13 +153,19 @@ def exec_google_copy(fi, global_config):
             )
 
             resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-    
+
             if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 res = delete_object(sess, bucket_name, blob_name)
                 if res.status_code in (200, 204):
-                    logger.info("Successfully delete fail upload object {}".format(fi["id"]))
+                    logger.info(
+                        "Successfully delete fail upload object {}".format(fi["id"])
+                    )
                 else:
-                    logger.info("Can not delete fail uploaded object {}. Satus code {}".format(fi["id"], res.status_code))
+                    logger.info(
+                        "Can not delete fail uploaded object {}. Satus code {}".format(
+                            fi["id"], res.status_code
+                        )
+                    )
             else:
                 logger.info(
                     "Finish streaming {}. Size {} (MB)".format(
@@ -375,7 +382,9 @@ def streaming(
                 if number_upload % 500 == 0:
                     logger.info(
                         "Uploading {}. Size {} (MB). Progress {}".format(
-                            blob_name, total_size*1.0/1000/1000, 100.0 * progress / total_size
+                            blob_name,
+                            total_size * 1.0 / 1000 / 1000,
+                            100.0 * progress / total_size,
                         )
                     )
 
