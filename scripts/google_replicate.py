@@ -473,6 +473,10 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start threads and log after they finish
     """
+    if not IGNORED_FILES:
+        raise UserError(
+            "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
+        )
     tasks, _ = utils.prepare_data(manifest_file, global_config)
 
     manager = Manager()
