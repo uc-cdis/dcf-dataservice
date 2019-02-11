@@ -9,7 +9,7 @@ from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
-from logging import get_logger
+from cdislogging import get_logger
 from indexclient.client import IndexClient
 
 import utils
@@ -158,7 +158,7 @@ def exec_google_copy(fi, global_config):
                 if res.status_code in (200, 204):
                     logger.info("Successfully delete fail upload object {}".format(fi["id"]))
                 else:
-                    logger.info("Can not delete fail upload object {}. Satus code {}".format(fi["id"], res.status_code))
+                    logger.info("Can not delete fail uploaded object {}. Satus code {}".format(fi["id"], res.status_code))
             else:
                 logger.info(
                     "Finish streaming {}. Size {} (MB)".format(
