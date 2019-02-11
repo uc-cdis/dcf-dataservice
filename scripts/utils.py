@@ -1,5 +1,6 @@
 import boto3
 import csv
+import random
 
 from errors import UserError
 
@@ -25,7 +26,7 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
 
 def get_google_bucket_name(fi, PROJECT_ACL):
     try:
-        project_info = PROJECT_ACL[fi.get("project_id")]
+        project_info = PROJECT_ACL[fi.get("project_id").split("-")[0]]
     except KeyError:
         raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
     return project_info["gs_bucket_prefix"] + (
@@ -48,13 +49,13 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     return get_fileinfo_list_from_csv_manifest("./manifest", start, end)
 
 
-def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
+def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem = "\t"):
     """
     get file info from csv manifest
     """
     files = []
     with open(manifest_file, "rt") as csvfile:
-        csvReader = csv.DictReader(csvfile, delimiter=";")
+        csvReader = csv.DictReader(csvfile, delimiter=dem)
         for row in csvReader:
             row["size"] = int(row["size"])
             files.append(row)
@@ -63,3 +64,34 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None):
     end_idx = end if end else len(files)
 
     return files[start_idx:end_idx]
+
+
+def prepare_data(manifest_file, global_config):
+    """
+    Read data file info from manifest and organize them into groups.
+    Each group contains files which should be copied to the same bucket
+    The groups will be push to the queue consumed by threads
+    """
+    if manifest_file.startswith("s3://"):
+        copying_files = get_fileinfo_list_from_s3_manifest(
+            url_manifest=manifest_file,
+            start=global_config.get("start"),
+            end=global_config.get("end"),
+        )
+    else:
+        copying_files = get_fileinfo_list_from_csv_manifest(
+            manifest_file=manifest_file,
+            start=global_config.get("start"),
+            end=global_config.get("end"),
+        )
+
+    if global_config.get("file_shuffle", False):
+        random.shuffle(copying_files)
+
+    chunk_size = global_config.get("chunk_size", 1)
+    tasks = []
+
+    for idx in range(0, len(copying_files), chunk_size):
+        tasks.append(copying_files[idx : idx + chunk_size])
+
+    return tasks, len(copying_files)
