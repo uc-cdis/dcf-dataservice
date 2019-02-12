@@ -207,12 +207,6 @@ def exec_google_cmd(jobinfo):
     Stream a list of files from the gdcapi to the google buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
 
-    Intergrity check:
-        - Streaming:
-            +) Compute local crc32c and match with the one provided by google
-            +) Compute md5 on the fly to check the intergrity of streaming data
-                from gdcapi to local machine
-
     Args:
         jobinfo(JobInfo): Job info
 
@@ -309,6 +303,9 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     Copy file to google bucket. Implemented using google cloud resumale API
     Args:
         fi(dict): file information
+        client(google client): google client
+        bucket_name(str): the target bucket
+        blob_name(str): the object key
         global_config(dict): configurations
             {
                 "chunk_size_download": 1024,
@@ -351,7 +348,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     if tries == NUM_TRIES:
         raise APIError("Can not setup connection to gdcapi for {}".format(fi["id"]))
 
-    if response.status_code != 200:
+    if response.status_code not in {200, 203}:
         raise APIError("GDCAPI error {}".format(response.status_code))
 
     try:
