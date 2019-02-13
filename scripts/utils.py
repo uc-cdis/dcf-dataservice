@@ -95,3 +95,15 @@ def prepare_data(manifest_file, global_config):
         tasks.append(copying_files[idx : idx + chunk_size])
 
     return tasks, len(copying_files)
+
+def generate_chunk_data_list(size, data_size):
+    """
+    generate a lit of data chunk enpoints
+    """
+    L = []
+    idx = 0
+    while idx < size:
+        L.append((idx, min(idx + data_size - 1, size - 1)))
+        idx += data_size
+
+    return L
