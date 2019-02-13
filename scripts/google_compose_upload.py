@@ -358,8 +358,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
 
         if thead_control.sig_update_turn % 10 == 0 and not global_config.get("quite"):
             logger.info(
-                "Received {} MB".format(
-                    thead_control.sig_update_turn * 1.0 / 1024 / 1024 * chunk_data_size
+                "Streaming {}. Received {} MB".format(
+                    fi["id"], thead_control.sig_update_turn * 1.0 / 1024 / 1024 * chunk_data_size
                 )
             )
 
