@@ -16,6 +16,7 @@ import utils
 from errors import APIError, UserError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
 import indexd_utils
+from google_compose_upload import stream_object_from_gdc_api
 
 # logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
 
@@ -243,17 +244,21 @@ def exec_google_cmd(jobinfo):
                         fi["id"], fi["size"] * 1.0 / 1000 / 1000
                     )
                 )
-                resumable_streaming_copy(
-                    fi, client, bucket_name, blob_name, jobinfo.global_config
-                )
-                if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
-                    delete_object(sess, bucket_name, blob_name)
-                else:
-                    logger.info(
-                        "Finish streaming {}. Size {} (MB)".format(
-                            fi["id"], fi["size"] * 1.0 / 1000 / 1000
-                        )
+                if jobinfo.global_config("upload_method", "") == "resumable":
+                    resumable_streaming_copy(
+                        fi, client, bucket_name, blob_name, jobinfo.global_config
                     )
+                    if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
+                        delete_object(sess, bucket_name, blob_name)
+                    else:
+                        logger.info(
+                            "Finish streaming {}. Size {} (MB)".format(
+                                fi["id"], fi["size"] * 1.0 / 1000 / 1000
+                            )
+                        )
+                else:
+                    stream_object_from_gdc_api(fi, bucket_name, jobinfo.global_config)
+
             except APIError as e:
                 logger.error(e.message)
             except Exception as e:
