@@ -283,6 +283,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             self.sig_update_turn = 1
 
     def _handler(chunk_info):
+        time.sleep(random.randint(1, 10))
         tries = 0
         request_success = False
 
