@@ -347,12 +347,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
             )
 
-        while thead_control.sig_update_turn != chunk_info["part_number"]:
-            time.sleep(1)
+        # while thead_control.sig_update_turn != chunk_info["part_number"]:
+        #     time.sleep(1)
 
         thead_control.mutexLock.acquire()
-        sig.update(chunk)
-        crc32c.update(chunk)
+        # sig.update(chunk)
+        # crc32c.update(chunk)
         thead_control.sig_update_turn += 1
         thead_control.mutexLock.release()
 
@@ -459,20 +459,20 @@ def validate_uploaded_data(fi, sess, target_bucket, sig, crc32c, sorted_results)
             )
             sig_check_pass = False
 
-    if sig_check_pass:
-        if meta_data.json().get("crc32c", "") != base64.b64encode(crc32c.digest()):
-            logger.warn(
-                "Can not stream the object {} to {}. crc32c check fails".format(
-                    fi.get("id"), target_bucket
-                )
-            )
-            sig_check_pass = False
+    # if sig_check_pass:
+    #     if meta_data.json().get("crc32c", "") != base64.b64encode(crc32c.digest()):
+    #         logger.warn(
+    #             "Can not stream the object {} to {}. crc32c check fails".format(
+    #                 fi.get("id"), target_bucket
+    #             )
+    #         )
+    #         sig_check_pass = False
 
-    if sig_check_pass:
-        if sig.hexdigest() != fi.get("md5"):
-            logger.warn(
-                "Can not stream the object {}. md5 check fails".format(fi.get("id"))
-            )
-            sig_check_pass = False
+    # if sig_check_pass:
+    #     if sig.hexdigest() != fi.get("md5"):
+    #         logger.warn(
+    #             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
+    #         )
+    #         sig_check_pass = False
 
     return sig_check_pass
