@@ -244,7 +244,7 @@ def exec_google_cmd(jobinfo):
                         fi["id"], fi["size"] * 1.0 / 1000 / 1000
                     )
                 )
-                if jobinfo.global_config("upload_method", "") == "resumable":
+                if jobinfo.global_config.get("upload_method", "") == "resumable":
                     resumable_streaming_copy(
                         fi, client, bucket_name, blob_name, jobinfo.global_config
                     )
