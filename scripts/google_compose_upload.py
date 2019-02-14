@@ -34,7 +34,7 @@ from indexd_utils import update_url
 
 logger = get_logger("GoogleReplication")
 
-RETRIES_NUM = 10
+RETRIES_NUM = 30
 
 
 def get_object_metadata(sess, bucket_name, blob_name):
@@ -317,11 +317,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     logger.warn(
                         "Connection reset. Take a sleep and retry. Detail {}".format(e)
                     )
-                    time.sleep(20)
+                    time.sleep(60)
                     tries += 1
             except Exception as e:
                 logger.warn("Take a sleep and retry. Detail {}".format(e))
-                time.sleep(10)
+                time.sleep(60)
                 tries += 1
 
         if tries == RETRIES_NUM:
