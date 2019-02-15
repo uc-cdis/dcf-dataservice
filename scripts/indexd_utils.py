@@ -21,6 +21,9 @@ def _remove_changed_url(doc, url):
             doc.urls_metadata.pop(element, None)
             modified = True
             continue
+        # Check if bucket1 and bucket2 are from the same project. 
+        # gdc_project_phs_controlled and gdc_project_phs_open are from the same project since
+        # the prefixes are the same
         bucket1 = bucket1[:-5] if bucket1.endswith("-open") else bucket1[:-11]
         bucket2 = bucket2[:-5] if bucket2.endswith("-open") else bucket2[:-11]
         if bucket1 == bucket2:

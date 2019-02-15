@@ -285,7 +285,7 @@ def exec_aws_copy(jobinfo):
 
             # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
             if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
-                if not jobinfo.global_config.get("quite", False):
+                if not jobinfo.global_config.get("quiet", False):
                     logger.info(
                         "Streaming: {}. Size {} (MB). Class {}".format(
                             object_name,
@@ -303,7 +303,7 @@ def exec_aws_copy(jobinfo):
                 cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
                     jobinfo.bucket, source_key, target_bucket, object_name
                 )
-                if not jobinfo.global_config.get("quite", False):
+                if not jobinfo.global_config.get("quiet", False):
                     logger.info(cmd)
                 # wait untill finish
                 subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
@@ -317,7 +317,7 @@ def exec_aws_copy(jobinfo):
                 target_bucket,
                 object_name,
             )
-            if not jobinfo.global_config.get("quite", False):
+            if not jobinfo.global_config.get("quiet", False):
                 logger.info(cmd)
             subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
         else:
@@ -442,7 +442,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 thead_control.mutexLock.release()
 
                 if thead_control.sig_update_turn % 10 == 0 and not global_config.get(
-                    "quite"
+                    "quiet"
                 ):
                     logger.info(
                         "Downloading {}. Received {} MB".format(
@@ -535,7 +535,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, sorted_results
+        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
     )
 
     if not sig_check_pass:
@@ -549,7 +549,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         )
 
 
-def validate_uploaded_data(fi, thread_s3, target_bucket, sig, sorted_results):
+def validate_uploaded_data(fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received):
     """
     validate uploaded data
 
@@ -558,64 +558,51 @@ def validate_uploaded_data(fi, thread_s3, target_bucket, sig, sorted_results):
         thread_s3(s3client): s3 client
         target_bucket(str): aws bucket
         sig(sig): md5 of downloaded data from api
-        sorted_results(list(object)): list of result returned by upload function
+        md5_digests(list(md5)): list of chunk md5
+        total_bytes_received(int): total data in bytes
     
     Returns:
        bool: pass or not
     """
 
-    md5_digests = []
-    total_bytes_received = 0
-    parts = []
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
-    for res, part_number, md5, chunk_size in sorted_results:
-        parts.append({"ETag": res["ETag"], "PartNumber": part_number})
-        md5_digests.append(md5)
-        total_bytes_received += chunk_size
 
     # compute local etag from list of md5s
     etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
-
-    sig_check_pass = True
 
     if total_bytes_received != fi.get("size"):
         logger.warn(
             "Can not stream the object {}. Size does not match".format(fi.get("id"))
         )
-        sig_check_pass = False
+        return False
 
-    if sig_check_pass:
-        try:
-            meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
-        except botocore.exceptions.ClientError as error:
-            logger.warn(
-                "Can not get meta data of {}. Detail {}".format(fi.get("id"), error)
+    try:
+        meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
+    except botocore.exceptions.ClientError as error:
+        logger.warn(
+            "Can not get meta data of {}. Detail {}".format(fi.get("id"), error)
+        )
+        return False
+
+    if meta_data.get("ETag") is None:
+        logger.warn("Can not get etag of {}".format(fi.get("id")))
+        return False
+
+    if sig.hexdigest() != fi.get("md5"):
+        logger.warn(
+            "Can not stream the object {}. md5 check fails".format(fi.get("id"))
+        )
+        return False
+
+    if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
+        logger.warn(
+            "Can not stream the object {} to {}. Etag check fails".format(
+                fi.get("id"), target_bucket
             )
-            sig_check_pass = False
+        )
+        return False
 
-    if sig_check_pass:
-        if meta_data.get("ETag") is None:
-            logger.warn("Can not get etag of {}".format(fi.get("id")))
-            sig_check_pass = False
-
-    if sig_check_pass:
-        if sig.hexdigest() != fi.get("md5"):
-            logger.warn(
-                "Can not stream the object {}. md5 check fails".format(fi.get("id"))
-            )
-            sig_check_pass = False
-
-    if sig_check_pass:
-        if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
-            logger.warn(
-                "Can not stream the object {} to {}. Etag check fails".format(
-                    fi.get("id"), target_bucket
-                )
-            )
-            sig_check_pass = False
-
-    return sig_check_pass
+    return True
 
 
 def is_changed_acl_object(fi, copied_objects):

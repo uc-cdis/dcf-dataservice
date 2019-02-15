@@ -29,7 +29,7 @@ There are two modes for running the replicating process: multiple processes and 
     "chunk_size": 100, # number of objects will be processed in single process/thread
     "log_bucket": "bucketname".
     "mode": "process|thread", # multiple process or multiple thread. Default: thread
-    "quite": 1|0, # specify if we want to print all the logs or not. Default: 0
+    "quiet": 1|0, # specify if we want to print all the logs or not. Default: 0
     "from_local": 1|0, # specify how we want to check if object exist or not (*). On the fly or from json dictionary. Deault 0
     "copied_objects": "path_to_the_file", # specify json file containing all copied objects
     "source_objects": "path_to_the_file", # specify json file containing all source objects (gdcbackup),
