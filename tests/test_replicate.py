@@ -37,17 +37,17 @@ def gen_mock_manifest_data():
 
 
 @patch("google.cloud.storage.Client")
-@patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
+@patch("scripts.google_replicate.blob_exists")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called(
-    mock_bucket_exists, mock_check_blob, mock_client
+    mock_bucket_exists, mock_blob_exist, mock_client
 ):
     """
     test that resumable_streaming_function is called
     """
 
     mock_bucket_exists.return_value = True
-    mock_check_blob.return_value = False
+    mock_blob_exist.side_effect = [False, False]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.side_effect = ["test", "test"]
@@ -55,6 +55,7 @@ def test_resumable_streaming_copy_called(
         {
             "id": "test_file_id",
             "file_name": "test file name",
+            "size": 1,
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
@@ -64,17 +65,17 @@ def test_resumable_streaming_copy_called(
 
 
 @patch("google.cloud.storage.Client")
+@patch("scripts.google_replicate.blob_exists")
 @patch("scripts.indexd_utils.update_url")
-@patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_not_called_due_to_existed_blob(
-    mock_bucket_exists, mock_check_blob, mock_update_url, mock_client
+    mock_bucket_exists, mock_update_url, mock_blob_exist, mock_client
 ):
     """
     test that streaming function is not called due to the existed object
     """
     mock_bucket_exists.return_value = True
-    mock_check_blob.return_value = test_resumable_streaming_copy_called
+    mock_blob_exist.return_value = True
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
@@ -82,6 +83,7 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
         {
             "id": "test_file_id",
             "file_name": "test file name",
+            "size": 1,
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
@@ -107,6 +109,7 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
         {
             "id": "test_file_id",
             "file_name": "test file name",
+            "size": 1,
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
@@ -116,25 +119,27 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
 
 
 @patch("google.cloud.storage.Client")
+@patch("scripts.google_replicate.blob_exists")
 @patch("scripts.indexd_utils.update_url")
-@patch("scripts.google_replicate.check_blob_name_exists_and_match_md5_size")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called_one_time(
-    mock_bucket_exists, mock_check_blob, mock_update_url, mock_client
+    mock_bucket_exists, mock_update_url, mock_blob_exist, mock_client
 ):
     """
     test that the streaming called only one time
     The object is successfully copied
     """
     mock_bucket_exists.return_value = True
-    mock_check_blob.side_effect = [False, True]
+    mock_blob_exist.side_effect = [False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    scripts.google_replicate.fail_resumable_copy_blob = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
     exec_google_copy(
         {
             "id": "test_file_id",
             "file_name": "test file name",
+            "size": 1,
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
@@ -159,7 +164,7 @@ def test_streamUpload_called(mock_requests_get, mock_client):
     mock_requests_get.return_value = mock_value
     scripts.google_replicate.streaming = MagicMock()
     resumable_streaming_copy(
-        {"fileid": "test_file_id", "file_name": "test file name"},
+        {"fileid": "test_file_id", "file_name": "test file name", "size": 1},
         mock_client,
         "bucket_test",
         "blob_test",
@@ -184,7 +189,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
     scripts.google_replicate.streaming = MagicMock()
     with pytest.raises(APIError):
         resumable_streaming_copy(
-            {"id": "test_file_id", "file_name": "test file name"},
+            {"id": "test_file_id", "file_name": "test file name", "size": 1},
             mock_client,
             "bucket_test",
             "blob_test",

@@ -264,7 +264,7 @@ def exec_aws_copy(jobinfo):
 
     Args:
         jobinfo(JobInfo): Job info
-
+    
     Returns:
         None
     """
