@@ -24,9 +24,8 @@ from indexclient.client import IndexClient
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 import utils
 from utils import (
-    get_fileinfo_list_from_csv_manifest,
-    get_fileinfo_list_from_s3_manifest,
     generate_chunk_data_list,
+    prepare_data
 )
 from errors import UserError
 from indexd_utils import update_url
@@ -143,34 +142,6 @@ def build_object_dataset(project_acl, awsbucket):
         th.join()
 
     return copied_objects, source_objects
-
-
-def prepare_data(manifest_file, global_config):
-    """
-    Read data file info from manifest and organize them into groups.
-    Each group contains files which should be copied to the same bucket
-    The groups will be push to the queue consumed by threads
-    """
-    if manifest_file.startswith("s3://"):
-        copying_files = get_fileinfo_list_from_s3_manifest(
-            url_manifest=manifest_file,
-            start=global_config.get("start"),
-            end=global_config.get("end"),
-        )
-    else:
-        copying_files = get_fileinfo_list_from_csv_manifest(
-            manifest_file=manifest_file,
-            start=global_config.get("start"),
-            end=global_config.get("end"),
-        )
-
-    chunk_size = global_config.get("chunk_size", 1)
-    tasks = []
-
-    for idx in range(0, len(copying_files), chunk_size):
-        tasks.append(copying_files[idx : idx + chunk_size])
-
-    return tasks, len(copying_files)
 
 
 def object_exists(bucket_name, key):
