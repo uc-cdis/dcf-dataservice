@@ -212,6 +212,7 @@ def test_call_aws_cli_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
@@ -223,7 +224,8 @@ def test_call_aws_cli_called():
             manager_ns,
             "bucket",
         )
-    scripts.aws_replicate.exec_aws_copy(job_info)
+    
+    scripts.aws_replicate.exec_aws_copy(lock, job_info)
     assert subprocess.Popen.call_count == 1
 
 
@@ -242,6 +244,7 @@ def test_call_streamming_method_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
@@ -253,6 +256,6 @@ def test_call_streamming_method_called():
             manager_ns,
             "bucket",
         )
-    scripts.aws_replicate.exec_aws_copy(job_info)
+    scripts.aws_replicate.exec_aws_copy(lock, job_info)
     assert subprocess.Popen.call_count == 0
     assert scripts.aws_replicate.stream_object_from_gdc_api.call_count == 1

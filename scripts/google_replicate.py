@@ -3,6 +3,7 @@ import requests
 import urllib
 import time
 from multiprocessing import Pool, Manager
+from functools import partial
 
 from google.cloud import storage
 from google.cloud.storage import Blob
@@ -205,7 +206,7 @@ def exec_google_copy(fi, global_config):
     )
 
 
-def exec_google_cmd(jobinfo):
+def exec_google_cmd(lock, jobinfo):
     """
     Stream a list of files from the gdcapi to the google buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
@@ -275,7 +276,9 @@ def exec_google_cmd(jobinfo):
             msg = "can not copy {} to GOOGLE bucket".format(blob_name)
             logger.error(msg)
 
+    lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(jobinfo.files)
+    lock.release()
     logger.info(
         "{}/{} object are processed/copying ".format(
             jobinfo.manager_ns.total_processed_files, jobinfo.total_files
@@ -482,6 +485,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    lock = manager.Lock()
 
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
@@ -497,7 +501,12 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     # Make the Pool of workers
     pool = Pool(thread_num)
 
-    pool.map(exec_google_cmd, jobInfos)
+    part_func = partial(exec_google_cmd, lock)
+
+    try:
+        pool.map_async(part_func, jobInfos).get(9999999)
+    except KeyboardInterrupt:
+        pool.terminate()
 
     # close the pool and wait for the work to finish
     pool.close()

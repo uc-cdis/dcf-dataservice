@@ -1,10 +1,10 @@
 from socket import error as SocketError
 import errno
-import multiprocessing
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
 import time
 import os
+from functools import partial
 import subprocess
 import shlex
 import hashlib
@@ -211,7 +211,7 @@ class JobInfo(object):
         )
 
 
-def exec_aws_copy(jobinfo):
+def exec_aws_copy(lock, jobinfo):
     """
     Copy a chunk of files from the source bucket to the target buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
@@ -324,8 +324,9 @@ def exec_aws_copy(jobinfo):
             logger.info(
                 "object {} is already copied to {}".format(object_name, target_bucket)
             )
-
+    lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(files)
+    lock.release()
     logger.info(
         "{}/{} object are processed/copying ".format(
             jobinfo.manager_ns.total_processed_files, jobinfo.total_files
@@ -622,7 +623,7 @@ def is_changed_acl_object(fi, copied_objects):
     return False
 
 
-def check_and_index_the_data(jobinfo):
+def check_and_index_the_data(lock, jobinfo):
     """
     Check if files are in manifest are copied or not.
     Index the files if they exists in target buckets and log
@@ -645,8 +646,9 @@ def check_and_index_the_data(jobinfo):
                     "index_success": False,
                     "msg": e.message,
                 }
-
+    lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(jobinfo.files)
+    lock.release()
     logger.info(
         "{}/{} object are processed/indexed ".format(
             jobinfo.manager_ns.total_processed_files, jobinfo.total_files
@@ -669,6 +671,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    lock = manager.Lock()
 
     jobInfos = []
     for task in tasks:
@@ -691,10 +694,17 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
         pool = ThreadPool(thread_num)
 
     results = []
-    if job_name == "copying":
-        results = pool.map(exec_aws_copy, jobInfos)
-    elif job_name == "indexing":
-        results = pool.map(check_and_index_the_data, jobInfos)
+    try:
+        if job_name == "copying":
+            part_func = partial(exec_aws_copy, lock)
+        elif job_name == "indexing":
+            part_func = partial(check_and_index_the_data, lock)
+        else:
+            raise UserError("Not supported!!!")
+        
+        results = pool.map_async(part_func, jobInfos).get(9999999)
+    except KeyboardInterrupt:
+        pool.terminate()
 
     # close the pool and wait for the work to finish
     pool.close()
