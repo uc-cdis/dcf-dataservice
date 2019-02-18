@@ -72,14 +72,6 @@ if __name__ == "__main__":
             args.manifest_file,
             None,
         )
-    elif args.action == "indexing":
-        aws = AWSBucketReplication(
-            manifest_file=args.manifest_file,
-            global_config=json.loads(args.global_config),
-            thread_num=int(args.thread_num),
-            job_name="indexing",
-        )
-        aws.run()
 
     elif args.action == "readact":
         delete_objects_from_cloud_resources(args.redact_file, args.log_bucket)
