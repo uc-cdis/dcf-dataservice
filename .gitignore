@@ -105,3 +105,4 @@ venv.bak/
 .mypy_cache/
 google_credentials.json
 dcf_dataservice_credentials.json
+settings.py

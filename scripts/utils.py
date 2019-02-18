@@ -45,8 +45,8 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     from urlparse import urlparse
 
     out = urlparse(url_manifest)
-    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest")
-    return get_fileinfo_list_from_csv_manifest("./manifest", start, end)
+    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
+    return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
 
 
 def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
@@ -65,6 +65,15 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem
 
     return files[start_idx:end_idx]
 
+
+def generate_chunk_data_list(size, data_size):
+    L = []
+    idx = 0
+    while idx < size:
+        L.append((idx, min(idx + data_size - 1, size - 1)))
+        idx += data_size
+
+    return L
 
 def prepare_data(manifest_file, global_config):
     """
