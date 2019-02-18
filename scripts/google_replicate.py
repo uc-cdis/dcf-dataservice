@@ -451,9 +451,11 @@ class JobInfo(object):
                 "multi_part_upload_threads": 10,
                 "data_chunk_size": 1024*1024*5
             }
-            manifest_file(str): manifest file
-            thread_num(int): number of threads
+            files(list(str)): list of files
+            total_files (int): number of files
             job_name(str): copying|indexing
+            copied_objects(dict): copied files
+            manager_ns(manager_namespace): manager namespace for synchronization
             bucket(str): source bucket
 
         """
