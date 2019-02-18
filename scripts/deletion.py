@@ -111,10 +111,13 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     filename = timestr + "_deletion_log.json"
 
-    s3 = boto3.client("s3")
-    with open(filename, "w") as outfile:
-        json.dump(log_json, outfile)
-    s3.upload_file(filename, log_bucket, basename(filename))
+    try:
+        s3 = boto3.client("s3")
+        with open(filename, "w") as outfile:
+            json.dump(log_json, outfile)
+        s3.upload_file(filename, log_bucket, basename(filename))
+    except Exception as e:
+        logger.errors(e)
 
 
 def _remove_object_from_s3(s3, indexclient, f, target_bucket):
