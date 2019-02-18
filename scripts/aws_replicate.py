@@ -701,7 +701,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
             part_func = partial(check_and_index_the_data, lock)
         else:
             raise UserError("Not supported!!!")
-        
+
         results = pool.map_async(part_func, jobInfos).get(9999999)
     except KeyboardInterrupt:
         pool.terminate()
