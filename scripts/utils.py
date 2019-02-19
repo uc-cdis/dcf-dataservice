@@ -75,6 +75,7 @@ def generate_chunk_data_list(size, data_size):
 
     return L
 
+
 def prepare_data(manifest_file, global_config):
     """
     Read data file info from manifest and organize them into groups.

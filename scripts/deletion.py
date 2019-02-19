@@ -92,17 +92,15 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
         #     )
 
         try:
-            logger.info("Remove {} from GS".format(fi["id"]))
             google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
-            logger.warn("Can not emove {} from GS".format(fi["id"]))
+            logger.warn(e)
             deletion_logs.append(
                 DeletionLog(
                     url=fi.get("id") + "/" + fi.get("filename"), message=e.message
                 )
             )
             continue
-        logger.info("Remove gs indexd url of {}".format(fi["id"]))
         deletion_logs.append(
             _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket)
         )
@@ -122,7 +120,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
             json.dump(log_json, outfile)
         s3.upload_file(filename, log_bucket, basename(filename))
     except Exception as e:
-        logger.errors(e)
+        logger.error(e)
 
 
 def _remove_object_from_s3(s3, indexclient, f, target_bucket):
@@ -137,6 +135,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     Returns:
         list(DeletionLog): list of deletion logs
     """
+    logger.info("Start to remove {} from AWS".format(f["id"]))
     bucket = s3.Bucket(target_bucket)
 
     key = join(f.get("id"), f.get("filename"))
@@ -150,14 +149,16 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
         deletion_log.message = str(e)
         return deletion_log
 
-    if res["Deleted"]:
+    if res.get("Deleted"):
         try:
+            deletion_log.deleted = True
             remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
             deletion_log.indexdUpdated = True
         except Exception as e:
             deletion_log.message = str(e)
-            logger.warn("Can not remove aws indexd url of {}".format(fi["id"]))
+            logger.warn("Can not remove aws indexd url of {}".format(f["id"]))
     else:
+        logger.warn("Can not delete {} from AWS".format(f["id"]))
         deletion_log.message = str(res.Errors)
 
     return deletion_log
@@ -177,7 +178,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket):
         list(DeletionLog)
 
     """
-
+    logger.info("Start to remove {} from GS".format(f["id"]))
     key = join(f.get("id"), f.get("filename"))
     full_path = join("gs://" + target_bucket, key)
     deletion_log = DeletionLog(url=full_path)
@@ -186,13 +187,17 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket):
     try:
         blob = bucket.blob(key)
         blob.delete()
+        deletion_log.deleted = True
     except Exception as e:
+        logger.warn("Can not delete {} from GS".format(f["id"]))
         deletion_log.message = str(e)
         return deletion_log
     try:
+        logger.info("Start to update indexd for {}".format(f["id"]))
         remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+        deletion_log.indexdUpdated = True
     except Exception as e:
-        logger.warn("Can not remove gs indexd url of {}".format(fi["id"]))
+        logger.warn("Can not remove gs indexd url of {}".format(f["id"]))
         deletion_log.deleted = True
         deletion_log.message = str(e)
 

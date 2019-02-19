@@ -4,6 +4,7 @@ import urllib
 import time
 from multiprocessing import Pool, Manager
 from functools import partial
+from urlparse import urlparse
 
 from google.cloud import storage
 from google.cloud.storage import Blob
@@ -291,7 +292,8 @@ def exec_google_cmd(lock, jobinfo):
 def _is_ignored_object(fi, IGNORED_FILES):
     """
     check if an object is ignored object or not. 
-    An ignored object is the one in the IGNORED_FILES list and match md5, size
+    An ignored object is the one in the IGNORED_FILES list with bucket 
+    5aa919de-0aa0-43ec-9ec3-288481102b6d and match md5, size
     """
 
     for element in IGNORED_FILES:
@@ -299,6 +301,7 @@ def _is_ignored_object(fi, IGNORED_FILES):
             fi["id"] == element["gdc_uuid"]
             and fi["size"] == element["gcs_object_size"]
             and fi["md5"] == element["md5sum"]
+            and urlparse(element["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
         ):
             return True
     return False

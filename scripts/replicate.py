@@ -39,7 +39,7 @@ def parse_arguments():
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
     aws_indexing_cmd.add_argument("--thread_num", required=True)
 
-    redact_cmd = subparsers.add_parser("readact")
+    redact_cmd = subparsers.add_parser("redact")
     redact_cmd.add_argument("--redact_file", required=True)
     redact_cmd.add_argument("--log_bucket", required=True)
 
