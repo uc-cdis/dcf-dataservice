@@ -1,6 +1,8 @@
+import os
 import boto3
 import csv
 import random
+from urlparse import urlparse
 
 from errors import UserError
 
@@ -105,3 +107,22 @@ def prepare_data(manifest_file, global_config):
         tasks.append(copying_files[idx : idx + chunk_size])
 
     return tasks, len(copying_files)
+
+
+def get_structure_gs_url(fi, IGNORED_FILES):
+    """
+    get structure url for object in "5aa919de-0aa0-43ec-9ec3-288481102b6d" bucket
+    must be called after _is_ignored_object return True
+    """
+    for element in IGNORED_FILES:
+        if (
+            fi["id"] == element["gdc_uuid"]
+            and fi["size"] == element["gcs_object_size"]
+            and fi["md5"] == element["md5sum"]
+            and urlparse(element["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
+        ):
+            res = urlparse(element["gcs_object_url"])
+            tmp = res.path.split("/")
+            if len(tmp) > 2:
+                return "gs://gdc-tcga-phs000178-controlled/" + os.path.join(*tmp[2:])
+    return None
