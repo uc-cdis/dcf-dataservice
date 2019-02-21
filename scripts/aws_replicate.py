@@ -658,7 +658,7 @@ def check_and_index_the_data(lock, jobinfo):
     return json_log
 
 
-def run(thread_num, global_config, job_name, manifest_file, bucket=None):
+def run(core_num, global_config, job_name, manifest_file, bucket=None):
     """
     start processes and log after they finish
     """
@@ -689,9 +689,9 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
 
     # Make the Pool of workers
     if global_config.get("mode") == "process":
-        pool = Pool(thread_num)
+        pool = Pool(core_num)
     else:
-        pool = ThreadPool(thread_num)
+        pool = ThreadPool(core_num)
 
     results = []
     try:

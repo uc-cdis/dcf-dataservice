@@ -475,7 +475,7 @@ class JobInfo(object):
         )
 
 
-def run(thread_num, global_config, job_name, manifest_file, bucket=None):
+def run(core_num, global_config, job_name, manifest_file, bucket=None):
     """
     start threads and log after they finish
     """
@@ -502,7 +502,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
         jobInfos.append(job)
 
     # Make the Pool of workers
-    pool = Pool(thread_num)
+    pool = Pool(core_num)
 
     part_func = partial(exec_google_cmd, lock)
 

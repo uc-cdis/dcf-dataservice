@@ -19,7 +19,7 @@ def parse_arguments():
     google_replicate_cmd = subparsers.add_parser("google_replicate")
     google_replicate_cmd.add_argument("--global_config", required=True)
     google_replicate_cmd.add_argument("--manifest_file", required=True)
-    google_replicate_cmd.add_argument("--thread_num", required=True)
+    google_replicate_cmd.add_argument("--core_num", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
@@ -37,7 +37,7 @@ def parse_arguments():
     # }
     aws_indexing_cmd.add_argument("--global_config", required=True)
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
-    aws_indexing_cmd.add_argument("--thread_num", required=True)
+    aws_indexing_cmd.add_argument("--core_num", required=True)
 
     redact_cmd = subparsers.add_parser("redact")
     redact_cmd.add_argument("--redact_file", required=True)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
         source_bucket = args.bucket if job_name == "copying" else None
         aws_replicate.run(
-            int(args.thread_num),
+            int(args.core_num),
             json.loads(args.global_config),
             job_name,
             args.manifest_file,
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         import google_replicate
 
         google_replicate.run(
-            int(args.thread_num),
+            int(args.core_num),
             json.loads(args.global_config),
             job_name,
             args.manifest_file,

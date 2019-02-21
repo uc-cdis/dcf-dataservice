@@ -166,10 +166,10 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     return deletion_log
 
 
-def _remove_gs_object(client, url, f):
+def _remove_gs_5aa_object(client, url, f):
     """
     """
-    logger.info("Remove 5aa object with uuid {}".format(f["id"]))
+    logger.info("Ignore 5aa object with uuid {}".format(f["id"]))
     return DeletionLog(url=url)
 
 
@@ -189,7 +189,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket):
     """
     url = get_structure_gs_url(f, IGNORED_FILES)
     if url:
-        return _remove_gs_object(client, url, f)
+        return _remove_gs_5aa_object(client, url, f)
 
     logger.info("Start to remove {} from GS".format(f["id"]))
     key = join(f.get("id"), f.get("filename"))
