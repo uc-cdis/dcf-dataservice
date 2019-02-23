@@ -1,7 +1,8 @@
+import os
 import boto3
 import csv
 import random
-
+from urlparse import urlparse
 from errors import UserError
 
 
@@ -101,6 +102,47 @@ def prepare_data(manifest_file, global_config):
     tasks = []
 
     for idx in range(0, len(copying_files), chunk_size):
-        tasks.append(copying_files[idx : idx + chunk_size])
+        tasks.append(copying_files[idx: idx + chunk_size])
 
     return tasks, len(copying_files)
+
+
+def get_ignored_files(ignored_filename):
+    """
+    get all the files in 5aa buckets and are in gdc full manifest
+    """
+    result = {}
+    try:
+        with open(ignored_filename, "rt") as f:
+            csvReader = csv.DictReader(f, delimiter=",")
+            for row in csvReader:
+                if urlparse(row["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d":
+                    row["gcs_object_size"] = int(row["gcs_object_size"])
+                    result[row["gdc_uuid"]] = row
+    except Exception as e:
+        print("Can not read ignored_files_manifest.csv file. Detail {}".format(e))
+    
+    return result
+
+
+def get_structured_object_key(uuid, ignored_dict):
+    """
+    Given an uuid return the url of the object in the 5aa bucket
+
+    Args:
+        uuid(str): object uuid
+        ignore_dict(dict): a dictionary of 5aa bucket object
+    """
+    try:
+        if uuid in ignored_dict:
+            element = ignored_dict[uuid]
+            if (
+                uuid == element["gdc_uuid"]
+                and urlparse(element["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
+            ):
+                res = urlparse(element["gcs_object_url"])
+                return os.path.join(*tres.path.split("/")mp[2:])
+    except IndexError:
+        return None
+
+    return None

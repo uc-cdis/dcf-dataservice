@@ -34,37 +34,34 @@ def _remove_changed_url(doc, url):
     return doc, modified
 
 
-def update_url(fi, indexclient, provider="s3"):
+def update_url(fi, indexclient, provider="s3", url=None):
     """
     update a record to indexd
     Args:
         fi(dict): file info
     Returns:
-        None
+        bool: record is created/updated or not
     """
-    try:
-        if provider == "s3":
-            bucket_name = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        else:
-            bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
-        s3_object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    except UserError as e:
-        raise APIError(
-            "Can not get the bucket name of the record with uuid {}. Detail {}".format(
-                fi.get("id", ""), e
+    if url is None:
+        try:
+            if provider == "s3":
+                bucket_name = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+            else:
+                bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+            s3_object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+        except UserError as e:
+            raise APIError(
+                "Can not get the bucket name of the record with uuid {}. Detail {}".format(
+                    fi.get("id", ""), e
+                )
             )
-        )
-
-    url = "{}://{}/{}".format(provider, bucket_name, s3_object_name)
+        url = "{}://{}/{}".format(provider, bucket_name, s3_object_name)
 
     try:
         doc = indexclient.get(fi.get("id", ""))
 
         if doc is not None:
             need_update = False
-            if doc.file_name != fi.get("file_name"):
-                doc.file_name = fi.get("file_name")
-                need_update = True
             if url not in doc.urls:
                 doc, _ = _remove_changed_url(doc, url)
                 doc.urls.append(url)
@@ -105,7 +102,6 @@ def update_url(fi, indexclient, provider="s3"):
     try:
         doc = indexclient.create(
             did=fi.get("id"),
-            file_name=fi.get("file_name"),
             hashes={"md5": fi.get("md5")},
             size=fi.get("size", 0),
             acl=acl,

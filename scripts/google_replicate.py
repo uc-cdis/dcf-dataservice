@@ -25,7 +25,7 @@ DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
-NUM_TRIES = 10
+NUM_TRIES = 30
 
 logger = get_logger("GoogleReplication")
 
@@ -112,7 +112,7 @@ def delete_object(sess, bucket_name, blob_name):
     return sess.request(method="DELETE", url=url)
 
 
-def exec_google_copy(fi, global_config):
+def exec_google_copy(fi, ignored_dict, global_config):
     """
     copy a file to google bucket.
     Args:
@@ -125,9 +125,16 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
+    try:
+        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    except UserError as e:
+        msg = "can not copy {} to GOOGLE bucket. Detail {}. AAA {}".format(blob_name, e, PROJECT_ACL)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
-    if _is_ignored_object(fi, IGNORED_FILES):
-        logger.info("{} is ignored".format(fi["id"]))
+    if fi["id"] in ignored_dict:
+        logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
+        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict)
         return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
 
     indexd_client = IndexClient(
@@ -138,12 +145,6 @@ def exec_google_copy(fi, global_config):
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
     blob_name = fi.get("id") + "/" + fi.get("file_name")
-    try:
-        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
-    except UserError as e:
-        msg = "can not copy {} to GOOGLE bucket. Detail {}. AAA {}".format(blob_name, e, PROJECT_ACL)
-        logger.error(msg)
-        return DataFlowLog(message=msg)
 
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)
@@ -190,7 +191,10 @@ def exec_google_copy(fi, global_config):
 
     if blob_exists(bucket_name, blob_name):
         try:
-            indexd_utils.update_url(fi, indexd_client, "gs")
+            if indexd_utils.update_url(fi, indexd_client, provider="gs"):
+                logger.info("Successfully update indexd for {}".format(fi["id"]))
+            else:
+                logger.info("Can not update indexd for {}".format(fi["id"]))
         except APIError as e:
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)
@@ -206,7 +210,7 @@ def exec_google_copy(fi, global_config):
     )
 
 
-def exec_google_cmd(lock, jobinfo):
+def exec_google_cmd(lock, ignored_dict, jobinfo):
     """
     Stream a list of files from the gdcapi to the google buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
@@ -222,17 +226,18 @@ def exec_google_cmd(lock, jobinfo):
     sess = AuthorizedSession(client._credentials)
 
     for fi in jobinfo.files:
-        # ignore object if they are in IGNORED_FILES
-        if _is_ignored_object(fi, IGNORED_FILES):
-            logger.info("{} is ignored".format(fi["id"]))
-            continue
-
-        blob_name = fi.get("id") + "/" + fi.get("file_name")
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
             msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
             logger.error(msg)
+        # ignore object if they are in 5aa bucket
+        if fi["id"] in ignored_dict:
+            logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
+            _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict)
+            continue
+
+        blob_name = fi.get("id") + "/" + fi.get("file_name")
 
         if not bucket_exists(bucket_name):
             msg = "There is no bucket with provided name {}\n".format(bucket_name)
@@ -266,7 +271,10 @@ def exec_google_cmd(lock, jobinfo):
 
         if blob_exists(bucket_name, blob_name):
             try:
-                indexd_utils.update_url(fi, jobinfo.indexclient, "gs")
+                if indexd_utils.update_url(fi, jobinfo.indexclient, "gs"):
+                    logger.info("Successfully update indexd for {}".format(fi["id"]))
+                else:
+                    logger.info("Can not update indexd for {}".format(fi["id"]))
             except APIError as e:
                 logger.error(e)
             except Exception as e:
@@ -288,20 +296,21 @@ def exec_google_cmd(lock, jobinfo):
     return len(jobinfo.files)
 
 
-def _is_ignored_object(fi, IGNORED_FILES):
+def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
     """
-    check if an object is ignored object or not. 
-    An ignored object is the one in the IGNORED_FILES list and match md5, size
+    update indexd for 5aa objects
     """
-
-    for element in IGNORED_FILES:
-        if (
-            fi["id"] == element["gdc_uuid"]
-            and fi["size"] == element["gcs_object_size"]
-            and fi["md5"] == element["md5sum"]
-        ):
-            return True
-    return False
+    object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
+    # check if 5aa object really exists
+    if blob_exists(bucket_name, object_key):
+        url = "gs://" + bucket_name + "/" + object_key
+        if indexd_utils.update_url(fi, indexclient, provider="gs", url=url):
+            logger.info("Successfully update indexd for {}".format(fi["id"]))
+        else:
+            logger.info("Can not update indexd for {}".format(fi["id"]))
+    else:
+        logger.error("{} which is 5aa bucket does not exist in dcf buckets.".format(fi["id"]))
+    
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
@@ -476,10 +485,13 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start threads and log after they finish
     """
-    if not IGNORED_FILES:
+    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
+
+    if not ignored_dict:
         raise UserError(
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
         )
+
     tasks, _ = utils.prepare_data(manifest_file, global_config)
 
     manager = Manager()
@@ -501,7 +513,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     # Make the Pool of workers
     pool = Pool(thread_num)
 
-    part_func = partial(exec_google_cmd, lock)
+    part_func = partial(exec_google_cmd, lock, ignored_dict)
 
     try:
         pool.map_async(part_func, jobInfos).get(9999999)
