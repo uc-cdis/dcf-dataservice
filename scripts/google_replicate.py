@@ -134,7 +134,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
 
     if fi["id"] in ignored_dict:
         logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
-        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict)
+        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, jobinfo.indexclient)
         return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
 
     indexd_client = IndexClient(
@@ -234,7 +234,7 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
         # ignore object if they are in 5aa bucket
         if fi["id"] in ignored_dict:
             logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
-            _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict)
+            _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, jobinfo.indexclient)
             continue
 
         blob_name = fi.get("id") + "/" + fi.get("file_name")
