@@ -141,7 +141,7 @@ def get_structured_object_key(uuid, ignored_dict):
                 and urlparse(element["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
             ):
                 res = urlparse(element["gcs_object_url"])
-                return os.path.join(*tres.path.split("/")mp[2:])
+                return os.path.join(*res.path.split("/")[2:])
     except IndexError:
         return None
 
