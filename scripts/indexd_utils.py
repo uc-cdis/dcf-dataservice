@@ -40,7 +40,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
     Args:
         fi(dict): file info
     Returns:
-        bool: record is created/updated or not
+        bool: if record is created/updated or not
     """
     if url is None:
         try:
@@ -124,7 +124,7 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
     Args:
         uuid(str): did
         urls(list): list of urls
-
+        indexclient(IndexClient): indexd client
     """
     doc = indexclient.get(uuid)
     if doc is not None:
