@@ -4,6 +4,7 @@ import urllib
 import time
 from multiprocessing import Pool, Manager
 from functools import partial
+import subprocess
 
 from google.cloud import storage
 from google.cloud.storage import Blob
@@ -163,6 +164,8 @@ def exec_google_copy(fi, ignored_dict, global_config):
         logger.error(msg)
         return DataFlowLog(message=msg)
 
+    _check_and_handle_changed_acl_object(fi)
+
     if blob_exists(bucket_name, blob_name):
         logger.info("{} is already copied".format(fi["id"]))
     else:
@@ -258,6 +261,8 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
         if not bucket_exists(bucket_name):
             msg = "There is no bucket with provided name {}\n".format(bucket_name)
             logger.error(msg)
+
+        _check_and_handle_changed_acl_object(fi)
 
         # skip the object if it exists in bucket already
         if blob_exists(bucket_name, blob_name):
@@ -466,6 +471,19 @@ def _is_completed_task(sess, task):
             return False
 
     return True
+
+
+def _check_and_handle_changed_acl_object(fi):
+    """
+    if object is changed acl, move it to the right bucket
+    """
+    bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    blob_name = "{}/{}".format(fi["id"], fi["file_name"])
+    prefix_bucket_name = bucket_name.split("-")[:-1]
+    bucket_name_reverse = prefix_bucket_name + "-open" if open not in fi["acl"] else prefix_bucket_name + "-controlled"
+    if blob_exists(bucket_name_reverse, blob_name):
+        cmd = "gsutil mv gs://{}/{} gs://{}/{}".format(bucket_name_reverse, blob_name, bucket_name, blob_name)
+        subprocess.Popen(cmd, shell=True).wait()
 
 
 class JobInfo(object):
