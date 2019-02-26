@@ -14,7 +14,7 @@ from utils import (
     get_google_bucket_name,
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
-    get_structure_gs_url,
+    get_structured_object_key,
 )
 from indexd_utils import remove_url_from_indexd_record
 from errors import UserError
@@ -187,8 +187,9 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket):
         list(DeletionLog)
 
     """
-    url = get_structure_gs_url(f, IGNORED_FILES)
-    if url:
+    object_key = get_structured_object_key(f, IGNORED_FILES)
+    if object_key:
+        url = "gs://gdc-tcga-phs000178-controlled/{}".format(object_key)
         return _remove_gs_5aa_object(client, url, f)
 
     logger.info("Start to remove {} from GS".format(f["id"]))
