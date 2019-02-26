@@ -479,8 +479,7 @@ def _check_and_handle_changed_acl_object(fi):
     """
     bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
     blob_name = "{}/{}".format(fi["id"], fi["file_name"])
-    prefix_bucket_name = bucket_name.split("-")[:-1]
-    bucket_name_reverse = prefix_bucket_name + "-open" if open not in fi["acl"] else prefix_bucket_name + "-controlled"
+    bucket_name_reverse = bucket_name[:-5] + "-controlled" if "open" in fi["acl"] else bucket_name[:-11] + "-open"
     if blob_exists(bucket_name_reverse, blob_name):
         cmd = "gsutil mv gs://{}/{} gs://{}/{}".format(bucket_name_reverse, blob_name, bucket_name, blob_name)
         subprocess.Popen(cmd, shell=True).wait()
