@@ -14,6 +14,7 @@ from utils import (
     get_google_bucket_name,
     get_fileinfo_list_from_csv_manifest,
     get_fileinfo_list_from_s3_manifest,
+    get_ignored_files,
     get_structured_object_key,
 )
 from indexd_utils import remove_url_from_indexd_record
@@ -73,6 +74,8 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     s3 = boto3.resource("s3")
     gs_client = storage.Client()
 
+    ignored_dict = get_ignored_files(IGNORED_FILES)
+
     deletion_logs = []
     num = 0
     for fi in file_infos:
@@ -104,7 +107,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
             )
             continue
         deletion_logs.append(
-            _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket)
+            _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
         )
 
     log_list = []
@@ -173,7 +176,7 @@ def _remove_gs_5aa_object(client, url, f):
     return DeletionLog(url=url)
 
 
-def _remove_object_from_gs(client, indexclient, f, target_bucket):
+def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     """
     remove object from gs
 
@@ -187,7 +190,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket):
         list(DeletionLog)
 
     """
-    object_key = get_structured_object_key(f, IGNORED_FILES)
+    object_key = get_structured_object_key(f, ignored_dict)
     if object_key:
         url = "gs://gdc-tcga-phs000178-controlled/{}".format(object_key)
         return _remove_gs_5aa_object(client, url, f)
