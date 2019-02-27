@@ -4,6 +4,7 @@ import urllib
 import time
 from multiprocessing import Pool, Manager
 from functools import partial
+import subprocess
 
 from google.cloud import storage
 from google.cloud.storage import Blob
@@ -25,7 +26,7 @@ DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
-NUM_TRIES = 10
+NUM_TRIES = 30
 
 logger = get_logger("GoogleReplication")
 
@@ -43,22 +44,36 @@ def bucket_exists(bucket_name):
     """
     client = storage.Client()
     bucket = client.bucket(bucket_name)
-    try:
-        return bucket.exists()
-    except Exception as e:
-        logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
-        return False
+    
+    tries = 0
+    while tries < NUM_TRIES:
+        try:
+            return bucket.exists()
+        except Exception as e:
+            time.sleep(300)
+            tries += 1
+    
+    logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
+    return False
 
 
 def blob_exists(bucket_name, blob_name):
     """
-    check if blob exists or not!
+    check if blob/key exists or not!
     """
-    if bucket_exists(bucket_name):
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = Blob(blob_name, bucket)
-        return blob.exists()
+    tries = 0
+
+    while tries < NUM_TRIES:
+        try:
+            if bucket_exists(bucket_name):
+                client = storage.Client()
+                bucket = client.bucket(bucket_name)
+                blob = Blob(blob_name, bucket)
+                return blob.exists()
+        except Exception:
+            time.sleep(300)
+            tries += 1
+
     return False
 
 
@@ -69,6 +84,12 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         bucket_name(str): the name of bucket
         blob_name(str): the name of blob
         fi(dict): file info dictionary
+            {
+                "id": "123",
+                "file_name": "abc.bam",
+                "size": 5,
+                ... 
+            }
     Returns:
         bool: indicating value if the blob is exist or not
     """
@@ -88,8 +109,14 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
     Something wrong during the copy(only for simple upload and resumable upload)
     Args:
         bucket_name(str): the name of bucket
-        blob_name(str): the name of blob
+        blob_name(str): the name of blob/key
         fi(dict): file info dictionary
+            {
+                "id": "123",
+                "file_name": "abc.bam",
+                "size": 5,
+                ... 
+            }
     Returns:
         bool: indicating value if the blob is exist or not
     """
@@ -112,7 +139,7 @@ def delete_object(sess, bucket_name, blob_name):
     return sess.request(method="DELETE", url=url)
 
 
-def exec_google_copy(fi, global_config):
+def exec_google_copy(fi, ignored_dict, global_config):
     """
     copy a file to google bucket.
     Args:
@@ -125,9 +152,16 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
+    try:
+        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    except UserError as e:
+        msg = "can not copy {} to GOOGLE bucket. Detail {}. {}".format(blob_name, e, PROJECT_ACL)
+        logger.error(msg)
+        return DataFlowLog(message=msg)
 
-    if _is_ignored_object(fi, IGNORED_FILES):
-        logger.info("{} is ignored".format(fi["id"]))
+    if fi["id"] in ignored_dict:
+        logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
+        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, jobinfo.indexclient)
         return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
 
     indexd_client = IndexClient(
@@ -138,17 +172,13 @@ def exec_google_copy(fi, global_config):
     client = storage.Client()
     sess = AuthorizedSession(client._credentials)
     blob_name = fi.get("id") + "/" + fi.get("file_name")
-    try:
-        bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
-    except UserError as e:
-        msg = "can not copy {} to GOOGLE bucket. Detail {}. AAA {}".format(blob_name, e, PROJECT_ACL)
-        logger.error(msg)
-        return DataFlowLog(message=msg)
 
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)
         logger.error(msg)
         return DataFlowLog(message=msg)
+
+    _check_and_handle_changed_acl_object(fi)
 
     if blob_exists(bucket_name, blob_name):
         logger.info("{} is already copied".format(fi["id"]))
@@ -166,11 +196,11 @@ def exec_google_copy(fi, global_config):
                 res = delete_object(sess, bucket_name, blob_name)
                 if res.status_code in (200, 204):
                     logger.info(
-                        "Successfully delete fail upload object {}".format(fi["id"])
+                        "Successfully delete failed upload object {}".format(fi["id"])
                     )
                 else:
                     logger.info(
-                        "Can not delete fail uploaded object {}. Satus code {}".format(
+                        "Can not delete failed uploaded object {}. Satus code {}".format(
                             fi["id"], res.status_code
                         )
                     )
@@ -190,7 +220,10 @@ def exec_google_copy(fi, global_config):
 
     if blob_exists(bucket_name, blob_name):
         try:
-            indexd_utils.update_url(fi, indexd_client, "gs")
+            if indexd_utils.update_url(fi, indexd_client, provider="gs"):
+                logger.info("Successfully update indexd for {}".format(fi["id"]))
+            else:
+                logger.info("Can not update indexd for {}".format(fi["id"]))
         except APIError as e:
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)
@@ -206,13 +239,17 @@ def exec_google_copy(fi, global_config):
     )
 
 
-def exec_google_cmd(lock, jobinfo):
+def exec_google_cmd(lock, ignored_dict, jobinfo):
     """
     Stream a list of files from the gdcapi to the google buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
+    If the file is 5aa object, skip and only index the file
 
     Args:
-        jobinfo(JobInfo): Job info
+        lock(SyncManageLock): lock for synchronization
+        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
+        gs url hash, size, etc.
+        jobinfo(JobInfo): Job info object
 
     Returns:
         int: Number of files processed
@@ -222,22 +259,26 @@ def exec_google_cmd(lock, jobinfo):
     sess = AuthorizedSession(client._credentials)
 
     for fi in jobinfo.files:
-        # ignore object if they are in IGNORED_FILES
-        if _is_ignored_object(fi, IGNORED_FILES):
-            logger.info("{} is ignored".format(fi["id"]))
-            continue
-
-        blob_name = fi.get("id") + "/" + fi.get("file_name")
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
             msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
             logger.error(msg)
 
+        # ignore object if they are in 5aa bucket
+        if fi["id"] in ignored_dict:
+            logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
+            _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, jobinfo.indexclient)
+            continue
+
+        blob_name = fi.get("id") + "/" + fi.get("file_name")
         if not bucket_exists(bucket_name):
             msg = "There is no bucket with provided name {}\n".format(bucket_name)
             logger.error(msg)
 
+        _check_and_handle_changed_acl_object(fi)
+
+        # skip the object if it exists in bucket already
         if blob_exists(bucket_name, blob_name):
             logger.info("{} is already copied".format(fi["id"]))
         else:
@@ -264,9 +305,13 @@ def exec_google_cmd(lock, jobinfo):
                 # Don't break (Not expected)
                 logger.error(e.message)
 
+        # only do indexing if the object exists
         if blob_exists(bucket_name, blob_name):
             try:
-                indexd_utils.update_url(fi, jobinfo.indexclient, "gs")
+                if indexd_utils.update_url(fi, jobinfo.indexclient, "gs"):
+                    logger.info("Successfully update indexd for {}".format(fi["id"]))
+                else:
+                    logger.info("Can not update indexd for {}".format(fi["id"]))
             except APIError as e:
                 logger.error(e)
             except Exception as e:
@@ -288,20 +333,30 @@ def exec_google_cmd(lock, jobinfo):
     return len(jobinfo.files)
 
 
-def _is_ignored_object(fi, IGNORED_FILES):
+def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
     """
-    check if an object is ignored object or not. 
-    An ignored object is the one in the IGNORED_FILES list and match md5, size
-    """
+    update indexd for 5aa objects
 
-    for element in IGNORED_FILES:
-        if (
-            fi["id"] == element["gdc_uuid"]
-            and fi["size"] == element["gcs_object_size"]
-            and fi["md5"] == element["md5sum"]
-        ):
-            return True
-    return False
+    Args:
+        fi(dict): file info
+        bucket_name(str): bucket name
+        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
+        gs url hash, size, etc.
+        indexclient(indexdclient): indexd client
+    Returns:
+        None
+
+    """
+    object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
+    # check if 5aa object really exists
+    if blob_exists(bucket_name, object_key):
+        url = "gs://" + bucket_name + "/" + object_key
+        if indexd_utils.update_url(fi, indexclient, provider="gs", url=url):
+            logger.info("Successfully update indexd for {}".format(fi["id"]))
+        else:
+            logger.info("Can not update indexd for {}".format(fi["id"]))
+    else:
+        logger.error("{} which is 5aa bucket does not exist in dcf buckets.".format(fi["id"]))
 
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
@@ -390,6 +445,7 @@ def streaming(
         bucket_name(str): target google bucket name
         chunk_size_download(int): chunk size in bytes from downling data file
         blob_name(str): object name
+        total_size(int): the file size
     Returns:
         None
     """
@@ -431,6 +487,18 @@ def _is_completed_task(sess, task):
     return True
 
 
+def _check_and_handle_changed_acl_object(fi):
+    """
+    if object is changed acl, move it to the right bucket
+    """
+    bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
+    blob_name = "{}/{}".format(fi["id"], fi["file_name"])
+    bucket_name_reverse = bucket_name[:-5] + "-controlled" if "open" in fi["acl"] else bucket_name[:-11] + "-open"
+    if blob_exists(bucket_name_reverse, blob_name):
+        cmd = "gsutil mv gs://{}/{} gs://{}/{}".format(bucket_name_reverse, blob_name, bucket_name, blob_name)
+        subprocess.Popen(cmd, shell=True).wait()
+
+
 class JobInfo(object):
     def __init__(
         self,
@@ -451,9 +519,11 @@ class JobInfo(object):
                 "multi_part_upload_threads": 10,
                 "data_chunk_size": 1024*1024*5
             }
-            manifest_file(str): manifest file
-            thread_num(int): number of threads
+            files(list(str)): list of copying files
+            total_files(int): total number of files
             job_name(str): copying|indexing
+            copied_objects(dict): a dictionary of copied files with key is uuid/file_name
+            manager_ns(ManagerNamespace): for synchronization
             bucket(str): source bucket
 
         """
@@ -475,11 +545,27 @@ class JobInfo(object):
 def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start threads and log after they finish
+    Args:
+        thread_num(int): Number of threads/cores
+        global_config(dict): a configuration
+            {
+                "chunk_size_download": 1024,
+                "chunk_size_upload": 1024
+            }
+        job_name(str): job name
+        manifest_file(str): the name of the manifest
+    
+    Returns:
+        None
+
     """
-    if not IGNORED_FILES:
+    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
+
+    if not ignored_dict:
         raise UserError(
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
         )
+
     tasks, _ = utils.prepare_data(manifest_file, global_config)
 
     manager = Manager()
@@ -501,7 +587,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     # Make the Pool of workers
     pool = Pool(thread_num)
 
-    part_func = partial(exec_google_cmd, lock)
+    part_func = partial(exec_google_cmd, lock, ignored_dict)
 
     try:
         pool.map_async(part_func, jobInfos).get(9999999)

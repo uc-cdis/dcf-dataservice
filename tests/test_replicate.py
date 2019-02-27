@@ -50,6 +50,7 @@ def test_resumable_streaming_copy_called(
     mock_blob_exist.side_effect = [False, False]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
     scripts.utils.get_google_bucket_name.side_effect = ["test", "test"]
     exec_google_copy(
         {
@@ -59,6 +60,7 @@ def test_resumable_streaming_copy_called(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
+        {},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == True
@@ -88,6 +90,7 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
             "acl": "[u'open']",
         },
         {},
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
     assert scripts.indexd_utils.update_url.called == True
@@ -114,6 +117,7 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
             "acl": "[u'open']",
         },
         {},
+        {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
 
@@ -134,6 +138,7 @@ def test_resumable_streaming_copy_called_one_time(
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.google_replicate.fail_resumable_copy_blob = MagicMock()
     scripts.utils.get_google_bucket_name = MagicMock()
+    scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
     scripts.utils.get_google_bucket_name.return_value = "test"
     exec_google_copy(
         {
@@ -143,6 +148,7 @@ def test_resumable_streaming_copy_called_one_time(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
+        {},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
