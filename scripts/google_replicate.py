@@ -44,22 +44,36 @@ def bucket_exists(bucket_name):
     """
     client = storage.Client()
     bucket = client.bucket(bucket_name)
-    try:
-        return bucket.exists()
-    except Exception as e:
-        logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
-        return False
+    
+    tries = 0
+    while tries < NUM_TRIES:
+        try:
+            return bucket.exists()
+        except Exception as e:
+            time.sleep(300)
+            tries += 1
+    
+    logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
+    return False
 
 
 def blob_exists(bucket_name, blob_name):
     """
     check if blob/key exists or not!
     """
-    if bucket_exists(bucket_name):
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = Blob(blob_name, bucket)
-        return blob.exists()
+    tries = 0
+
+    while tries < NUM_TRIES:
+        try:
+            if bucket_exists(bucket_name):
+                client = storage.Client()
+                bucket = client.bucket(bucket_name)
+                blob = Blob(blob_name, bucket)
+                return blob.exists()
+        except Exception:
+            time.sleep(300)
+            tries += 1
+
     return False
 
 
@@ -141,7 +155,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
     try:
         bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
     except UserError as e:
-        msg = "can not copy {} to GOOGLE bucket. Detail {}. AAA {}".format(blob_name, e, PROJECT_ACL)
+        msg = "can not copy {} to GOOGLE bucket. Detail {}. {}".format(blob_name, e, PROJECT_ACL)
         logger.error(msg)
         return DataFlowLog(message=msg)
 
