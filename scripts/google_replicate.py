@@ -11,7 +11,10 @@ from google.cloud.storage import Blob
 from google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
-from cdislogging import get_logger
+from google.api_core.exceptions import BadRequest, Forbidden
+
+#from cdislogging import get_logger
+import logging as logger
 
 from indexclient.client import IndexClient
 
@@ -20,7 +23,7 @@ from errors import APIError, UserError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
 import indexd_utils
 
-# logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
+logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
@@ -28,7 +31,7 @@ DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
 NUM_TRIES = 30
 
-logger = get_logger("GoogleReplication")
+#logger = get_logger("GoogleReplication")
 
 
 class DataFlowLog(object):
@@ -49,11 +52,15 @@ def bucket_exists(bucket_name):
     while tries < NUM_TRIES:
         try:
             return bucket.exists()
-        except Exception as e:
+        except BadRequest:
+            return False
+        except Forbidden as e:
+            logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
+            return False
+        except Exception:
             time.sleep(300)
             tries += 1
-    
-    logger.error("Bucket is not accessible {}. Detail {}".format(bucket_name, e))
+
     return False
 
 
@@ -70,6 +77,8 @@ def blob_exists(bucket_name, blob_name):
                 bucket = client.bucket(bucket_name)
                 blob = Blob(blob_name, bucket)
                 return blob.exists()
+        except BadRequest:
+            return False
         except Exception:
             time.sleep(300)
             tries += 1
