@@ -4,6 +4,7 @@ import json
 
 import aws_replicate
 from deletion import delete_objects_from_cloud_resources
+from google_bucket_cleaning import generate_manfifest_for_cleaning
 
 
 def parse_arguments():
@@ -43,6 +44,13 @@ def parse_arguments():
     redact_cmd.add_argument("--redact_file", required=True)
     redact_cmd.add_argument("--log_bucket", required=True)
 
+    cleaning_cmd = subparsers.add_parser("cleaning")
+    cleaning_cmd.add_argument("--copied_fname", required=True)
+    cleaning_cmd.add_argument("--active_manifest", required=True)
+    cleaning_cmd.add_argument("--legacy_manifest", required=True)
+    cleaning_cmd.add_argument("--out_fname", required=True)
+
+
     return parser.parse_args()
 
 
@@ -60,7 +68,6 @@ if __name__ == "__main__":
             args.manifest_file,
             source_bucket,
         )
-        aws.run()
     elif args.action == "google_replicate":
         job_name = "copying"
         import google_replicate
@@ -75,6 +82,8 @@ if __name__ == "__main__":
 
     elif args.action == "readact":
         delete_objects_from_cloud_resources(args.redact_file, args.log_bucket)
+    elif args.action == "cleaning":
+        generate_manfifest_for_cleaning(args.out_fname, args.copied_fname, args.active_manifest, args.legacy_manifest)
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))

@@ -109,13 +109,19 @@ def prepare_data(manifest_file, global_config):
 
 def get_ignored_files(ignored_filename):
     """
-    get all the files in 5aa buckets and are in gdc full manifest
+    get all the files in 5aa buckets from ignored files
     """
     result = {}
     try:
         with open(ignored_filename, "rt") as f:
             csvReader = csv.DictReader(f, delimiter=",")
             for row in csvReader:
+                if row["gdc_uuid"] is None:
+                    print row
+                    continue
+                if len(row["gdc_uuid"]) < 20:
+                    print row
+                    continue
                 if urlparse(row["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d":
                     row["gcs_object_size"] = int(row["gcs_object_size"])
                     result[row["gdc_uuid"]] = row
@@ -146,3 +152,21 @@ def get_structured_object_key(uuid, ignored_dict):
         return None
 
     return None
+
+
+def write_csv(filename, files, attr=None, fieldnames=None):
+    def on_key(element):
+        return element[attr]
+
+    if attr:
+        sorted_files = sorted(files, key=on_key)
+    else:
+        sorted_files = files
+    if not files:
+        return
+    fieldnames =  fieldnames or files[0].keys()
+    with open(filename, mode="w") as outfile:
+        writer = csv.DictWriter(outfile, delimiter="\t", fieldnames=fieldnames)
+        writer.writeheader()
+        for f in sorted_files:
+            writer.writerow(f)

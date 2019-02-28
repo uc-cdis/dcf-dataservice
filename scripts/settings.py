@@ -35,4 +35,4 @@ except Exception as e:
     print("Can not read GDC_datasets_access_control.csv file. Detail {}".format(e))
 
 
-IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
+IGNORED_FILES = "/Users/giangbui/Projects/dcf-dataservice/manifest/Data/ignored_files_manifest.csv"
