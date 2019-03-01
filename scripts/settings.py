@@ -20,3 +20,4 @@ PROJECT_ACL = {}
 with open("/dcf-dataservice/GDC_project_map.json", "r") as f:
     PROJECT_ACL = json.loads(f.read())
 
+IGNORED_FILES = "./ignored_files_manifest.csv"

@@ -19,7 +19,7 @@ import logging as logger
 from indexclient.client import IndexClient
 
 import utils
-from errors import APIError, UserError
+from errors import APIError, UserError, StreamError
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
 import indexd_utils
 
@@ -148,7 +148,7 @@ def delete_object(sess, bucket_name, blob_name):
     return sess.request(method="DELETE", url=url)
 
 
-def exec_google_copy(fi, ignored_dict, global_config):
+def exec_google_copy(fi, global_config):
     """
     copy a file to google bucket.
     Args:
@@ -203,8 +203,10 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     fi["id"], fi["size"] * 1.0 / 1000 / 1000
                 )
             )
-
-            resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+            try:
+                resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+            except StreamError as e:
+                logger.warn(e)
 
             if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 res = delete_object(sess, bucket_name, blob_name)
@@ -302,9 +304,12 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
                         fi["id"], fi["size"] * 1.0 / 1000 / 1000
                     )
                 )
-                resumable_streaming_copy(
-                    fi, client, bucket_name, blob_name, jobinfo.global_config
-                )
+                try:
+                    resumable_streaming_copy(
+                        fi, client, bucket_name, blob_name, jobinfo.global_config
+                    )
+                except StreamError as e:
+                    logger.warn(e)
                 if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                     delete_object(sess, bucket_name, blob_name)
                 else:
@@ -437,7 +442,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             fi["size"],
         )
     except Exception:
-        raise APIError(
+        raise StreamError(
             "GCSObjectStreamUpload: Can not upload {}".format(fi.get("id", ""))
         )
 

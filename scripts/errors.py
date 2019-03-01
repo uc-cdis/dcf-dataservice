@@ -4,3 +4,7 @@ class UserError(Exception):
 
 class APIError(Exception):
     pass
+
+
+class StreamError(Exception):
+    pass
