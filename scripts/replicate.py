@@ -60,7 +60,6 @@ if __name__ == "__main__":
             args.manifest_file,
             source_bucket,
         )
-        aws.run()
     elif args.action == "google_replicate":
         job_name = "copying"
         import google_replicate
