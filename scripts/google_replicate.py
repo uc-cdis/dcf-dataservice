@@ -161,6 +161,11 @@ def exec_google_copy(fi, ignored_dict, global_config):
     Returns:
         DataFlowLog
     """
+    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
+    if not ignored_dict:
+        raise UserError(
+            "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
+        )
     try:
         bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
     except UserError as e:
