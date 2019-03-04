@@ -108,14 +108,14 @@ def prepare_data(manifest_file, global_config):
     return tasks, len(copying_files)
 
 
-def get_ignored_files(ignored_filename):
+def get_ignored_files(ignored_filename, delimiter=","):
     """
     get all the files in 5aa buckets and are in gdc full manifest
     """
     result = {}
     try:
         with open(ignored_filename, "rt") as f:
-            csvReader = csv.DictReader(f, delimiter=",")
+            csvReader = csv.DictReader(f, delimiter=delimiter)
             for row in csvReader:
                 if urlparse(row["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d":
                     row["gcs_object_size"] = int(row["gcs_object_size"])

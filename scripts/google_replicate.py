@@ -1,3 +1,4 @@
+import os
 import base64
 import requests
 import urllib
@@ -77,6 +78,8 @@ def blob_exists(bucket_name, blob_name):
                 bucket = client.bucket(bucket_name)
                 blob = Blob(blob_name, bucket)
                 return blob.exists()
+            else:
+                return False
         except BadRequest:
             return False
         except Exception:
@@ -148,7 +151,7 @@ def delete_object(sess, bucket_name, blob_name):
     return sess.request(method="DELETE", url=url)
 
 
-def exec_google_copy(fi, global_config):
+def exec_google_copy(fi, ignored_dict, global_config):
     """
     copy a file to google bucket.
     Args:
@@ -161,10 +164,15 @@ def exec_google_copy(fi, global_config):
     Returns:
         DataFlowLog
     """
-    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+
     if not ignored_dict:
         raise UserError(
-            "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
+            "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.py is configured correctly!!!"
         )
     try:
         bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
@@ -172,25 +180,20 @@ def exec_google_copy(fi, global_config):
         msg = "can not copy {} to GOOGLE bucket. Detail {}. {}".format(blob_name, e, PROJECT_ACL)
         logger.error(msg)
         return DataFlowLog(message=msg)
-
-    if fi["id"] in ignored_dict:
-        logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
-        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, jobinfo.indexclient)
-        return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
-
-    indexd_client = IndexClient(
-        INDEXD["host"],
-        INDEXD["version"],
-        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-    )
-    client = storage.Client()
-    sess = AuthorizedSession(client._credentials)
-    blob_name = fi.get("id") + "/" + fi.get("file_name")
-
+    
     if not bucket_exists(bucket_name):
         msg = "There is no bucket with provided name {}\n".format(bucket_name)
         logger.error(msg)
         return DataFlowLog(message=msg)
+
+    if fi["id"] in ignored_dict:
+        logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
+        _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexd_client)
+        return DataFlowLog(message="{} is in the ignored list".format(fi["id"]))
+
+    client = storage.Client()
+    sess = AuthorizedSession(client._credentials)
+    blob_name = fi.get("id") + "/" + fi.get("file_name")
 
     _check_and_handle_changed_acl_object(fi)
 
@@ -281,6 +284,10 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
             msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
             logger.error(msg)
 
+        if not bucket_exists(bucket_name):
+            msg = "There is no bucket with provided name {}\n".format(bucket_name)
+            logger.error(msg)
+            continue
         # ignore object if they are in 5aa bucket
         if fi["id"] in ignored_dict:
             logger.info("{} is ignored. Start to check indexd for u5aa objects".format(fi["id"]))
@@ -288,9 +295,6 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
             continue
 
         blob_name = fi.get("id") + "/" + fi.get("file_name")
-        if not bucket_exists(bucket_name):
-            msg = "There is no bucket with provided name {}\n".format(bucket_name)
-            logger.error(msg)
 
         _check_and_handle_changed_acl_object(fi)
 

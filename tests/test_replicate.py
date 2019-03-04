@@ -60,7 +60,7 @@ def test_resumable_streaming_copy_called(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
-        {},
+        {"11111111": "test"},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == True
@@ -89,7 +89,7 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
-        {},
+        {"11111111": "test"},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
@@ -116,7 +116,7 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
-        {},
+        {"11111111": "test"},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.called == False
@@ -148,7 +148,7 @@ def test_resumable_streaming_copy_called_one_time(
             "project_id": "TCGA",
             "acl": "[u'open']",
         },
-        {},
+        {"11111111": "test"},
         {},
     )
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
