@@ -28,8 +28,8 @@ logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
-DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
-DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
+DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
+DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
 
 #logger = get_logger("GoogleReplication")
@@ -61,7 +61,7 @@ def bucket_exists(bucket_name):
         except Exception:
             time.sleep(300)
             tries += 1
-
+    logger.error("Can not check the status of the bucket {} after multiple attempts".format(bucket_name))
     return False
 
 
@@ -86,6 +86,7 @@ def blob_exists(bucket_name, blob_name):
             time.sleep(300)
             tries += 1
 
+    logger.error("Can not check the status of the blob {} after multiple attempts".format(blob_name))
     return False
 
 
@@ -206,10 +207,16 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     fi["id"], fi["size"] * 1.0 / 1000 / 1000
                 )
             )
-            try:
-                resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
-            except StreamError as e:
-                logger.warn(e)
+            tries = 0
+            while tries < NUM_TRIES:
+                try:
+                    resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config)
+                    break
+                except StreamError as e:
+                    logger.warn(e)
+                    tries += 1
+            if tries == NUM_TRIES:
+                logger.error("Can not stream {} after multiple attemps".format(fi("id")))
 
             if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 res = delete_object(sess, bucket_name, blob_name)
@@ -486,9 +493,9 @@ def streaming(
             if chunk:  # filter out keep-alive new chunks
                 progress += s.write(chunk)
                 number_upload += 1
-                if number_upload % 500 == 0:
+                if number_upload % int(10*DEFAULT_CHUNK_SIZE_DOWNLOAD/chunk_size_download) == 0:
                     logger.info(
-                        "Uploading {}. Size {} (MB). Progress {}".format(
+                        "Uploading {}. Size {} (MB). Progress {}%".format(
                             blob_name,
                             total_size * 1.0 / 1000 / 1000,
                             100.0 * progress / total_size,
