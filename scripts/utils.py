@@ -2,6 +2,9 @@ import os
 import boto3
 import csv
 import random
+from google.cloud import storage
+import threading
+from threading import Thread
 from urlparse import urlparse
 from errors import UserError
 
@@ -77,7 +80,7 @@ def generate_chunk_data_list(size, data_size):
     return L
 
 
-def prepare_data(manifest_file, global_config):
+def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=None):
     """
     Read data file info from manifest and organize them into groups.
     Each group contains files which should be copied to the same bucket
@@ -101,6 +104,14 @@ def prepare_data(manifest_file, global_config):
 
     chunk_size = global_config.get("chunk_size", 1)
     tasks = []
+
+    if copied_objects:
+        filtered_copying_files = []
+        for fi in copying_files:
+            target_bucket = get_aws_bucket_name(fi, project_acl)
+            if "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"]) not in copied_objects:
+                filtered_copying_files.append(fi)
+        copying_files = filtered_copying_files
 
     for idx in range(0, len(copying_files), chunk_size):
         tasks.append(copying_files[idx: idx + chunk_size])
@@ -147,3 +158,48 @@ def get_structured_object_key(uuid, ignored_dict):
         return None
 
     return None
+
+
+def build_object_dataset_gs(PROJECT_ACL):
+    mutexLock = threading.Lock()
+    copied_object = {}
+
+    def build_source_bucket_dataset(bucket_name, objects):
+        """
+        build source bucket dataset for lookup
+        to avoid list object operations
+        """
+        storage_client = storage.Client()
+        bucket = storage_client.get_bucket(bucket_name)
+
+        blobs = bucket.list_blobs()
+        result = {}
+        for blob in blobs:
+            result[bucket_name+"/"+blob.name] = {"bucket": bucket_name, "Size": blob.size}
+
+        mutexLock.acquire()
+        objects.update(result)
+        mutexLock.release()
+
+    threads = []
+    target_bucket_names = set()
+    for _, bucket_info in PROJECT_ACL.iteritems():
+        for label in ["open", "controlled"]:
+            bucket_name = bucket_info["gs_bucket_prefix"] + "-" + label
+            target_bucket_names.add(bucket_name)
+
+    for target_bucket_name in target_bucket_names:
+        threads.append(
+            Thread(
+                target=build_source_bucket_dataset,
+                args=(target_bucket_name, copied_object),
+            )
+        )
+
+    for th in threads:
+        th.start()
+
+    for th in threads:
+        th.join()
+
+    return copied_object

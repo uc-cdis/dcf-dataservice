@@ -12,6 +12,8 @@ from apache_beam.options.pipeline_options import SetupOptions
 import json
 
 from scripts.google_replicate import exec_google_copy
+from scripts.utils import get_ignored_files
+from scripts.settings import IGNORED_FILES
 
 try:
     unicode  # pylint: disable=unicode-builtin
@@ -19,6 +21,11 @@ except NameError:
     unicode = str
 
 FILE_HEADERS = ["id", "file_name", "size", "md5", "acl", "project_id"]
+
+
+class PipePrepare(object):
+    # class variable
+    ignored_list = get_ignored_files(IGNORED_FILES, "\t")
 
 
 class FileCopyingDoFn(beam.DoFn):
@@ -39,7 +46,7 @@ class FileCopyingDoFn(beam.DoFn):
         fi = dict(zip(FILE_HEADERS, words))
         fi["size"] = int(fi["size"])
 
-        return [(fi, exec_google_copy(fi, self.global_config))]
+        return [(fi, exec_google_copy(fi, PipePrepare.ignored_list, self.global_config))]
 
 
 def format_result(result):

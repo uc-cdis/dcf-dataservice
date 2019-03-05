@@ -10,6 +10,7 @@ except ImportError:
 
 from multiprocessing import Manager
 
+import boto3
 import pytest
 import google
 import scripts.aws_replicate
@@ -211,10 +212,14 @@ def test_call_aws_cli_called():
 
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
+
     utils.get_aws_bucket_name.return_value = "TCGA-open"
     
-    source_objects = {"11111111111111111/abc.bam": {"StorageClass": "STANDARD"}}
-    copied_objects = {}
+    scripts.aws_replicate.bucket_exists = MagicMock()
+    scripts.aws_replicate.bucket_exists.return_value = True
+    scripts.aws_replicate.object_exists = MagicMock()
+    scripts.aws_replicate.object_exists.return_value = True
+
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
@@ -225,8 +230,8 @@ def test_call_aws_cli_called():
             gen_mock_manifest_data()[0:1],
             1,
             "",
-            copied_objects,
-            source_objects,
+            {},
+            {},
             manager_ns,
             "bucket",
         )
@@ -244,6 +249,11 @@ def test_call_streamming_method_called():
     scripts.aws_replicate.stream_object_from_gdc_api = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
     utils.get_aws_bucket_name.return_value = "TCGA-open"
+
+    scripts.aws_replicate.bucket_exists = MagicMock()
+    scripts.aws_replicate.bucket_exists.return_value = True
+    scripts.aws_replicate.object_exists = MagicMock()
+    scripts.aws_replicate.object_exists.return_value = False
     
     source_objects = {"11111111111111111/abc.bam": {"StorageClass": "GLACIER"}}
     copied_objects = {}
