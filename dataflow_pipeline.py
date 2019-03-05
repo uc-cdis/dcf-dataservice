@@ -12,6 +12,12 @@ from apache_beam.options.pipeline_options import SetupOptions
 import json
 
 from scripts.google_replicate import exec_google_copy
+from scripts.utils import (
+    get_ignored_files,
+    build_object_dataset_gs,
+    prepare_txt_manifest_google_dataflow
+)
+from scripts.settings import IGNORED_FILES, PROJECT_ACL
 
 try:
     unicode  # pylint: disable=unicode-builtin
@@ -19,6 +25,11 @@ except NameError:
     unicode = str
 
 FILE_HEADERS = ["id", "file_name", "size", "md5", "acl", "project_id"]
+
+
+class PipePrepare(object):
+    # class variable
+    ignored_dict = get_ignored_files(IGNORED_FILES, "\t")
 
 
 class FileCopyingDoFn(beam.DoFn):
@@ -39,7 +50,7 @@ class FileCopyingDoFn(beam.DoFn):
         fi = dict(zip(FILE_HEADERS, words))
         fi["size"] = int(fi["size"])
 
-        return [(fi, exec_google_copy(fi, self.global_config))]
+        return [(fi, exec_google_copy(fi, PipePrepare.ignored_dict, self.global_config))]
 
 
 def format_result(result):
@@ -90,9 +101,18 @@ def run(argv=None):
     pipeline_options.view_as(SetupOptions).save_main_session = True
     p = beam.Pipeline(options=pipeline_options)
 
+    copied_objects = build_object_dataset_gs(PROJECT_ACL)
+    input_path = prepare_txt_manifest_google_dataflow(
+        known_args.input,
+        "./data_flow_input.txt",
+        copied_objects,
+        PROJECT_ACL,
+        PipePrepare.ignored_dict
+    )
+
     # Read the text file[pattern] into a PCollection.
     lines = p | "read" >> ReadFromText(
-        file_pattern=known_args.input, skip_header_lines=1
+        file_pattern=input_path, skip_header_lines=1
     )
     result = lines | "copy" >> beam.ParDo(FileCopyingDoFn(global_config))
     formated_result = result | "format" >> beam.Map(format_result)
