@@ -37,24 +37,27 @@ def exec_validation(lock, ignored_dict, indexclient, jobinfo):
         except UserError as e:
             logger.error(e)
 
-        # ignore object if they are in 5aa bucket
-        if fi["id"] in ignored_dict:
-            object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
-            if blob_exists(bucket_name, object_key):
-                fi["gs_url"], fi["indexd_url"] = object_key, indexclient(fi.get("id", ""))
-            if not fi["indexd_url"]:
-                logger.warn("{} is not indexed".format(fi["id"]))
-            continue
+        try:
+            if fi["id"] in ignored_dict:
+                object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
+                if blob_exists(bucket_name, object_key):
+                    fi["gs_url"], fi["indexd_url"] = object_key, indexclient(fi.get("id", ""))
+                if not fi["indexd_url"]:
+                    logger.warn("{} is not indexed".format(fi["id"]))
+                continue
 
-        blob_name = fi.get("id") + "/" + fi.get("file_name")
+            blob_name = fi.get("id") + "/" + fi.get("file_name")
 
-        if blob_exists(bucket_name, blob_name):
-            fi["gs_url"] = "gs://{}/{}".format(bucket_name, blob_name)
-            fi["indexd_url"] = indexclient(fi.get("id", ""))
-            if not fi["indexd_url"]:
-                logger.warn("{} is not indexed".format(fi["id"]))
-        else:
-            logger.warn("{} is not copied".format(fi["id"]))
+            if blob_exists(bucket_name, blob_name):
+                fi["gs_url"] = "gs://{}/{}".format(bucket_name, blob_name)
+                fi["indexd_url"] = indexclient(fi.get("id", ""))
+                if not fi["indexd_url"]:
+                    logger.warn("{} is not indexed".format(fi["id"]))
+            else:
+                logger.warn("{} is not copied".format(fi["id"]))
+        except Exception as e:
+            logger.erro(e)
+            time.sleep(120)
 
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(jobinfo.files)
