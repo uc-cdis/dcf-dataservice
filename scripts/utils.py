@@ -266,3 +266,23 @@ def build_object_dataset_gs(PROJECT_ACL):
         th.join()
 
     return copied_object
+
+
+def write_csv(filename, files, sorted_attr=None, fieldnames=None):
+    def on_key(element):
+        return element[sorted_attr]
+    import csv
+    if sorted_attr:
+        sorted_files = sorted(files, key=on_key)
+    else:
+        sorted_files = files
+
+    if not files:
+        return
+    fieldnames = fieldnames or files[0].keys()
+    with open(filename, mode="w") as outfile:
+        writer = csv.DictWriter(outfile, delimiter="\t", fieldnames=fieldnames)
+        writer.writeheader()
+
+        for f in sorted_files:
+            writer.writerow(f)
