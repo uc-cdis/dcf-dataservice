@@ -122,10 +122,8 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
         filtered_copying_files = []
         for fi in copying_files:
             target_bucket = get_aws_bucket_name(fi, project_acl)
-            if (
-                "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
-                not in copied_objects
-            ):
+            key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
+            if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
         copying_files = filtered_copying_files
 
