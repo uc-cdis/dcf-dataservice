@@ -2,13 +2,16 @@ import os
 import boto3
 import csv
 import random
+from google.cloud import storage
+import threading
+from threading import Thread
 from urlparse import urlparse
 from errors import UserError
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
-        project_info = PROJECT_ACL[fi.get("project_id")]
+        project_info = PROJECT_ACL[fi.get("project_id").split("-")[0]]
     except KeyError:
         raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
 
@@ -50,6 +53,19 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
 
 
+def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
+    """
+    Get the manifest from gs
+    pass to get_fileinfo_list_from_manifest to get 
+    list of file info dictionary (size, md5, etc.)
+    """
+    import subprocess
+    cmd = "gsutil cp {} ./tmp.csv".format(url_manifest)
+    subprocess.Popen(cmd, shell=True).wait()
+
+    return get_fileinfo_list_from_csv_manifest("./tmp.csv", start, end)
+
+
 def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
     """
     get file info from csv manifest
@@ -76,7 +92,8 @@ def generate_chunk_data_list(size, data_size):
 
     return L
 
-def prepare_data(manifest_file, global_config):
+
+def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=None):
     """
     Read data file info from manifest and organize them into groups.
     Each group contains files which should be copied to the same bucket
@@ -101,27 +118,81 @@ def prepare_data(manifest_file, global_config):
     chunk_size = global_config.get("chunk_size", 1)
     tasks = []
 
+    if copied_objects:
+        filtered_copying_files = []
+        for fi in copying_files:
+            target_bucket = get_aws_bucket_name(fi, project_acl)
+            if (
+                "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
+                not in copied_objects
+            ):
+                filtered_copying_files.append(fi)
+        copying_files = filtered_copying_files
+
     for idx in range(0, len(copying_files), chunk_size):
-        tasks.append(copying_files[idx: idx + chunk_size])
+        tasks.append(copying_files[idx : idx + chunk_size])
 
     return tasks, len(copying_files)
 
 
-def get_ignored_files(ignored_filename):
+def prepare_txt_manifest_google_dataflow(
+    gs_manifest_file, local_manifest_txt_file, copied_objects=None, project_acl=None, ignored_dict=None
+):
+    """
+    Since Apache Beam does not support csv format, convert the csv to txt file
+    """
+    copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
+    if copied_objects:
+        filtered_copying_files = []
+        for fi in copying_files:
+            if fi["id"] in ignored_dict:
+                continue
+            target_bucket = get_google_bucket_name(fi, project_acl)
+            if (
+                "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
+                not in copied_objects
+            ):
+                filtered_copying_files.append(fi)
+        copying_files = filtered_copying_files
+
+    with open(local_manifest_txt_file, "w") as fw:
+        fw.write("id\tfile_name\tsize\tmd5\tacl\tproject_id")
+        for fi in copying_files:
+            fw.write(
+                "\n{}\t{}\t{}\t{}\t{}\t{}".format(
+                    fi["id"],
+                    fi["file_name"].replace(" ", "_"),
+                    fi["size"],
+                    fi["md5"],
+                    fi["acl"].replace(" ", ""),
+                    fi["project_id"],
+                )
+            )
+
+    import subprocess
+    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".csv", ".txt"))
+    subprocess.Popen(cmd, shell=True).wait()
+    return gs_manifest_file.replace(".csv", ".txt")
+
+
+def get_ignored_files(ignored_filename, delimiter=","):
     """
     get all the files in 5aa buckets and are in gdc full manifest
     """
     result = {}
     try:
         with open(ignored_filename, "rt") as f:
-            csvReader = csv.DictReader(f, delimiter=",")
+            csvReader = csv.DictReader(f, delimiter=delimiter)
             for row in csvReader:
-                if urlparse(row["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d":
+                if (
+                    urlparse(row["gcs_object_url"]).netloc
+                    == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
+                ):
                     row["gcs_object_size"] = int(row["gcs_object_size"])
                     result[row["gdc_uuid"]] = row
     except Exception as e:
         print("Can not read ignored_files_manifest.csv file. Detail {}".format(e))
-    
+
     return result
 
 
@@ -138,7 +209,8 @@ def get_structured_object_key(uuid, ignored_dict):
             element = ignored_dict[uuid]
             if (
                 uuid == element["gdc_uuid"]
-                and urlparse(element["gcs_object_url"]).netloc == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
+                and urlparse(element["gcs_object_url"]).netloc
+                == "5aa919de-0aa0-43ec-9ec3-288481102b6d"
             ):
                 res = urlparse(element["gcs_object_url"])
                 return os.path.join(*res.path.split("/")[2:])
@@ -146,3 +218,51 @@ def get_structured_object_key(uuid, ignored_dict):
         return None
 
     return None
+
+
+def build_object_dataset_gs(PROJECT_ACL):
+    mutexLock = threading.Lock()
+    copied_object = {}
+
+    def build_source_bucket_dataset(bucket_name, objects):
+        """
+        build source bucket dataset for lookup
+        to avoid list object operations
+        """
+        storage_client = storage.Client()
+        bucket = storage_client.get_bucket(bucket_name)
+
+        blobs = bucket.list_blobs()
+        result = {}
+        for blob in blobs:
+            result[bucket_name + "/" + blob.name] = {
+                "bucket": bucket_name,
+                "Size": blob.size,
+            }
+
+        mutexLock.acquire()
+        objects.update(result)
+        mutexLock.release()
+
+    threads = []
+    target_bucket_names = set()
+    for _, bucket_info in PROJECT_ACL.iteritems():
+        for label in ["open", "controlled"]:
+            bucket_name = bucket_info["gs_bucket_prefix"] + "-" + label
+            target_bucket_names.add(bucket_name)
+
+    for target_bucket_name in target_bucket_names:
+        threads.append(
+            Thread(
+                target=build_source_bucket_dataset,
+                args=(target_bucket_name, copied_object),
+            )
+        )
+
+    for th in threads:
+        th.start()
+
+    for th in threads:
+        th.join()
+
+    return copied_object
