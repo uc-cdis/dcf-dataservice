@@ -1,6 +1,5 @@
 # run with 
-# gen3 runjob google-bucket-replicate-job.yaml PROJECT google_project INPUT_BUCKET input_bucket LOG_BUCKET log_bucket
-# Ex. gen3 runjob dcf-dataservice/jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 INPUT_BUCKET data-flow-code LOG_BUCKET data-flow-code
+# Ex. gen3 runjob jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 MANIFEST_FILE gs://data-flow-code/input/manifest_big_head IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -19,9 +18,6 @@ spec:
         - name: setting-volume
           secret:
             secretName: "dcf-dataservice-settings-secrets"
-        - name: project-acl-volume
-          configMap:
-            name: project-acl-manifest
         - name: creds-json-volume
           secret:
             secretName: "dcf-dataservice-json-secret"
@@ -32,8 +28,12 @@ spec:
         env:
           - name: PROJECT
             GEN3_PROJECT
-          - name: INPUT_BUCKET
-            GEN3_INPUT_BUCKET
+          - name: MAX_WORKERS
+            GEN3_MAX_WORKERS
+          - name: MANIFEST_FILE
+            GEN3_MANIFEST_FILE
+          - name: IGNORED_FILE
+            GEN3_IGNORED_FILE
           - name: LOG_BUCKET
             GEN3_LOG_BUCKET
         volumeMounts:
@@ -43,9 +43,6 @@ spec:
           - name: "setting-volume"
             mountPath: "/secrets/dcf_dataservice_settings"
             subPath: "dcf_dataservice_settings"
-          - name: "project-acl-volume"
-            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
-            subPath: "GDC_datasets_access_control.csv"
           - name: "creds-json-volume"
             mountPath: "/secrets/dcf_dataservice_credentials.json"
             subPath: "dcf_dataservice_credentials.json"
@@ -54,7 +51,8 @@ spec:
           - "-c"
           - |
             cat /secrets/dcf_dataservice_settings > ./scripts/settings.py
+            gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
-            python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --staging_location gs://$LOG_BUCKET/staging --temp_location gs://$LOG_BUCKET/temp --output gs://$LOG_BUCKET/output --setup_file ./setup.py --input gs://$INPUT_BUCKET/input/manifest --extra_package indexclient-1.5.2.zip
+            python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --autoscaling_algorithm NONE --num_worker $MAX_WORKERS --maxNumWorkers $MAX_WORKERS --staging_location gs://$LOG_BUCKET/staging --temp_location gs://$LOG_BUCKET/temp --output gs://$LOG_BUCKET/output --setup_file ./setup.py --input $MANIFEST_FILE --extra_package indexclient-1.5.2.zip
       restartPolicy: Never

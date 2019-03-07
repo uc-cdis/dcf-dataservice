@@ -23,15 +23,21 @@ spec:
         - name: cred-volume
           secret:
             secretName: "dcf-aws-creds-secret"
-        - name: project-acl-volume
+        - name: project-map-volume
           configMap:
-            name: project-acl-manifest
+            name: project-map-manifest
         - name: creds-json-volume
           secret:
             secretName: "dcf-dataservice-json-secret"
       containers:
       - name: awsreplicate
         image: quay.io/cdis/dcf-dataservice:master
+        resources:
+          limits:
+            memory: "32Gi"
+          requests:
+            cpu: "8"
+            memory: "8Gi"
         imagePullPolicy: Always
         env:
           - name: GDC_BUCKET_NAME
@@ -48,9 +54,9 @@ spec:
           - name: cred-volume
             mountPath: "/root/.aws/credentials"
             subPath: credentials
-          - name: "project-acl-volume"
-            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
-            subPath: "GDC_datasets_access_control.csv"
+          - name: "project-map-volume"
+            mountPath: "/dcf-dataservice/GDC_project_map.json"
+            subPath: "GDC_project_map.json"
           - name: "creds-json-volume"
             mountPath: "/secrets/dcf_dataservice_credentials.json"
             subPath: "dcf_dataservice_credentials.json"
@@ -65,5 +71,5 @@ spec:
             aws configure set default.s3.max_concurrent_requests 1000
             aws configure set default.s3.max_queue_size 10000
             python scripts/replicate.py aws_replicate --bucket $GDC_BUCKET_NAME --thread_num $THREAD_NUM --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": $CHUNK_SIZE, \"log_bucket\": \"$LOG_BUCKET\"}"
-            python scripts/replicate.py indexing  --thread_num 20 --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": 3, \"log_bucket\": \"$LOG_BUCKET\"}"
+            # python scripts/replicate.py indexing  --thread_num 20 --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": 3, \"log_bucket\": \"$LOG_BUCKET\"}"
       restartPolicy: Never

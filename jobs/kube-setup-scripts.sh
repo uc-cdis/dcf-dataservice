@@ -31,10 +31,10 @@ if [[ -d ${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice ]]; then
       g3kubectl create secret generic dcf-dataservice-settings-secrets --from-file=dcf_dataservice_settings=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/dcf_dataservice_settings
    fi
 
-  if ! g3kubectl get configmaps/project-acl-manifest > /dev/null 2>&1; then
-     if [[ ! -f "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_datasets_access_control.csv" ]]; then
-       touch "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_datasets_access_control.csv"
+  if ! g3kubectl get configmaps/project-map-manifest > /dev/null 2>&1; then
+     if [[ ! -f "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_project_map.json" ]]; then
+       touch "${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_project_map.json"
      fi
-     g3kubectl create configmap project-acl-manifest --from-file=GDC_datasets_access_control.csv=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_datasets_access_control.csv
+     g3kubectl create configmap project-map-manifest --from-file=GDC_project_map.json=${WORKSPACE}/${vpc_name}/apis_configs/dcf_dataservice/GDC_project_map.json
   fi
 fi
