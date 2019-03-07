@@ -31,7 +31,7 @@ def exec_validation(lock, ignored_dict, indexclient, jobinfo):
 
     for fi in jobinfo.files:
 
-        fi["gs_url"], fi["indexd_url"]  = None, None
+        fi["gs_url"], fi["indexd_url"] = None, None
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
