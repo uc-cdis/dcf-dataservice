@@ -106,3 +106,4 @@ venv.bak/
 google_credentials.json
 dcf_dataservice_credentials.json
 scripts/settings.bk
+scripts/settings.py
