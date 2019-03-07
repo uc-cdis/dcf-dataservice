@@ -1,4 +1,5 @@
 import time
+import subprocess
 from multiprocessing import Pool, Manager
 from functools import partial
 from google_replicate import bucket_exists, blob_exists, JobInfo
@@ -134,9 +135,10 @@ def run(thread_num, global_config, job_name, manifest_file, out_manifest):
 
     files = utils.get_fileinfo_list_from_gs_manifest(manifest_file)
     for fi in files:
-        fi["gs_url", fi["indexd_url"] = None, None
+        fi["gs_url"], fi["indexd_url"] = None, None
         if fi["id"] in lookup_dict:
-            fi["gs_url", fi["indexd_url"] = lookup_dict[fi["id"]]["gs_url"], lookup_dict[fi["id"]]["indexd_url"]
+            fi["gs_url"], fi["indexd_url"] = lookup_dict[fi["id"]]["gs_url"], lookup_dict[fi["id"]]["indexd_url"]
 
     utils.write_csv("./tmp.csv", files)
     cmd = "gsutil cp ./tmp.csv {}".format(out_manifest)
+    subprocess.Popen(cmd, shell=True).wait()
