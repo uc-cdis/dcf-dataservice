@@ -155,7 +155,8 @@ def bucket_exists(s3, bucket_name):
 
 def object_exists(s3, bucket_name, key):
     """
-    check if object exists or not
+    check if object exists or not. If object storage is GLACIER, the head_object will return 403
+    The meaning of the function here is to check if the object exists in the maner of downloadable
     Args:
         s3(s3client): s3 client
         bucket_name(str): the name of the bucket
@@ -170,7 +171,7 @@ def object_exists(s3, bucket_name, key):
         return True
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
-        if error_code == 404:
+        if error_code in {404, 403}:
             return False
         else:
             logger.error("Something wrong with checking object {} in bucket {}. Detail {}".format(key, bucket_name,e))
@@ -274,7 +275,7 @@ def exec_aws_copy(lock, jobinfo):
             continue
 
         try:
-            if not bucket_exists(target_bucket):
+            if not bucket_exists(s3, target_bucket):
                 logger.error("There is no bucket with provided name {}\n".format(target_bucket))
                 continue
 
@@ -300,7 +301,6 @@ def exec_aws_copy(lock, jobinfo):
 
             # only copy ones not exist in target buckets
             if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
-            #if not object_exists(s3, target_bucket, object_key):
                 source_key = object_key
                 if not object_exists(s3, jobinfo.bucket, source_key):
                     try:
@@ -309,7 +309,7 @@ def exec_aws_copy(lock, jobinfo):
                             fi["url"],
                         ).group(0)
 
-                        if not object_exists(jobinfo.bucket, source_key):
+                        if not object_exists(s3, jobinfo.bucket, source_key):
                             source_key = None
                     except (AttributeError, TypeError):
                         source_key = None
@@ -720,12 +720,13 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     start processes and log after they finish
     """
     copied_objects, source_objects = {}, {}
-    
+
     if job_name != "indexing":
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
 
     tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+
     logger.info("Total files need to be replicated: {}".format(total_files))
 
     manager = Manager()
