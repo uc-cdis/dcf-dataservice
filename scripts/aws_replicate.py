@@ -718,8 +718,6 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     if job_name != "indexing":
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
-    
-    return
 
     tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
     logger.info("Total files need to be replicated: {}".format(total_files))
