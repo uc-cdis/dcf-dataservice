@@ -84,6 +84,7 @@ def build_object_dataset(project_acl, awsbucket):
     mutexLock = threading.Lock()
     copied_objects = {}
     source_objects = {}
+    client = boto3.client("s3")
 
     def list_objects(bucket_name, objects):
         """
@@ -94,8 +95,8 @@ def build_object_dataset(project_acl, awsbucket):
         result = {}
 
         try:
-            client = boto3.client("s3")
             paginator = client.get_paginator("list_objects_v2")
+            print("start to list objects in {}".format(bucket_name))
             pages = paginator.paginate(Bucket=bucket_name, RequestPayer="requester")
             for page in pages:
                 for obj in page["Contents"]:
@@ -104,8 +105,8 @@ def build_object_dataset(project_acl, awsbucket):
                         "Size": obj["Size"],
                         "Bucket": bucket_name,
                     }
-        except KeyError:
-            logger.info("There is no object in {}".format(bucket_name))
+        except KeyError as e:
+            logger.error("Something wrong with listing objects in {}. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
             logger.error(
                 "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
@@ -717,6 +718,8 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     if job_name != "indexing":
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
+    
+    return
 
     tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
     logger.info("Total files need to be replicated: {}".format(total_files))
