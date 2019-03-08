@@ -63,7 +63,7 @@ def exec_validation(lock, ignored_dict, indexclient, jobinfo):
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(jobinfo.files)
     lock.release()
-    if jobinfo.manager_ns.total_processed_files % 100 == 0:
+    if jobinfo.manager_ns.total_processed_files % 1000 == 0:
         logger.info(jobinfo.manager_ns.total_processed_files)
 
     return fi
