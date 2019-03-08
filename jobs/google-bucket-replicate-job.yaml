@@ -24,6 +24,10 @@ spec:
       containers:
       - name: googlereplicate
         image: quay.io/cdis/dcf-dataservice:master
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
         imagePullPolicy: Always
         env:
           - name: PROJECT
