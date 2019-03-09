@@ -42,7 +42,7 @@ def exec_validation(lock, ignored_dict, indexclient, jobinfo):
             if fi["id"] in ignored_dict:
                 object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
                 if blob_exists(bucket_name, object_key):
-                    fi["gs_url"], fi["indexd_url"] = object_key, indexclient(fi.get("id", ""))
+                    fi["gs_url"], fi["indexd_url"] = object_key, indexclient.get(fi.get("id", ""))
                 if not fi["indexd_url"]:
                     logger.warn("{} is not indexed".format(fi["id"]))
                 continue
@@ -51,11 +51,11 @@ def exec_validation(lock, ignored_dict, indexclient, jobinfo):
 
             if blob_exists(bucket_name, blob_name):
                 fi["gs_url"] = "gs://{}/{}".format(bucket_name, blob_name)
-                fi["indexd_url"] = indexclient(fi.get("id", ""))
+                fi["indexd_url"] = indexclient.get(fi.get("id", ""))
                 if not fi["indexd_url"]:
                     logger.warn("{} is not indexed".format(fi["id"]))
             else:
-                logger.warn("{} is not copied".format(fi["id"]))
+                logger.warn("{} does not exist in the bucket {}".format(fi, bucket_name))
         except Exception as e:
             logger.erro(e)
             time.sleep(120)
@@ -73,7 +73,7 @@ def _read_data(manifest_file):
     results = []
     copying_files = utils.get_fileinfo_list_from_gs_manifest(manifest_file)
     for fi in copying_files:
-        results.append({"id": fi["id"], "file_name": fi["file_name"]})
+        results.append({"id": fi["id"], "file_name": fi["file_name"], "project_id": fi["project_id"], "acl": fi["acl"]})
     return results
 
 
@@ -112,7 +112,7 @@ def run(thread_num, global_config, job_name, manifest_file, out_manifest):
 
     jobInfos = []
     for fi in files:
-        job = JobInfo(global_config, [fi], len(files), job_name, {}, manager_ns, bucket)
+        job = JobInfo(global_config, [fi], len(files), job_name, {}, manager_ns)
         jobInfos.append(job)
 
     # Make the Pool of workers
