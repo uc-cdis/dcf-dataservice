@@ -278,7 +278,7 @@ def exec_aws_copy(lock, jobinfo):
         object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
         # object already exists in dcf but acl is changed
-        if is_changed_acl_object(fi, target_bucket):
+        if is_changed_acl_object(fi, fi.source_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
             cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
                 get_reversed_acl_bucket_name(target_bucket),
@@ -296,21 +296,25 @@ def exec_aws_copy(lock, jobinfo):
             continue
 
         # only copy ones not exist in target buckets
-        if not object_exists(target_bucket, object_key):
+        # if not object_exists(target_bucket, object_key):
+        if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
             source_key = object_key
-            if not object_exists(jobinfo.bucket, source_key):
+            # if not object_exists(jobinfo.bucket, source_key):
+            if "{}/{}".format(jobinfo.bucket, source_key) not in jobinfo.source_objects:
                 try:
                     source_key = re.search(
                         "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
                         fi["url"],
                     ).group(0)
 
-                    if not object_exists(jobinfo.bucket, source_key):
+                    # if not object_exists(jobinfo.bucket, source_key):
+                    if "{}/{}".format(jobinfo.bucket, source_key) not in jobinfo.source_objects:
                         source_key = None
                 except (AttributeError, TypeError):
                     source_key = None
 
-                if source_key is None and object_exists(jobinfo.bucket, fi["id"]):
+                #if source_key is None and object_exists(jobinfo.bucket, fi["id"]):
+                if source_key is None and "{}/{}".format(jobinfo.bucket, fi["id"]) in jobinfo.source_objects:
                     source_key = fi["id"]
 
             if not source_key:
@@ -327,8 +331,8 @@ def exec_aws_copy(lock, jobinfo):
                 continue
 
             try:
-                #storage_class = jobinfo.source_objects[source_key]["StorageClass"]
-                storage_class = get_object_storage_class(jobinfo.bucket, source_key)
+                storage_class = jobinfo.source_objects[source_key]["StorageClass"]
+                #storage_class = get_object_storage_class(jobinfo.bucket, source_key)
             except Exception as e:
                 logger.warn(e)
                 continue
@@ -662,13 +666,13 @@ def get_reversed_acl_bucket_name(target_bucket):
     return target_bucket[:-10] + "open"
 
 
-def is_changed_acl_object(fi, target_bucket):
+def is_changed_acl_object(fi, source_objects, target_bucket):
     """
     check if the object has acl changed or not
     """
 
-    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    if object_exists(get_reversed_acl_bucket_name(target_bucket), object_path):
+    object_path = "{}/{}/{}".format(get_reversed_acl_bucket_name(target_bucket), fi.get("id"), fi.get("file_name"))
+    if object_path in source_objects:
         return True
 
     return False
@@ -713,13 +717,14 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start processes and log after they finish
     """
+
     copied_objects, source_objects = {}, {}
-    
     if job_name != "indexing":
         logger.info("scan all copied objects")
-        copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
+        copied_objects, source_objects = build_object_dataset(PROJECT_ACL, bucket)
 
     tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+
     logger.info("Total files need to be replicated: {}".format(total_files))
 
     manager = Manager()
