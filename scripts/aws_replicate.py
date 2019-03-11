@@ -314,7 +314,7 @@ def exec_aws_copy(lock, jobinfo):
                     except (AttributeError, TypeError):
                         source_key = None
 
-                    if source_key is None and object_exists(jobinfo.bucket, fi["id"]):
+                    if source_key is None and object_exists(s3, jobinfo.bucket, fi["id"]):
                         source_key = fi["id"]
 
                 if not source_key:
@@ -787,6 +787,9 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     s3 = boto3.client("s3")
     with open(filename, "w") as outfile:
         json.dump(json_log, outfile)
-    s3.upload_file(
-        filename, global_config.get("log_bucket"), os.path.basename(filename)
-    )
+    try:
+        s3.upload_file(
+            filename, global_config.get("log_bucket"), os.path.basename(filename)
+        )
+    except Exception as e:
+        logger.error(e)
