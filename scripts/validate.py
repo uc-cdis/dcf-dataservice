@@ -80,6 +80,7 @@ def run(global_config):
             logger.error(e)
 
     for idx, manifest_file in enumerate(manifest_files):
+        manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         for fi in files:
             del fi["url"]
@@ -105,7 +106,7 @@ def run(global_config):
         try:
             s3 = boto3.client("s3")
             s3.upload_file(
-                'tmp.csv', global_config.get("log_bucket"), out_manifests[idx]
+                'tmp.csv', global_config.get("log_bucket"), out_manifests[idx].strip()
             )
         except Exception as e:
             logger.error(e)
