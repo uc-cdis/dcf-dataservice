@@ -1,19 +1,15 @@
-import os
-import time
 import json
 import boto3
-import subprocess
-import logging as logger
+from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 
 import utils
 from errors import UserError
-from scripts.aws_replicate import build_object_dataset
-from scripts.utils import build_object_dataset_gs
+from aws_replicate import build_object_dataset
 from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
-logger.basicConfig(level=logger.INFO, format='%(asctime)s %(message)s')
+logger = get_logger("Validation")
 
 
 def get_indexd_records():
@@ -46,8 +42,10 @@ def run(global_config):
         None
 
     """
-    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
+    if not global_config.get("log_bucket"):
+        raise UserError("please provide the log bucket")
 
+    ignored_dict = utils.get_ignored_files(IGNORED_FILES, "\t")
     if not ignored_dict:
         raise UserError(
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
@@ -61,10 +59,10 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset(PROJECT_ACL)
-    gs_copied_objects = build_object_dataset_gs(PROJECT_ACL)
+    #aws_copied_objects, _ = build_object_dataset(PROJECT_ACL)
+    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
-    if global_config("save_copied_objects"):
+    if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
         with open("./gs_copied_objects.json", "w") as outfile:
@@ -80,22 +78,24 @@ def run(global_config):
             )
         except Exception as e:
             logger.error(e)
-    
+
     for idx, manifest_file in enumerate(manifest_files):
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         for fi in files:
             del fi["url"]
+            fi['gs_url'], fi['indexd_url'] = None, None
             if fi["id"] in ignored_dict:
-                fi['gs_url'], fi['indexd_url'] = None, None
                 object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
             else:
                 bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
                 object_key = "{}/{}/{}".format(bucket, fi["id"], fi["file_name"])
-            
-            if object_key in gs_copied_objects:
-                logger.warn("{} is not copied yet".format(object_key))
+
+            if object_key not in gs_copied_objects and fi["size"] != 0:
+                logger.error("{} is not copied yet".format(object_key))
+            elif fi["size"] != 0:
                 fi['gs_url'] = "gs://" + object_key
-            fi['indexd_url'] = indexd_records.get(indexd_records[fi["id"]], None)
+
+            fi['indexd_url'] = indexd_records.get(fi.get("id"))
             if not fi['indexd_url']:
                 logger.warn("There is no indexd record for {}".format(fi["id"]))
             elif fi['gs_url'] not in fi['indexd_url']:
@@ -103,6 +103,7 @@ def run(global_config):
 
         utils.write_csv("./tmp.csv", files)
         try:
+            s3 = boto3.client("s3")
             s3.upload_file(
                 'tmp.csv', global_config.get("log_bucket"), out_manifests[idx]
             )
