@@ -156,7 +156,7 @@ def bucket_exists(s3, bucket_name):
 def object_exists(s3, bucket_name, key):
     """
     check if object exists or not. If object storage is GLACIER, the head_object will return 403
-    The meaning of the function here is to check if the object exists in the maner of downloadable
+    The meaning of the function here is to check if it is possible to replicate the object with aws cli
     Args:
         s3(s3client): s3 client
         bucket_name(str): the name of the bucket
