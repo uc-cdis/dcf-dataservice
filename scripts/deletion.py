@@ -81,20 +81,20 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     for fi in file_infos:
         num = num + 1
         logger.info("Start to process file {}".format(num))
-        # try:
-        #     aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
-        # except UserError as e:
-        #     deletion_logs.append(
-        #         DeletionLog(
-        #             url=fi.get("id") + "/" + fi.get("filename"), message=e.message
-        #         )
-        #     )
-        #     aws_target_bucket = None
+        try:
+            aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
+        except UserError as e:
+            deletion_logs.append(
+                DeletionLog(
+                    url=fi.get("id") + "/" + fi.get("filename"), message=e.message
+                )
+            )
+            aws_target_bucket = None
 
-        # if aws_target_bucket:
-        #     deletion_logs.append(
-        #         _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
-        #     )
+        if aws_target_bucket:
+            deletion_logs.append(
+                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
+            )
 
         try:
             google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
