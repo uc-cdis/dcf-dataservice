@@ -28,7 +28,7 @@ def get_indexd_records():
         progress += 1
         if progress % 1000 == 0:
             logger.info("INDEXD: get {} records".format(progress))
-        results[doc.did] = it.urls
+        results[doc.did] = doc.urls
     return results
 
 
