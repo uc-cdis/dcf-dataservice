@@ -144,18 +144,19 @@ def build_object_dataset(project_acl, awsbucket):
     return copied_objects, source_objects
 
 
-def bucket_exists(bucket_name):
+def bucket_exists(s3, bucket_name):
     try:
-        boto3.resource('s3').meta.client.head_bucket(Bucket=bucket_name)
+        s3.meta.client.head_bucket(Bucket=bucket_name)
         return True
     except botocore.exceptions.ClientError as e:
         logger.error("The bucket {} does not exist or you have no access. Detail {}".format(bucket_name, e))
         return False
 
 
-def object_exists(bucket_name, key):
+def object_exists(s3, bucket_name, key):
     """
-    check if object exists or not
+    check if object exists or not. If object storage is GLACIER, the head_object will return 403
+    The meaning of the function here is to check if it is possible to replicate the object with aws cli
     Args:
         s3(s3client): s3 client
         bucket_name(str): the name of the bucket
@@ -165,20 +166,19 @@ def object_exists(bucket_name, key):
     Side effect:
         Log in case that no access provided
     """
-    s3 = boto3.resource("s3")
     try:
         s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         return True
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
-        if error_code == 404:
+        if error_code in {404, 403}:
             return False
         else:
+            logger.error("Something wrong with checking object {} in bucket {}. Detail {}".format(key, bucket_name,e))
             raise
 
 
-def get_object_storage_class(bucket_name, key):
-    s3 = boto3.resource("s3")
+def get_object_storage_class(s3, bucket_name, key):
     try:
         meta = s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         return meta.get("StorageClass", "STANDARD")
@@ -187,6 +187,7 @@ def get_object_storage_class(bucket_name, key):
         if error_code == 404:
             return None
         else:
+            logger.error("Something wrong with checking object class {} in bucket {}. Detail {}".format(key, bucket_name, e))
             raise
 
 
@@ -263,6 +264,8 @@ def exec_aws_copy(lock, jobinfo):
     """
 
     files = jobinfo.files
+    session = boto3.session.Session()
+    s3 = session.resource("s3")
 
     for fi in files:
         try:
@@ -270,102 +273,105 @@ def exec_aws_copy(lock, jobinfo):
         except UserError as e:
             logger.warn(e)
             continue
-        
-        if not bucket_exists(target_bucket):
-            logger.error("There is no bucket with provided name {}\n".format(target_bucket))
-            continue
 
-        object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+        try:
+            if not bucket_exists(s3, target_bucket):
+                logger.error("There is no bucket with provided name {}\n".format(target_bucket))
+                continue
 
-        # object already exists in dcf but acl is changed
-        if is_changed_acl_object(fi, target_bucket):
-            logger.info("acl object is changed. Move object to the right bucket")
-            cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
-                get_reversed_acl_bucket_name(target_bucket),
-                object_key,
-                target_bucket,
-                object_key,
-            )
-            if not jobinfo.global_config.get("quiet", False):
-                logger.info(cmd)
-            subprocess.Popen(shlex.split(cmd)).wait()
+            object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+
+            # object already exists in dcf but acl is changed
+            if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
+                logger.info("acl object is changed. Move object to the right bucket")
+                cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
+                    get_reversed_acl_bucket_name(target_bucket),
+                    object_key,
+                    target_bucket,
+                    object_key,
+                )
+                if not jobinfo.global_config.get("quiet", False):
+                    logger.info(cmd)
+                subprocess.Popen(shlex.split(cmd)).wait()
+                try:
+                    update_url(fi, jobinfo.indexclient)
+                except APIError as e:
+                    logger.warn(e)
+                continue
+
+            # only copy ones not exist in target buckets
+            if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
+                source_key = object_key
+                if not object_exists(s3, jobinfo.bucket, source_key):
+                    try:
+                        source_key = re.search(
+                            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
+                            fi["url"],
+                        ).group(0)
+
+                        if not object_exists(s3, jobinfo.bucket, source_key):
+                            source_key = None
+                    except (AttributeError, TypeError):
+                        source_key = None
+
+                    if source_key is None and object_exists(s3, jobinfo.bucket, fi["id"]):
+                        source_key = fi["id"]
+
+                if not source_key:
+                    logger.info(
+                        "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
+                            fi["id"], jobinfo.bucket
+                        )
+                    )
+                    try:
+                        stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
+                        update_url(fi, jobinfo.indexclient)
+                    except Exception as e:
+                        logger.warn(e)
+                    continue
+
+                try:
+                    #storage_class = jobinfo.source_objects[source_key]["StorageClass"]
+                    storage_class = get_object_storage_class(s3, jobinfo.bucket, source_key)
+                except Exception as e:
+                    logger.warn(e)
+                    continue
+
+                # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
+                if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
+                    if not jobinfo.global_config.get("quiet", False):
+                        logger.info(
+                            "Streaming: {}. Size {} (MB). Class {}".format(
+                                object_key,
+                                int(fi["size"] * 1.0 / 1024 / 1024),
+                                storage_class,
+                            )
+                        )
+                    try:
+                        stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
+                    except Exception as e:
+                        # catch generic exception to prevent the code from terminating
+                        # in the middle of replicating process
+                        logger.warn(e)
+                else:
+                    logger.info("start aws copying {}".format(object_key))
+                    cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
+                        jobinfo.bucket, source_key, target_bucket, object_key
+                    )
+                    if not jobinfo.global_config.get("quiet", False):
+                        logger.info(cmd)
+                    # wait untill finish
+                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+            else:
+                logger.info(
+                    "object {} is already copied to {}".format(object_key, target_bucket)
+                )
             try:
                 update_url(fi, jobinfo.indexclient)
             except APIError as e:
                 logger.warn(e)
-            continue
-
-        # only copy ones not exist in target buckets
-        if not object_exists(target_bucket, object_key):
-            source_key = object_key
-            if not object_exists(jobinfo.bucket, source_key):
-                try:
-                    source_key = re.search(
-                        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
-                        fi["url"],
-                    ).group(0)
-
-                    if not object_exists(jobinfo.bucket, source_key):
-                        source_key = None
-                except (AttributeError, TypeError):
-                    source_key = None
-
-                if source_key is None and object_exists(jobinfo.bucket, fi["id"]):
-                    source_key = fi["id"]
-
-            if not source_key:
-                logger.warn(
-                    "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
-                        fi["id"], jobinfo.bucket
-                    )
-                )
-                try:
-                    stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
-                    update_url(fi, jobinfo.indexclient)
-                except Exception as e:
-                    logger.warn(e)
-                continue
-
-            try:
-                #storage_class = jobinfo.source_objects[source_key]["StorageClass"]
-                storage_class = get_object_storage_class(jobinfo.bucket, source_key)
-            except Exception as e:
-                logger.warn(e)
-                continue
-
-            # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
-            if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY"}:
-                if not jobinfo.global_config.get("quiet", False):
-                    logger.info(
-                        "Streaming: {}. Size {} (MB). Class {}".format(
-                            object_key,
-                            int(fi["size"] * 1.0 / 1024 / 1024),
-                            storage_class,
-                        )
-                    )
-                try:
-                    stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
-                except Exception as e:
-                    # catch generic exception to prevent the code from terminating
-                    # in the middle of replicating process
-                    logger.warn(e)
-            else:
-                logger.info("start aws copying {}".format(object_key))
-                cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
-                    jobinfo.bucket, source_key, target_bucket, object_key
-                )
-                if not jobinfo.global_config.get("quiet", False):
-                    logger.info(cmd)
-                # wait untill finish
-                subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
-        else:
-            logger.info(
-                "object {} is already copied to {}".format(object_key, target_bucket)
-            )
-        try:
-            update_url(fi, jobinfo.indexclient)
-        except APIError as e:
-            logger.warn(e)
+        except Exception as e:
+            logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(files)
     lock.release()
@@ -530,12 +536,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             Bucket=target_bucket, Key=object_path
         )
     except botocore.exceptions.ClientError as error:
-        logger.warn(
+        logger.error(
             "Error when create multiple part upload for object with uuid{}. Detail {}".format(
                 object_path, error
             )
         )
-        return None
+        return
 
     chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
 
@@ -662,13 +668,13 @@ def get_reversed_acl_bucket_name(target_bucket):
     return target_bucket[:-10] + "open"
 
 
-def is_changed_acl_object(fi, target_bucket):
+def is_changed_acl_object(fi, copied_objects, target_bucket):
     """
     check if the object has acl changed or not
     """
 
-    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    if object_exists(get_reversed_acl_bucket_name(target_bucket), object_path):
+    object_path = "{}/{}/{}".format(get_reversed_acl_bucket_name(target_bucket), fi.get("id"), fi.get("file_name"))
+    if object_path in copied_objects:
         return True
 
     return False
@@ -714,12 +720,13 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     start processes and log after they finish
     """
     copied_objects, source_objects = {}, {}
-    
+
     if job_name != "indexing":
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
 
     tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+
     logger.info("Total files need to be replicated: {}".format(total_files))
 
     manager = Manager()
@@ -780,6 +787,9 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     s3 = boto3.client("s3")
     with open(filename, "w") as outfile:
         json.dump(json_log, outfile)
-    s3.upload_file(
-        filename, global_config.get("log_bucket"), os.path.basename(filename)
-    )
+    try:
+        s3.upload_file(
+            filename, global_config.get("log_bucket"), os.path.basename(filename)
+        )
+    except Exception as e:
+        logger.error(e)

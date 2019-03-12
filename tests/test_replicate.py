@@ -219,6 +219,8 @@ def test_call_aws_cli_called():
     scripts.aws_replicate.bucket_exists.return_value = True
     scripts.aws_replicate.object_exists = MagicMock()
     scripts.aws_replicate.object_exists.return_value = True
+    scripts.aws_replicate.get_object_storage_class = MagicMock()
+    scripts.aws_replicate.get_object_storage_class.return_value = "STANDARD"
 
     manager = Manager()
     manager_ns = manager.Namespace()
