@@ -10,14 +10,91 @@
  Deploy a data-flow job that copies data from GDC to GCP buckets. The `copy` transform of the data-flow pipeline streams objects from GDC data center to GOOGLE buckets.
 
 ## How to run
-Following the below steps to setup to run as k8 jobs
-- Create a directory in `$vpc_name/apis_configs` and named as `dcf_dataservice`.
-- Put the `creds.json`, `aws_creds_secret` and `gcloud-creds-secret` into `dcf_dataservice` folder. While `aws_creds_secret` contains AWS key `gcloud-creds-secret` contains google cloud service account.
-- Also put the `GDC_datasets_access_control.csv` into `dcf_dataservice` folder. This file contains GDC project access control level. The file is little bit different to 
-the one GDC provides. It has two more column to map the project id to dcf bucket: `aws_bucket_prefix` and `google_bucket_prefix`. Let say if the file has project_id `TCGA-CLM`, the google_bucket_prefix and aws_bucket_prefix should be `gdc-tcga-phs000178`. Please note that there are some dcf buckets already created before we have the bucket name convention so the this file is edited to support the old name buckets accordingly.
-- Upload the `manifest` in S3 for AWS sync. For GOOLE sync, put the file into `gs://INPUT_BUCKET//input/`. User also need to have `LOG_BUCKET` to store the log and the output outcome. Please see the yaml job file for more detail.
+Create a directory in `$vpc_name/apis_configs` and name it as `dcf_dataservice` and follow the below steps to setup to run as k8 jobs
+
+### AWS sync
+- Put the `creds.json`, `aws_creds_secret` into the `dcf_dataservice` folder. While `aws_creds_secret` contains AWS key `creds.json` contains GDCAPI token and indexd account.
+
+`aws_creds_secret`
+```
+aws_access_key_id=xxxxxxxxxx
+aws_secret_access_key=xxxxxxxx
+```
+`creds.json`
+```
+{
+"GDC_TOKEN": "TOKEN",
+"INDEXD": {
+    "host": "https://nci-crdc.datacommons.io/index/index",
+    "version": "v0",
+    "auth": {"username": "gdcapi", "password": "xxxxx"}
+}
+}
+```
+- Also put the `GDC_project_map.json` into `dcf_dataservice` folder. This file provides a mapping between a project and an aws and google bucket prefix. It contains two fields `aws_bucket_prefix` and `google_bucket_prefix` to help determining which bucket an object need to be copied to. Please note that there are some buckets already created before we have the bucket name convention so this file is edited to support the old name buckets accordingly.
+```
+{
+    "TARGET": {
+        "aws_bucket_prefix": "target"},
+        "gs_bucket_prefix": "gdc-target-phs000218"},
+    "TCGA": {
+        "aws_bucket_prefix": "tcga"},
+        "gs_bucket_prefix": "gdc-tcga-phs000178"},
+    "VAREPOP": {
+        "aws_bucket_prefix": "gdc-varepop-apollo-phs001374"},
+        "gs_bucket_prefix": "gdc-varepop-apollo-phs001374"},
+}
+```
+- Upload the `manifest` to S3 bucket `s3://INPUT_BUCKET/input/`.
 - Run `jobs/kube-script-setup.sh`.
-- See jobs/*.yaml file for more details how to run the jobs.
+An example command to run the aws sync job with 100 threads and each thread handles 50 files.
+```
+gen3 runjob jobs/aws-bucket-replicate-job.yaml GDC_BUCKET_NAME gdcbackup MANIFEST_S3 s3://tests/manifest THREAD_NUM 100 LOG_BUCKET log_bucket CHUNK_SIZE 50
+```
+
+### GOOGLE sync
+- Put the `gcloud-creds-secret` and `dcf_dataservice_settings` into the `dcf_dataservice` folder. 
+`dcf_dataservice_settings`
+```
+GDC_TOKEN = "TOKEN"
+INDEXD = {
+    "host": "https://nci-crdc.datacommons.io/index/index",
+    "version": "v0",
+    "auth": {"username": "gdcapi", "password": "xxxxx"}
+}
+```
+- Also put the `GDC_project_map.csv` into `dcf_dataservice` folder.
+- Upload the `manifest` to a GS bucket `gs://INPUT_BUCKET/input/`. User also need to have `LOG_BUCKET` to store the log and the output. Please see the yaml job file for more detail.
+- Put the file `ignored_files_manifest.csv` provided by the sponsor to `gs://INPUT_BUCKET/5aa/`. This file provides a list of structured or un-flatten objects already existed in DCF. ISB does not want DCF to flatten them since they are in use for their existed projects. The dcf refresh service need to ignore them during the replication process.
+- Run `jobs/kube-script-setup.sh`.
+
+An example command to run the google sync job.
+```
+gen3 runjob dcf-dataservice/jobs/google-bucket-replicate-job.yaml PROJECT cdis-test MAX_WORKERS 100 MANIFEST_FILE gs://INPUT_BUCKET/input/manifest IGNORED_FILE gs://INPUT_BUCKET/5aa/ignored_files_manifest.csv LOG_BUCKET log_bucket
+```
+
+### Redaction
+- Put a redaction manifest to a S3 and run the following command
+```
+gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET s3://log_bucket
+```
+
+### Manifest formats
+
+Both the `sync manifest` and `redaction manifest` have the same format as descibed below.
+```
+id	file_name	md5	size	state	project_id	baseid	version	release	acl	type	deletereason	url
+ada53c3d-16ff-4e2a-8646-7cf78baf7aff	ada53c3d-16ff-4e2a-8646-7cf78baf7aff.vcf.gz	ff53a02d67fd28fcf5b8cd609cf51b06	137476	released	TCGA-LGG	6230cd6d-8610-4db4-94f4-2f87592c949b	1	12.0	[u'phs000xxx']	active		s3://xxxx/ada53c3d-16ff-4e2a-8646-7cf78baf7aff
+2127dca2-e6b7-4e8a-859d-0d7093bd91e6	2127dca2-e6b7-4e8a-859d-0d7093bd91e6.vep.vcf.gz	c4deccb43f5682cffe8f56c97d602d08	136553	released	TCGA-LGG	6a84714f-2523-4424-b9cb-c21e8177cd0f	1	12.0	[u'phs000xxx']	active		s3://xxxx/2127dca2-e6b7-4e8a-859d-0d7093bd91e6/2127dca2-e6b7-4e8a-859d-0d7093bd91e6.vep.vcf.gz
+```
+
+The `ignored_files_manifest.csv`
+
+```
+gcs_object_size	gcs_object_time_stamp	md5sum	acl	gcs_object_url	gdc_uuid
+19490957	2016-03-28T21:51:54Z	bd7b6da28d89c922ea26d145aef5387e	phs000xxx	gs://5aaxxxxxxxx/tcga/PAAD/DNA/AMPLICON/BI/ILLUMINA/C1748.TCGA-LB-A9Q5-01A-11D-A397-08.1.bam	e5c9f17d-8f66-4089-ac70-2a5cde55450f
+```
+
 
 ## Configuration
 ### AWS bucket replication
@@ -45,3 +122,16 @@ While aws cli runs on server side, user have to deal with throughput issues when
 
 ### GS bucket replication
 
+### GS bucket replication
+
+The followings is an example of configuration for running google replication with google dataflow.
+
+```
+{
+    "scan_copied_objects": 1, #
+    "chunk_size_download": 1024 * 1024 * 32, # chunk size with download from gdcapi. Default 1024 * 1024 * 32
+    "chunk_size_upload": 1024 * 1024 * 256, # chunk size with download from gdcapi. Default 1024 * 1024 * 128
+    "multi_part_upload_threads": 10, # Number of threads for multiple download and upload. Default 10
+}
+
+```

@@ -318,7 +318,7 @@ def exec_aws_copy(lock, jobinfo):
                         source_key = fi["id"]
 
                 if not source_key:
-                    logger.warn(
+                    logger.info(
                         "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
                             fi["id"], jobinfo.bucket
                         )
@@ -536,12 +536,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             Bucket=target_bucket, Key=object_path
         )
     except botocore.exceptions.ClientError as error:
-        logger.warn(
+        logger.error(
             "Error when create multiple part upload for object with uuid{}. Detail {}".format(
                 object_path, error
             )
         )
-        return None
+        return
 
     chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
 
