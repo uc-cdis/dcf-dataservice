@@ -70,7 +70,7 @@ def build_object_dataset_from_file(copied_objects_file, source_objects_file):
     return copied_objects, source_objects
 
 
-def build_object_dataset(project_acl, awsbucket):
+def build_object_dataset(project_acl, awsbucket=None):
     """
     Load copied objects and source objects. The copied objects are obtained by
     listing the target buckets (derived from project_acl). The source objects are

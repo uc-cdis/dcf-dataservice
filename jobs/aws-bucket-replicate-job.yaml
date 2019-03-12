@@ -37,7 +37,7 @@ spec:
             memory: "32Gi"
           requests:
             cpu: "14"
-            memory: "24Gi"
+            memory: "25Gi"
         imagePullPolicy: Always
         env:
           - name: GDC_BUCKET_NAME

@@ -24,9 +24,6 @@ def parse_arguments():
 
     google_validate_cmd = subparsers.add_parser("validate")
     google_validate_cmd.add_argument("--global_config", required=True)
-    google_validate_cmd.add_argument("--manifest_file", required=True)
-    google_validate_cmd.add_argument("--out_manifest", required=True)
-    google_validate_cmd.add_argument("--thread_num", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
@@ -82,11 +79,7 @@ if __name__ == "__main__":
     elif args.action == "validate":
         import validate
         validate.run(
-            int(args.thread_num),
-            json.loads(args.global_config),
-            "validation",
-            args.manifest_file,
-            args.out_manifest
+            json.loads(args.global_config)
         )
 
     elif args.action == "readact":
