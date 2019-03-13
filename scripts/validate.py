@@ -51,6 +51,10 @@ def run(global_config):
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
         )
 
+    logger.info("List of the manifests")
+    logger.info(global_config.get("manifest_files"))
+    logger.info(global_config.get("out_manifests"))
+
     manifest_files = global_config.get("manifest_files", "").split(",")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
@@ -59,12 +63,14 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = get_indexd_records()
-    #aws_copied_objects, _ = build_object_dataset(PROJECT_ACL)
+    aws_copied_objects, _ = build_object_dataset(PROJECT_ACL)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
     if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
+        with open("./aws_copied_objects.json", "w") as outfile:
+            json.dump(aws_copied_objects, outfile)
         with open("./gs_copied_objects.json", "w") as outfile:
             json.dump(gs_copied_objects, outfile)
         
@@ -72,6 +78,9 @@ def run(global_config):
         try:
             s3.upload_file(
                 'indexd_records.json', global_config.get("log_bucket"), 'indexd_records.json'
+            )
+            s3.upload_file(
+                'aws_copied_objects.json', global_config.get("log_bucket"), 'aws_copied_objects.json'
             )
             s3.upload_file(
                 'gs_copied_objects.json', global_config.get("log_bucket"), 'gs_copied_objects.json'
@@ -84,23 +93,35 @@ def run(global_config):
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         for fi in files:
             del fi["url"]
-            fi['gs_url'], fi['indexd_url'] = None, None
-            if fi["id"] in ignored_dict:
-                object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
-            else:
-                bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
-                object_key = "{}/{}/{}".format(bucket, fi["id"], fi["file_name"])
-
-            if object_key not in gs_copied_objects and fi["size"] != 0:
-                logger.error("{} is not copied yet".format(object_key))
-            elif fi["size"] != 0:
-                fi['gs_url'] = "gs://" + object_key
+            fi['aws_url'], fi['gs_url'], fi['indexd_url'] = None, None, None
 
             fi['indexd_url'] = indexd_records.get(fi.get("id"))
             if not fi['indexd_url']:
-                logger.warn("There is no indexd record for {}".format(fi["id"]))
-            elif fi['gs_url'] not in fi['indexd_url']:
-                logger.warn("indexd does not have gs url of {}".format(fi["id"]))
+                logger.error("There is no indexd record for {}".format(fi["id"]))
+
+            # validate aws 
+            aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+            object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
+            if object_path not in aws_copied_objects and fi["size"] != 0:
+                logger.error("{} is not copied yet to aws buckets".format(object_path))
+            elif fi["size"] != 0:
+                fi['aws_url'] = "s3://" + object_path
+                if fi['aws_url'] not in fi['indexd_url']:
+                    logger.error("indexd does not have aws url of {}".format(fi["id"]))
+
+            # validate google
+            gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
+            if fi["id"] in ignored_dict:
+                object_path = "{}/{}".format(gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict))
+            else:
+                object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fi["file_name"])
+
+            if object_path not in gs_copied_objects and fi["size"] != 0:
+                logger.error("{} is not copied yet to google buckes".format(object_path))
+            elif fi["size"] != 0:
+                fi['gs_url'] = "gs://" + object_path
+                if fi['gs_url'] not in fi['indexd_url']:
+                    logger.error("indexd does not have gs url of {}".format(fi["id"]))
 
         utils.write_csv("./tmp.csv", files)
         try:
