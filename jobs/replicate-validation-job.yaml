@@ -1,5 +1,5 @@
-# run with 
-# Ex. gen3 runjob jobs/replicate-validation-job.yaml THREAD_NUM 4 MANIFEST_FILE gs://data-flow-code/input/manifest_big_head OUTPUT_MANIFEST gs://data-flow-code/out_manifest.csv
+# run with
+# Ex. gen3 runjob jobs/replicate-validation-job.yaml  IGNORED_FILE s3://test/test.csv MANIFEST_FILES 's3://bucket1/key1,s3://bucket1/key12' OUT_FILES 'file1,file2' LOG_BUCKET 'TEST'
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -12,6 +12,9 @@ spec:
         app: gen3job
     spec:
       volumes:
+        - name: aws-cred-volume
+          secret:
+            secretName: "dcf-aws-creds-secret"
         - name: cred-volume
           secret:
             secretName: "google-creds-secret"
@@ -32,13 +35,18 @@ spec:
             cpu: "8"
             memory: "16Gi"
         env:
-          - name: THREAD_NUM
-            GEN3_THREAD_NUM
-          - name: MANIFEST_FILE
-            GEN3_MANIFEST_FILE
-          - name: OUTPUT_MANIFEST
-            GEN3_OUTPUT_MANIFEST
+          - name: IGNORED_FILE
+            GEN3_IGNORED_FILE
+          - name: MANIFEST_FILES
+            GEN3_MANIFEST_FILES
+          - name: OUT_FILES
+            GEN3_OUT_FILES
+          - name: LOG_BUCKET
+            GEN3_LOG_BUCKET
         volumeMounts:
+          - name: aws-cred-volume
+            mountPath: "/root/.aws/credentials"
+            subPath: credentials
           - name: cred-volume
             mountPath: "/secrets/google_service_account_creds"
             subPath: google_service_account_creds
@@ -52,10 +60,13 @@ spec:
         args:
           - "-c"
           - |
+            echo """
+            [default]
+            region: us-east-1
+            """ > ~/.aws/config
             cat /secrets/dcf_dataservice_settings > ./scripts/settings.py
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
-            python scripts/replicate.py validate --thread_num $THREAD_NUM --manifest_file $MANIFEST_FILE --global_config "{}" --out_manifest $OUTPUT_MANIFEST
-
+            python scripts/replicate.py validate --global_config "{\"manifest_files\":\"$MANIFEST_FILES\", \"out_manifests\": \"$OUT_FILES\", \"log_bucket\": \"$LOG_BUCKET\", \"save_copied_objects\": 1}"
       restartPolicy: Never
