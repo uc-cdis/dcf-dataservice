@@ -288,7 +288,7 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
         try:
             bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
-            msg = "can not copy {} to GOOGLE bucket. Detail {}".format(blob_name, e)
+            msg = "can not copy {} to GOOGLE bucket. Detail {}".format(bucket_name, e)
             logger.error(msg)
 
         if not bucket_exists(bucket_name):

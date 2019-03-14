@@ -190,7 +190,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         list(DeletionLog)
 
     """
-    object_key = get_structured_object_key(f, ignored_dict)
+    object_key = get_structured_object_key(f["id"], ignored_dict)
     if object_key:
         url = "gs://gdc-tcga-phs000178-controlled/{}".format(object_key)
         return _remove_gs_5aa_object(client, url, f)
