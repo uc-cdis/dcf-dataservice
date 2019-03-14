@@ -76,7 +76,8 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
 
     ignored_dict = get_ignored_files(IGNORED_FILES, "\t")
 
-    deletion_logs = []
+    aws_deletion_logs = []
+    gs_deletion_logs = []
     num = 0
     for fi in file_infos:
         num = num + 1
@@ -84,7 +85,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
         try:
             aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
-            deletion_logs.append(
+            aws_deletion_logs.append(
                 DeletionLog(
                     url=fi.get("id") + "/" + fi.get("filename"), message=e.message
                 )
@@ -92,7 +93,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
             aws_target_bucket = None
 
         if aws_target_bucket:
-            deletion_logs.append(
+            aws_deletion_logs.append(
                 _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
             )
 
@@ -100,30 +101,41 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
             google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
             logger.warn(e)
-            deletion_logs.append(
+            gs_deletion_logs.append(
                 DeletionLog(
                     url=fi.get("id") + "/" + fi.get("filename"), message=e.message
                 )
             )
             continue
-        deletion_logs.append(
+        gs_deletion_logs.append(
             _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
         )
 
-    log_list = []
-    for log in deletion_logs:
-        log_list.append(log.to_dict())
-    log_json = {}
-    log_json["data"] = log_list
+    aws_log_list = []
+    for log in aws_deletion_logs:
+        aws_log_list.append(log.to_dict())
+    aws_log_json = {}
+    aws_log_json["data"] = aws_log_list
+
+    gs_log_list = []
+    for log in gs_deletion_logs:
+        gs_log_list.append(log.to_dict())
+    gs_log_json = {}
+    gs_log_json["data"] = gs_log_list
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    filename = timestr + "_deletion_log.json"
+    gs_filename = timestr + "gs_deletion_log.json"
+    aws_filename = timestr + "aws_deletion_log.json"
 
     try:
         s3 = boto3.client("s3")
-        with open(filename, "w") as outfile:
-            json.dump(log_json, outfile)
-        s3.upload_file(filename, log_bucket, basename(filename))
+        with open(aws_filename, "w") as outfile:
+            json.dump(aws_log_json, outfile)
+        s3.upload_file(aws_filename, log_bucket, basename(aws_filename))
+
+        with open(gs_filename, "w") as outfile:
+            json.dump(gs_log_json, outfile)
+        s3.upload_file(gs_filename, log_bucket, basename(gs_filename))
     except Exception as e:
         logger.error(e)
 
