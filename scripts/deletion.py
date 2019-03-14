@@ -74,7 +74,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
     s3 = boto3.resource("s3")
     gs_client = storage.Client()
 
-    ignored_dict = get_ignored_files(IGNORED_FILES)
+    ignored_dict = get_ignored_files(IGNORED_FILES, "\t")
 
     deletion_logs = []
     num = 0
