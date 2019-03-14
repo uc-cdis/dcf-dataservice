@@ -1,5 +1,5 @@
 # run with 
-# gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET s3://log_bucket
+# gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET log_bucket IGNORED_FILE_S3 s3://bucket/ignored_files_manifest
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -14,13 +14,13 @@ spec:
       volumes:
         - name: cred-volume
           secret:
-            secretName: "aws-creds-secret"
+            secretName: "dcf-aws-creds-secret"
         - name: google-cred-volume
           secret:
             secretName: "google-creds-secret"
-        - name: project-acl-volume
+        - name: project-map-volume
           configMap:
-            name: project-acl-manifest
+            name: project-map-manifest
         - name: creds-json-volume
           secret:
             secretName: "dcf-dataservice-json-secret"
@@ -33,6 +33,8 @@ spec:
             GEN3_LOG_BUCKET
           - name: MANIFEST_S3
             GEN3_MANIFEST_S3
+          - name: IGNORED_FILE_S3
+            GEN3_IGNORED_FILE_S3
         volumeMounts:
           - name: cred-volume
             mountPath: "/root/.aws/credentials"
@@ -40,9 +42,9 @@ spec:
           - name: google-cred-volume
             mountPath: "/secrets/google_service_account_creds"
             subPath: google_service_account_creds
-          - name: "project-acl-volume"
-            mountPath: "/dcf-dataservice/GDC_datasets_access_control.csv"
-            subPath: "GDC_datasets_access_control.csv"
+          - name: "project-map-volume"
+            mountPath: "/dcf-dataservice/GDC_project_map.json"
+            subPath: "GDC_project_map.json"
           - name: "creds-json-volume"
             mountPath: "/secrets/dcf_dataservice_credentials.json"
             subPath: "dcf_dataservice_credentials.json"
@@ -56,5 +58,6 @@ spec:
             """ > ~/.aws/config
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
+            aws s3 cp $IGNORED_FILE_S3 /dcf-dataservice/ignored_files_manifest.csv
             python scripts/replicate.py readact --redact_file $MANIFEST_S3 --log_bucket $LOG_BUCKET
       restartPolicy: Never
