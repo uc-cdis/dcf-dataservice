@@ -22,7 +22,7 @@ def parse_arguments():
     google_replicate_cmd.add_argument("--manifest_file", required=True)
     google_replicate_cmd.add_argument("--thread_num", required=True)
 
-    google_validate_cmd = subparsers.add_parser("validate")
+    google_validate_cmd = subparsers.add_parser("manifest_augmenting")
     google_validate_cmd.add_argument("--global_config", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
@@ -76,9 +76,9 @@ if __name__ == "__main__":
             args.manifest_file,
             None,
         )
-    elif args.action == "validate":
-        import validate
-        validate.run(
+    elif args.action == "manifest_augmenting":
+        import manifest_aug
+        manifest_aug.run(
             json.loads(args.global_config)
         )
 
