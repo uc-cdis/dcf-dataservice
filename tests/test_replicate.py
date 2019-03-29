@@ -225,11 +225,13 @@ def test_call_aws_cli_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
             gen_mock_manifest_data()[0:1],
+            1,
             1,
             "",
             {},
@@ -262,11 +264,13 @@ def test_call_streamming_method_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
             gen_mock_manifest_data()[0:1],
+            1,
             1,
             "",
             copied_objects,

@@ -60,10 +60,10 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     list of file info dictionary (size, md5, etc.)
     """
     import subprocess
-    cmd = "gsutil cp {} ./tmp.csv".format(url_manifest)
+    cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
     subprocess.Popen(cmd, shell=True).wait()
 
-    return get_fileinfo_list_from_csv_manifest("./tmp.csv", start, end)
+    return get_fileinfo_list_from_csv_manifest("./tmp.tsv", start, end)
 
 
 def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
@@ -170,9 +170,9 @@ def prepare_txt_manifest_google_dataflow(
             )
 
     import subprocess
-    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".csv", ".txt"))
+    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt"))
     subprocess.Popen(cmd, shell=True).wait()
-    return gs_manifest_file.replace(".csv", ".txt")
+    return gs_manifest_file.replace(".tsv", ".txt")
 
 
 def get_ignored_files(ignored_filename, delimiter=","):
