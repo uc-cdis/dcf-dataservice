@@ -30,9 +30,14 @@ from utils import (
 from errors import UserError, APIError
 from indexd_utils import update_url
 
-logger = get_logger("AWSReplication")
+global logger
 
 RETRIES_NUM = 5
+
+
+def resume_logger(filename=None):
+    global logger
+    logger = get_logger("AWSReplication", filename)
 
 
 def build_object_dataset_from_file(copied_objects_file, source_objects_file):
@@ -197,6 +202,7 @@ class JobInfo(object):
         global_config,
         files,
         total_files,
+        total_copying_data,
         job_name,
         copied_objects,
         source_objects,
@@ -221,6 +227,7 @@ class JobInfo(object):
         self.bucket = bucket
         self.files = files
         self.total_files = total_files
+        self.total_copying_data = total_copying_data
         self.global_config = global_config
         self.job_name = job_name
         self.copied_objects = copied_objects
@@ -361,7 +368,7 @@ def exec_aws_copy(lock, jobinfo):
                     if not jobinfo.global_config.get("quiet", False):
                         logger.info(cmd)
                     # wait untill finish
-                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+                    subprocess.Popen(shlex.split(cmd)).wait()
             else:
                 logger.info(
                     "object {} is already copied to {}".format(object_key, target_bucket)
@@ -374,10 +381,11 @@ def exec_aws_copy(lock, jobinfo):
             logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(files)
+    jobinfo.manager_ns.total_copied_data += fi["size"]*1.0/1024/1024/1024
     lock.release()
     logger.info(
-        "{}/{} object are processed/copying ".format(
-            jobinfo.manager_ns.total_processed_files, jobinfo.total_files
+        "{}/{} objects are processed and {}/{} (GiB) is copied".format(
+            jobinfo.manager_ns.total_processed_files, jobinfo.total_files, int(jobinfo.manager_ns.total_copied_data), int(jobinfo.total_copying_data)
         )
     )
 
@@ -715,23 +723,32 @@ def check_and_index_the_data(lock, jobinfo):
     return json_log
 
 
-def run(thread_num, global_config, job_name, manifest_file, bucket=None):
+def run(release, thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start processes and log after they finish
     """
+    s3 = boto3.client("s3")
+    try:
+        s3.download_file(global_config.get("log_bucket"), release + "/log.txt", "./log.txt")
+    except botocore.exceptions.ClientError as e:
+        print("Can not download log. Detail {}".format(e))
+
+    resume_logger("./log.txt")
+
     copied_objects, source_objects = {}, {}
 
     if job_name != "indexing":
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
 
-    tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+    tasks, total_files, total_copying_data = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
 
     logger.info("Total files need to be replicated: {}".format(total_files))
 
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     jobInfos = []
@@ -740,6 +757,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
             global_config,
             task,
             total_files,
+            total_copying_data,
             job_name,
             copied_objects,
             source_objects,
@@ -784,12 +802,14 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     for result in results:
         json_log.update(result)
 
-    s3 = boto3.client("s3")
     with open(filename, "w") as outfile:
         json.dump(json_log, outfile)
     try:
         s3.upload_file(
-            filename, global_config.get("log_bucket"), os.path.basename(filename)
+            "./log.txt", global_config.get("log_bucket"), release + "/log.txt"
+        )
+        s3.upload_file(
+            filename, global_config.get("log_bucket"), release + "/" + os.path.basename(filename)
         )
     except Exception as e:
         logger.error(e)

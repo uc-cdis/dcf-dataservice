@@ -60,10 +60,10 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     list of file info dictionary (size, md5, etc.)
     """
     import subprocess
-    cmd = "gsutil cp {} ./tmp.csv".format(url_manifest)
+    cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
     subprocess.Popen(cmd, shell=True).wait()
 
-    return get_fileinfo_list_from_csv_manifest("./tmp.csv", start, end)
+    return get_fileinfo_list_from_csv_manifest("./tmp.tsv", start, end)
 
 
 def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
@@ -117,6 +117,7 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
 
     chunk_size = global_config.get("chunk_size", 1)
     tasks = []
+    total_copying_data = 0
 
     if copied_objects:
         filtered_copying_files = []
@@ -125,12 +126,13 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
             key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
             if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
+                total_copying_data += fi["size"]*1.0/1024/1024/1024
         copying_files = filtered_copying_files
 
     for idx in range(0, len(copying_files), chunk_size):
         tasks.append(copying_files[idx : idx + chunk_size])
 
-    return tasks, len(copying_files)
+    return tasks, len(copying_files), total_copying_data
 
 
 def prepare_txt_manifest_google_dataflow(
@@ -168,9 +170,9 @@ def prepare_txt_manifest_google_dataflow(
             )
 
     import subprocess
-    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".csv", ".txt"))
+    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt"))
     subprocess.Popen(cmd, shell=True).wait()
-    return gs_manifest_file.replace(".csv", ".txt")
+    return gs_manifest_file.replace(".tsv", ".txt")
 
 
 def get_ignored_files(ignored_filename, delimiter=","):

@@ -209,7 +209,7 @@ def test_call_aws_cli_called():
     """
     Test that the aws cli is called since the object storage class is standard
     """
-
+    scripts.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
 
@@ -225,11 +225,13 @@ def test_call_aws_cli_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
             gen_mock_manifest_data()[0:1],
+            1,
             1,
             "",
             {},
@@ -246,7 +248,7 @@ def test_call_streamming_method_called():
     """
     Test that the streamming method is called since the object is Glacier
     """
-
+    scripts.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
     scripts.aws_replicate.stream_object_from_gdc_api = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
@@ -262,11 +264,13 @@ def test_call_streamming_method_called():
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
             gen_mock_manifest_data()[0:1],
+            1,
             1,
             "",
             copied_objects,
