@@ -23,7 +23,7 @@ spec:
             secretName: "dcf-dataservice-json-secret"
       containers:
       - name: googlereplicate
-        image: quay.io/cdis/dcf-dataservice:feat_file_log
+        image: quay.io/cdis/dcf-dataservice:master
         resources:
           requests:
             cpu: "2"
