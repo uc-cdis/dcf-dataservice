@@ -209,7 +209,7 @@ def test_call_aws_cli_called():
     """
     Test that the aws cli is called since the object storage class is standard
     """
-
+    scripts.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
 
@@ -246,7 +246,7 @@ def test_call_streamming_method_called():
     """
     Test that the streamming method is called since the object is Glacier
     """
-
+    scripts.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
     scripts.aws_replicate.stream_object_from_gdc_api = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
