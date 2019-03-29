@@ -11,6 +11,7 @@ def parse_arguments():
     subparsers = parser.add_subparsers(title="action", dest="action")
 
     aws_replicate_cmd = subparsers.add_parser("aws_replicate")
+    aws_replicate_cmd.add_argument("--release", required=True)
     aws_replicate_cmd.add_argument("--global_config", required=True)
     aws_replicate_cmd.add_argument("--bucket", required=True)
     aws_replicate_cmd.add_argument("--manifest_file", required=True)
@@ -54,6 +55,7 @@ if __name__ == "__main__":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
         source_bucket = args.bucket if job_name == "copying" else None
         aws_replicate.run(
+            args.release,
             int(args.thread_num),
             json.loads(args.global_config),
             job_name,

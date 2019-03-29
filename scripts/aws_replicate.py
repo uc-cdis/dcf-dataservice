@@ -30,9 +30,14 @@ from utils import (
 from errors import UserError, APIError
 from indexd_utils import update_url
 
-logger = get_logger("AWSReplication")
+global logger
 
 RETRIES_NUM = 5
+
+
+def resume_logger(filename=None):
+    global logger
+    logger = get_logger("AWSReplication", filename)
 
 
 def build_object_dataset_from_file(copied_objects_file, source_objects_file):
@@ -361,7 +366,7 @@ def exec_aws_copy(lock, jobinfo):
                     if not jobinfo.global_config.get("quiet", False):
                         logger.info(cmd)
                     # wait untill finish
-                    subprocess.Popen(shlex.split(cmd + " --quiet")).wait()
+                    subprocess.Popen(shlex.split(cmd)).wait()
             else:
                 logger.info(
                     "object {} is already copied to {}".format(object_key, target_bucket)
@@ -715,10 +720,18 @@ def check_and_index_the_data(lock, jobinfo):
     return json_log
 
 
-def run(thread_num, global_config, job_name, manifest_file, bucket=None):
+def run(release, thread_num, global_config, job_name, manifest_file, bucket=None):
     """
     start processes and log after they finish
     """
+    s3 = boto3.client("s3")
+    try:
+        s3.download_file(global_config.get("log_bucket"), release + "/log.txt", "./log.txt")
+    except botocore.exceptions.ClientError as e:
+        print("Can not download log. Detail {}".format(e))
+
+    resume_logger("./log.txt")
+
     copied_objects, source_objects = {}, {}
 
     if job_name != "indexing":
@@ -784,12 +797,14 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
     for result in results:
         json_log.update(result)
 
-    s3 = boto3.client("s3")
     with open(filename, "w") as outfile:
         json.dump(json_log, outfile)
     try:
         s3.upload_file(
-            filename, global_config.get("log_bucket"), os.path.basename(filename)
+            "./log.txt", global_config.get("log_bucket"), release + "/log.txt"
+        )
+        s3.upload_file(
+            filename, global_config.get("log_bucket"), release + "/" + os.path.basename(filename)
         )
     except Exception as e:
         logger.error(e)

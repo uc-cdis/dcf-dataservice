@@ -1,5 +1,5 @@
 # run with 
-# Ex. gen3 runjob jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 MANIFEST_FILE gs://data-flow-code/input/manifest_big_head IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
+# Ex. gen3 runjob jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 RELEASE RS16 MANIFEST_FILE gs://data-flow-code/input/GDC_test.csv IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -23,7 +23,7 @@ spec:
             secretName: "dcf-dataservice-json-secret"
       containers:
       - name: googlereplicate
-        image: quay.io/cdis/dcf-dataservice:master
+        image: quay.io/cdis/dcf-dataservice:feat_file_log
         resources:
           requests:
             cpu: "2"
@@ -34,6 +34,8 @@ spec:
             GEN3_PROJECT
           - name: MAX_WORKERS
             GEN3_MAX_WORKERS
+          - name: RELEASE
+            GEN3_RELEASE
           - name: MANIFEST_FILE
             GEN3_MANIFEST_FILE
           - name: IGNORED_FILE
@@ -58,5 +60,5 @@ spec:
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
-            python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --autoscaling_algorithm NONE --num_worker $MAX_WORKERS --maxNumWorkers $MAX_WORKERS --staging_location gs://$LOG_BUCKET/staging --temp_location gs://$LOG_BUCKET/temp --output gs://$LOG_BUCKET/output --setup_file ./setup.py --input $MANIFEST_FILE --extra_package indexclient-1.5.2.zip
+            python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --autoscaling_algorithm NONE --num_worker $MAX_WORKERS --maxNumWorkers $MAX_WORKERS --staging_location gs://$LOG_BUCKET/$RELEASE/staging --temp_location gs://$LOG_BUCKET/$RELEASE/temp --output gs://$LOG_BUCKET/$RELEASE/output/ --setup_file ./setup.py --input $MANIFEST_FILE --extra_package indexclient-1.5.9.zip
       restartPolicy: Never
