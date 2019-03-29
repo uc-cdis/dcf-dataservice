@@ -596,7 +596,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
         )
 
-    tasks, _ = utils.prepare_data(manifest_file, global_config)
+    tasks, _, _ = utils.prepare_data(manifest_file, global_config)
 
     manager = Manager()
     manager_ns = manager.Namespace()

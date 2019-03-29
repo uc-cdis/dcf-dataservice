@@ -202,6 +202,7 @@ class JobInfo(object):
         global_config,
         files,
         total_files,
+        total_copying_data,
         job_name,
         copied_objects,
         source_objects,
@@ -226,6 +227,7 @@ class JobInfo(object):
         self.bucket = bucket
         self.files = files
         self.total_files = total_files
+        self.total_copying_data = total_copying_data
         self.global_config = global_config
         self.job_name = job_name
         self.copied_objects = copied_objects
@@ -379,10 +381,11 @@ def exec_aws_copy(lock, jobinfo):
             logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(files)
+    jobinfo.manager_ns.total_copied_data += fi["size"]*1.0/1024/1024/1024
     lock.release()
     logger.info(
-        "{}/{} object are processed/copying ".format(
-            jobinfo.manager_ns.total_processed_files, jobinfo.total_files
+        "{}/{} objects are processed and {}/{} (GiB) is copied".format(
+            jobinfo.manager_ns.total_processed_files, jobinfo.total_files, int(jobinfo.manager_ns.total_copied_data), int(jobinfo.total_copying_data)
         )
     )
 
@@ -738,13 +741,14 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
 
-    tasks, total_files = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+    tasks, total_files, total_copying_data = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
 
     logger.info("Total files need to be replicated: {}".format(total_files))
 
     manager = Manager()
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
+    manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
     jobInfos = []
@@ -753,6 +757,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
             global_config,
             task,
             total_files,
+            total_copying_data,
             job_name,
             copied_objects,
             source_objects,

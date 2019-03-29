@@ -117,6 +117,7 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
 
     chunk_size = global_config.get("chunk_size", 1)
     tasks = []
+    total_copying_data = 0
 
     if copied_objects:
         filtered_copying_files = []
@@ -125,12 +126,13 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
             key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
             if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
+                total_copying_data += fi["size"]*1.0/1024/1024/1024
         copying_files = filtered_copying_files
 
     for idx in range(0, len(copying_files), chunk_size):
         tasks.append(copying_files[idx : idx + chunk_size])
 
-    return tasks, len(copying_files)
+    return tasks, len(copying_files), total_copying_data
 
 
 def prepare_txt_manifest_google_dataflow(
