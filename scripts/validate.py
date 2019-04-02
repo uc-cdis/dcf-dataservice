@@ -34,12 +34,16 @@ def get_indexd_records():
 
 def run(global_config):
     """
-    run validation
+    Given manifests run validation process to check if all the objects exist and are indexed correctly
     Args:
         global_config(dict): a configuration
+        {
+            'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
+            'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
+        }
 
     Returns:
-        None
+        Bool
 
     """
     if not global_config.get("log_bucket"):
@@ -88,7 +92,9 @@ def run(global_config):
         except Exception as e:
             logger.error(e)
 
+    validation_pass = True
     for idx, manifest_file in enumerate(manifest_files):
+        total_failures = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         for fi in files:
@@ -97,16 +103,21 @@ def run(global_config):
 
             fi['indexd_url'] = indexd_records.get(fi.get("id"))
             if not fi['indexd_url']:
+                validation_pass = False
+                total_failures += 1
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
             # validate aws 
             aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
             if object_path not in aws_copied_objects and fi["size"] != 0:
+                validation_pass = False
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
                 fi['aws_url'] = "s3://" + object_path
                 if fi['aws_url'] not in fi['indexd_url']:
+                    validation_pass = False
+                    total_failures += 1
                     logger.error("indexd does not have aws url of {}".format(fi["id"]))
 
             # validate google
@@ -117,11 +128,19 @@ def run(global_config):
                 object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fi["file_name"])
 
             if object_path not in gs_copied_objects and fi["size"] != 0:
+                validation_pass = False
                 logger.error("{} is not copied yet to google buckes".format(object_path))
             elif fi["size"] != 0:
                 fi['gs_url'] = "gs://" + object_path
                 if fi['gs_url'] not in fi['indexd_url']:
+                    validation_pass = False
+                    total_failures += 1
                     logger.error("indexd does not have gs url of {}".format(fi["id"]))
+
+        if total_failures == 0:
+            logger.info("All the objects in {} are replicated and indexed correctly!!!", manifest_file)
+        else:
+            logger.info("TOTAL FAILURE CASES {} in {}".format(total_failures, manifest_file))
 
         utils.write_csv("./tmp.csv", files)
         try:
@@ -131,3 +150,5 @@ def run(global_config):
             )
         except Exception as e:
             logger.error(e)
+
+    return validation_pass

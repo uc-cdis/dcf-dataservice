@@ -1,5 +1,5 @@
 # run with
-# Ex. gen3 runjob jobs/replicate-validation-job.yaml  IGNORED_FILE s3://test/test.csv MANIFEST_FILES 's3://bucket1/key1,s3://bucket1/key12' OUT_FILES 'file1,file2' LOG_BUCKET 'TEST'
+# Ex. gen3 runjob jobs/replicate-validation-job.yaml  IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv MANIFEST_FILES 's3://giang816test/active_manifest.tsv,s3://giang816test/legacy_manifest.tsv' OUT_FILES 'active_aug.tsv,legacy_aug.tsv' LOG_BUCKET 'xssxs'
 apiVersion: batch/v1
 kind: Job
 metadata:
