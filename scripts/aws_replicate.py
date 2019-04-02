@@ -172,7 +172,7 @@ def object_exists(s3, bucket_name, key):
         Log in case that no access provided
     """
     try:
-        s3.meta.client.head_object(Bucket=bucket_name, Key=key)
+        s3.meta.client.head_object(Bucket=bucket_name, Key=key, RequestPayer='requester')
         return True
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
@@ -185,7 +185,7 @@ def object_exists(s3, bucket_name, key):
 
 def get_object_storage_class(s3, bucket_name, key):
     try:
-        meta = s3.meta.client.head_object(Bucket=bucket_name, Key=key)
+        meta = s3.meta.client.head_object(Bucket=bucket_name, Key=key, RequestPayer='requester')
         return meta.get("StorageClass", "STANDARD")
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
