@@ -344,8 +344,8 @@ def exec_aws_copy(lock, jobinfo):
                     logger.warn(e)
                     continue
 
-                # If storage class is not standard or REDUCED_REDUNDANCY, stream object from gdc api
-                if storage_class not in {"STANDARD", "REDUCED_REDUNDANCY", "INTELLIGENT_TIERING"}:
+                # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
+                if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
                     if not jobinfo.global_config.get("quiet", False):
                         logger.info(
                             "Streaming: {}. Size {} (MB). Class {}".format(
