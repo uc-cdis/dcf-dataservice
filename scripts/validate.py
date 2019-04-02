@@ -43,7 +43,7 @@ def run(global_config):
         }
 
     Returns:
-        Bool
+        bool
 
     """
     if not global_config.get("log_bucket"):
@@ -63,11 +63,13 @@ def run(global_config):
     out_manifests = global_config.get("out_manifests", "").split(",")
 
     if len(manifest_files) != len(out_manifests):
-        raise UserError("number of output manifests and number of manifest_files are not the same")
+        raise UserError(
+            "number of output manifests and number of manifest_files are not the same"
+        )
     logger.info("scan all copied objects")
 
     indexd_records = get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset(PROJECT_ACL)
+    aws_copied_objects, _ = build_object_dataset(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
     if global_config.get("save_copied_objects"):
@@ -77,78 +79,131 @@ def run(global_config):
             json.dump(aws_copied_objects, outfile)
         with open("./gs_copied_objects.json", "w") as outfile:
             json.dump(gs_copied_objects, outfile)
-        
+
         s3 = boto3.client("s3")
         try:
             s3.upload_file(
-                'indexd_records.json', global_config.get("log_bucket"), 'indexd_records.json'
+                "indexd_records.json",
+                global_config.get("log_bucket"),
+                "indexd_records.json",
             )
             s3.upload_file(
-                'aws_copied_objects.json', global_config.get("log_bucket"), 'aws_copied_objects.json'
+                "aws_copied_objects.json",
+                global_config.get("log_bucket"),
+                "aws_copied_objects.json",
             )
             s3.upload_file(
-                'gs_copied_objects.json', global_config.get("log_bucket"), 'gs_copied_objects.json'
+                "gs_copied_objects.json",
+                global_config.get("log_bucket"),
+                "gs_copied_objects.json",
             )
         except Exception as e:
             logger.error(e)
 
-    validation_pass = True
+    pass_valiation = True
     for idx, manifest_file in enumerate(manifest_files):
-        total_failures = 0
+        total_aws_copy_failures = 0
+        total_gs_copy_failures = 0
+        total_aws_index_failures = 0
+        total_gs_index_failures = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         for fi in files:
             del fi["url"]
-            fi['aws_url'], fi['gs_url'], fi['indexd_url'] = None, None, None
+            fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
-            fi['indexd_url'] = indexd_records.get(fi.get("id"))
-            if not fi['indexd_url']:
-                validation_pass = False
-                total_failures += 1
+            fi["indexd_url"] = indexd_records.get(fi.get("id"))
+            if not fi["indexd_url"]:
+                total_aws_index_failures += 1
+                total_gs_index_failures += 1
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
-            # validate aws 
+            # validate aws
             aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
             if object_path not in aws_copied_objects and fi["size"] != 0:
-                validation_pass = False
+                total_aws_copy_failures += 1
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
-                fi['aws_url'] = "s3://" + object_path
-                if fi['aws_url'] not in fi['indexd_url']:
-                    validation_pass = False
-                    total_failures += 1
+                fi["aws_url"] = "s3://" + object_path
+                if fi["aws_url"] not in fi["indexd_url"]:
+                    total_aws_index_failures += 1
                     logger.error("indexd does not have aws url of {}".format(fi["id"]))
 
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
             if fi["id"] in ignored_dict:
-                object_path = "{}/{}".format(gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict))
+                object_path = "{}/{}".format(
+                    gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
+                )
             else:
                 object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fi["file_name"])
 
             if object_path not in gs_copied_objects and fi["size"] != 0:
-                validation_pass = False
-                logger.error("{} is not copied yet to google buckes".format(object_path))
+                total_gs_copy_failures += 1
+                logger.error(
+                    "{} is not copied yet to google buckes".format(object_path)
+                )
             elif fi["size"] != 0:
-                fi['gs_url'] = "gs://" + object_path
-                if fi['gs_url'] not in fi['indexd_url']:
-                    validation_pass = False
-                    total_failures += 1
+                fi["gs_url"] = "gs://" + object_path
+                if fi["gs_url"] not in fi["indexd_url"]:
+                    total_gs_index_failures += 1
                     logger.error("indexd does not have gs url of {}".format(fi["id"]))
 
-        if total_failures == 0:
-            logger.info("All the objects in {} are replicated and indexed correctly!!!", manifest_file)
+        if total_gs_index_failures + total_gs_copy_failures == 0:
+            logger.info(
+                "All the objects in {} are replicated to GS and indexed correctly!!!",
+                manifest_file,
+            )
         else:
-            logger.info("TOTAL FAILURE CASES {} in {}".format(total_failures, manifest_file))
+            if total_gs_index_failures > 0:
+                logger.info(
+                    "TOTAL GS INDEX FAILURE CASES {} in {}".format(
+                        total_gs_index_failures, manifest_file
+                    )
+                )
+            if total_gs_copy_failures > 0:
+                logger.info(
+                    "TOTAL GS COPY FAILURE CASES {} in {}".format(
+                        total_gs_copy_failures, manifest_file
+                    )
+                )
+
+        if total_aws_index_failures + total_aws_copy_failures == 0:
+            logger.info(
+                "All the objects in {} are replicated to AWS and indexed correctly!!!",
+                manifest_file,
+            )
+        else:
+            if total_aws_index_failures > 0:
+                logger.info(
+                    "TOTAL AWS INDEX FAILURE CASES {} in {}".format(
+                        total_aws_index_failures, manifest_file
+                    )
+                )
+            if total_aws_copy_failures > 0:
+                logger.info(
+                    "TOTAL AWS COPY FAILURE CASES {} in {}".format(
+                        total_aws_copy_failures, manifest_file
+                    )
+                )
+
+        if pass_valiation:
+            pass_valiation = (
+                total_aws_copy_failures
+                + total_gs_copy_failures
+                + total_aws_index_failures
+                + total_gs_index_failures
+                == 0
+            )
 
         utils.write_csv("./tmp.csv", files)
         try:
             s3 = boto3.client("s3")
             s3.upload_file(
-                'tmp.csv', global_config.get("log_bucket"), out_manifests[idx].strip()
+                "tmp.csv", global_config.get("log_bucket"), out_manifests[idx].strip()
             )
         except Exception as e:
             logger.error(e)
 
-    return validation_pass
+    return pass_valiation
