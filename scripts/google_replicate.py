@@ -165,6 +165,10 @@ def exec_google_copy(fi, ignored_dict, global_config):
     Returns:
         DataFlowLog
     """
+    if fi["size"] == 0:
+        msg = "can not copy {} to GOOGLE bucket since it is empty file".format(fi["id"])
+        return DataFlowLog(message=msg)
+
     indexd_client = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
@@ -440,7 +444,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
         raise APIError("Can not setup connection to gdcapi for {}".format(fi["id"]))
 
     if response.status_code not in {200, 203}:
-        raise APIError("GDCAPI error {}".format(response.status_code))
+        raise APIError("GDCAPI error {} for uuid {}".format(response.status_code, fi["id"]))
 
     try:
         streaming(

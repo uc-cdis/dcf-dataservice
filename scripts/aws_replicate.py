@@ -70,7 +70,7 @@ def build_object_dataset_from_file(copied_objects_file, source_objects_file):
     return copied_objects, source_objects
 
 
-def build_object_dataset(project_acl, awsbucket):
+def build_object_dataset_aws(project_acl, logger, awsbucket=None):
     """
     Load copied objects and source objects. The copied objects are obtained by
     listing the target buckets (derived from project_acl). The source objects are
@@ -86,6 +86,7 @@ def build_object_dataset(project_acl, awsbucket):
         copied_objects(dict): contains copied objects already
         source_objects(dict): contains source objects
     """
+
     mutexLock = threading.Lock()
     copied_objects = {}
     source_objects = {}
@@ -739,7 +740,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
 
     if job_name != "indexing":
         logger.info("scan all copied objects")
-        copied_objects, _ = build_object_dataset(PROJECT_ACL, None)
+        copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger, None)
 
     tasks, total_files, total_copying_data = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
 

@@ -3,6 +3,8 @@ import argparse
 import json
 
 import aws_replicate
+import google_replicate
+import validate
 from deletion import delete_objects_from_cloud_resources
 
 
@@ -21,6 +23,9 @@ def parse_arguments():
     google_replicate_cmd.add_argument("--global_config", required=True)
     google_replicate_cmd.add_argument("--manifest_file", required=True)
     google_replicate_cmd.add_argument("--thread_num", required=True)
+
+    google_validate_cmd = subparsers.add_parser("validate")
+    google_validate_cmd.add_argument("--global_config", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
@@ -64,7 +69,6 @@ if __name__ == "__main__":
         )
     elif args.action == "google_replicate":
         job_name = "copying"
-        import google_replicate
 
         google_replicate.run(
             int(args.thread_num),
@@ -72,6 +76,10 @@ if __name__ == "__main__":
             job_name,
             args.manifest_file,
             None,
+        )
+    elif args.action == "validate":
+        validate.run(
+            json.loads(args.global_config)
         )
 
     elif args.action == "readact":
