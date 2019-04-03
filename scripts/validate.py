@@ -132,7 +132,6 @@ def run(global_config):
 
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
-            # if a file is in ignored_dict, we don’t copy but we still need to check if the file exists in the bucket and is indexed
             if fi["id"] in ignored_dict:
                 object_path = "{}/{}".format(
                     gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
