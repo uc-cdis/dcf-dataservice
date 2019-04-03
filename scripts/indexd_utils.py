@@ -70,15 +70,13 @@ def update_url(fi, indexclient, provider="s3", url=None):
             if fi.get("acl") in {"[u'open']", "['open']"}:
                 acl = ["*"]
             else:
-                L = fi.get("acl")[1:-1].split(",")
+                L = fi.get("acl", "").strip()[1:-1].split(",")
                 acl = []
                 for ace in L:
-                    ace = ace.strip()
-                    if ace.startswith("u'"):
-                        ace = ace[2:-1]
+                    ace = ace.strip().replace("u'", "").replace("'", "")
                     acl.append(ace)
 
-            if doc.acl != acl:
+            if set(doc.acl) != set(acl):
                 doc.acl = acl
                 need_update = True
 

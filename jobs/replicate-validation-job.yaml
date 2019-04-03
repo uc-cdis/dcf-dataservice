@@ -1,5 +1,5 @@
 # run with
-# Ex. gen3 runjob jobs/replicate-validation-job.yaml  IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv MANIFEST_FILES 's3://giang816test/active_manifest.tsv,s3://giang816test/legacy_manifest.tsv' OUT_FILES 'active_aug.tsv,legacy_aug.tsv' LOG_BUCKET 'xssxs'
+# Ex. gen3 job run jobs/replicate-validation-job.yaml  IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv MANIFEST_FILES 's3://giang816test/active_manifest.tsv,s3://giang816test/legacy_manifest.tsv' OUT_FILES 'active_aug.tsv,legacy_aug.tsv' LOG_BUCKET 'xssxs'
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -25,7 +25,7 @@ spec:
           secret:
             secretName: "dcf-dataservice-json-secret"
       containers:
-      - name: googlereplicate
+      - name: replicatevalidation
         image: quay.io/cdis/dcf-dataservice:master
         imagePullPolicy: Always
         resources:

@@ -3,6 +3,8 @@ import argparse
 import json
 
 import aws_replicate
+import google_replicate
+import validate
 from deletion import delete_objects_from_cloud_resources
 
 
@@ -67,7 +69,6 @@ if __name__ == "__main__":
         )
     elif args.action == "google_replicate":
         job_name = "copying"
-        import google_replicate
 
         google_replicate.run(
             int(args.thread_num),
@@ -77,7 +78,6 @@ if __name__ == "__main__":
             None,
         )
     elif args.action == "validate":
-        import validate
         validate.run(
             json.loads(args.global_config)
         )

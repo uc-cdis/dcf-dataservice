@@ -6,7 +6,7 @@ from indexclient.client import IndexClient
 
 import utils
 from errors import UserError
-from aws_replicate import build_object_dataset
+from aws_replicate import build_object_dataset_aws
 from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 logger = get_logger("Validation")
@@ -69,7 +69,7 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset(PROJECT_ACL, logger)
+    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
     if global_config.get("save_copied_objects"):
@@ -100,7 +100,7 @@ def run(global_config):
         except Exception as e:
             logger.error(e)
 
-    pass_valiation = True
+    pass_validation = True
     for idx, manifest_file in enumerate(manifest_files):
         total_aws_copy_failures = 0
         total_gs_copy_failures = 0
@@ -132,6 +132,7 @@ def run(global_config):
 
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
+            # if a file is in ignored_dict, we don’t copy but we still need to check if the file exists in the bucket and is indexed
             if fi["id"] in ignored_dict:
                 object_path = "{}/{}".format(
                     gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
@@ -142,7 +143,7 @@ def run(global_config):
             if object_path not in gs_copied_objects and fi["size"] != 0:
                 total_gs_copy_failures += 1
                 logger.error(
-                    "{} is not copied yet to google buckes".format(object_path)
+                    "{} is not copied yet to google buckets".format(object_path)
                 )
             elif fi["size"] != 0:
                 fi["gs_url"] = "gs://" + object_path
@@ -188,8 +189,8 @@ def run(global_config):
                     )
                 )
 
-        if pass_valiation:
-            pass_valiation = (
+        if pass_validation:
+            pass_validation = (
                 total_aws_copy_failures
                 + total_gs_copy_failures
                 + total_aws_index_failures
@@ -206,4 +207,4 @@ def run(global_config):
         except Exception as e:
             logger.error(e)
 
-    return pass_valiation
+    return pass_validation

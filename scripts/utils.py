@@ -271,7 +271,6 @@ def build_object_dataset_gs(PROJECT_ACL):
 def write_csv(filename, files, sorted_attr=None, fieldnames=None):
     def on_key(element):
         return element[sorted_attr]
-    import csv
     if sorted_attr:
         sorted_files = sorted(files, key=on_key)
     else:

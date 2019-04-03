@@ -1,5 +1,5 @@
 # run with 
-# gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET log_bucket IGNORED_FILE_S3 s3://bucket/ignored_files_manifest
+# gen3 job run jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET log_bucket IGNORED_FILE_S3 s3://bucket/ignored_files_manifest
 apiVersion: batch/v1
 kind: Job
 metadata:
