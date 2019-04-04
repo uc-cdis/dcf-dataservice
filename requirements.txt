@@ -1,5 +1,6 @@
 python_dateutil==2.6.1
 requests>=2.20.0<3.0.0
+retry==0.9.2
 boto3>=1.9.111
 google-cloud==0.33.1
 google-resumable-media==0.3.1

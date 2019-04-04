@@ -1,3 +1,5 @@
+from retry import retry
+
 from errors import APIError, UserError
 import utils
 from settings import PROJECT_ACL
@@ -34,6 +36,7 @@ def _remove_changed_url(doc, url):
     return doc, modified
 
 
+@retry(Exception, tries=5, delay=10)
 def update_url(fi, indexclient, provider="s3", url=None):
     """
     update a record to indexd
