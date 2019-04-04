@@ -6,7 +6,7 @@ from indexclient.client import IndexClient
 
 import utils
 from errors import UserError
-from aws_replicate import build_object_dataset_aws
+from aws_replicate import bucket_exists, build_object_dataset_aws
 from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 logger = get_logger("Validation")
@@ -48,6 +48,10 @@ def run(global_config):
     """
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
+    
+    s3 = boto3.client("s3")
+    if not bucket_exists(s3, global_config.get("log_bucket")):
+        return
 
     ignored_dict = utils.get_ignored_files(IGNORED_FILES, "\t")
     if not ignored_dict:
@@ -80,7 +84,6 @@ def run(global_config):
         with open("./gs_copied_objects.json", "w") as outfile:
             json.dump(gs_copied_objects, outfile)
 
-        s3 = boto3.client("s3")
         try:
             s3.upload_file(
                 "indexd_records.json",
@@ -197,7 +200,6 @@ def run(global_config):
 
         utils.write_csv("./tmp.csv", files)
         try:
-            s3 = boto3.client("s3")
             s3.upload_file(
                 "tmp.csv", global_config.get("log_bucket"), out_manifests[idx].strip()
             )
