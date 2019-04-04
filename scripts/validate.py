@@ -152,8 +152,7 @@ def run(global_config):
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
-                "All the objects in {} are replicated to GS and indexed correctly!!!",
-                manifest_file,
+                "All the objects in {} are replicated to GS and indexed correctly!!!".format(manifest_file)
             )
         else:
             if total_gs_index_failures > 0:
@@ -171,8 +170,7 @@ def run(global_config):
 
         if total_aws_index_failures + total_aws_copy_failures == 0:
             logger.info(
-                "All the objects in {} are replicated to AWS and indexed correctly!!!",
-                manifest_file,
+                "All the objects in {} are replicated to AWS and indexed correctly!!!".format(manifest_file)
             )
         else:
             if total_aws_index_failures > 0:
