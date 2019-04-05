@@ -50,7 +50,11 @@ def run(global_config):
         raise UserError("please provide the log bucket")
     
     s3 = boto3.client("s3")
-    if not bucket_exists(s3, global_config.get("log_bucket")):
+
+    session = boto3.session.Session()
+    s3_sess = session.resource("s3")
+
+    if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         return
 
     ignored_dict = utils.get_ignored_files(IGNORED_FILES, "\t")
