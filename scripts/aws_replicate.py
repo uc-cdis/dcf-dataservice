@@ -731,11 +731,13 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
     
-    s3 = boto3.client("s3")
-
-    if not bucket_exists(s3, global_config.get("log_bucket")):
+    session = boto3.session.Session()
+    s3_sess = session.resource("s3")
+    
+    if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         return
 
+    s3 = boto3.client("s3")
     try:
         s3.download_file(global_config.get("log_bucket"), release + "/log.txt", "./log.txt")
     except botocore.exceptions.ClientError as e:
