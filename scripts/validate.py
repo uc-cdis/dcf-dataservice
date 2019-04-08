@@ -201,8 +201,15 @@ def run(global_config):
                 + total_gs_index_failures
                 == 0
             )
+        
+        HEADERS = ["id", "file_name", "md5", "size", "state", "project_id", "baseid", "version", "release", "acl", "type", "deletereason", "gs_url", "indexd_url"]
+        isb_files = []
+        for fi in files:
+            del fi["aws_url"]
+            if fi["size"] != 0:
+                isb_files.append(fi)
 
-        utils.write_csv("./tmp.csv", files)
+        utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
         try:
             s3.upload_file(
                 "tmp.csv", global_config.get("log_bucket"), out_manifests[idx].strip()
