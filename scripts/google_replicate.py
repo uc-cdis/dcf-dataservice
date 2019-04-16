@@ -248,6 +248,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
             logger.error(e.message)
             return DataFlowLog(message=e.message)
 
+    # Confirm that the object was copied
     if blob_exists(bucket_name, blob_name):
         try:
             if indexd_utils.update_url(fi, indexd_client, provider="gs"):

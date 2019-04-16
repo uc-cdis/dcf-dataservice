@@ -737,9 +737,11 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         return
 
+    log_filename = manifest_file.replace.split("/")[-1](".tsv", "txt")
+
     s3 = boto3.client("s3")
     try:
-        s3.download_file(global_config.get("log_bucket"), release + "/log.txt", "./log.txt")
+        s3.download_file(global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt")
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
 
@@ -816,7 +818,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
         json.dump(json_log, outfile)
     try:
         s3.upload_file(
-            "./log.txt", global_config.get("log_bucket"), release + "/log.txt"
+            "./log.txt", global_config.get("log_bucket"), release + "/" + log_filename
         )
         s3.upload_file(
             filename, global_config.get("log_bucket"), release + "/" + os.path.basename(filename)
