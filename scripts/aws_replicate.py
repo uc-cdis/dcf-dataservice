@@ -208,6 +208,7 @@ class JobInfo(object):
         copied_objects,
         source_objects,
         manager_ns,
+        release,
         bucket=None,
     ):
         """
@@ -234,6 +235,7 @@ class JobInfo(object):
         self.copied_objects = copied_objects
         self.source_objects = source_objects
         self.manager_ns = manager_ns
+        self.release = release
 
         self.indexclient = IndexClient(
             INDEXD["host"],
@@ -383,6 +385,13 @@ def exec_aws_copy(lock, jobinfo):
     lock.acquire()
     jobinfo.manager_ns.total_processed_files += len(files)
     jobinfo.manager_ns.total_copied_data += fi["size"]*1.0/1024/1024/1024
+    if jobinfo.manager_ns.total_processed_files % (5*len(files)) == 0:
+        try:
+            session.client("s3").upload_file(
+                "./log.txt", jobinfo.global_config.get("log_bucket"), jobinfo.release + "/log.txt"
+            )
+        except Exception as e:
+            logger.error(e)
     lock.release()
     logger.info(
         "{}/{} objects are processed and {}/{} (GiB) is copied".format(
@@ -460,6 +469,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     )
                 )
                 time.sleep(5)
+                if e.code == 403:
+                    break
                 tries += 1
             except SocketError as e:
                 if e.errno != errno.ECONNRESET:
@@ -737,7 +748,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         return
 
-    log_filename = manifest_file.replace.split("/")[-1](".tsv", "txt")
+    log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
     s3 = boto3.client("s3")
     try:
@@ -774,6 +785,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
             copied_objects,
             source_objects,
             manager_ns,
+            release,
             bucket,
         )
         jobInfos.append(job)
@@ -784,7 +796,6 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     else:
         pool = ThreadPool(thread_num)
 
-    results = []
     try:
         if job_name == "copying":
             part_func = partial(exec_aws_copy, lock)
@@ -793,7 +804,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
         else:
             raise UserError("Not supported!!!")
 
-        results = pool.map_async(part_func, jobInfos).get(9999999)
+        pool.map_async(part_func, jobInfos).get(9999999)
     except KeyboardInterrupt:
         pool.terminate()
 
@@ -801,27 +812,9 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     pool.close()
     pool.join()
 
-    filename = global_config.get("log_file", "{}_log.json".format(job_name))
-
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    filename = timestr + "_" + filename
-
-    if job_name == "copying":
-        results = [{"data": results}]
-
-    json_log = {}
-
-    for result in results:
-        json_log.update(result)
-
-    with open(filename, "w") as outfile:
-        json.dump(json_log, outfile)
     try:
         s3.upload_file(
             "./log.txt", global_config.get("log_bucket"), release + "/" + log_filename
-        )
-        s3.upload_file(
-            filename, global_config.get("log_bucket"), release + "/" + os.path.basename(filename)
         )
     except Exception as e:
         logger.error(e)

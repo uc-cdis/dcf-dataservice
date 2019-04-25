@@ -171,7 +171,7 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
     if global_config.get("log_bucket") and global_config.get("release"):
         with open(fi["id"], "w") as f:
             f.write(
-                "%s %s %d %s %s %s %s %s %s"
+                "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s"
                 % (
                     fi.get("id"),
                     fi.get("file_name").replace(" ", "_"),

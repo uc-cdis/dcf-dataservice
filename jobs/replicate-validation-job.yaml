@@ -1,5 +1,5 @@
 # run with
-# Ex. gen3 job run jobs/replicate-validation-job.yaml  IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv MANIFEST_FILES 's3://giang816test/active_manifest.tsv,s3://giang816test/legacy_manifest.tsv' OUT_FILES 'active_aug.tsv,legacy_aug.tsv' LOG_BUCKET 'xssxs'
+# Ex. gen3 job run jobs/replicate-validation-job.yaml RELEASE DR16 IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv MANIFEST_FILES 's3://giang816test/GDC_full_sync_legacy_manifest_20190326_post_DR16.0.tsv' OUT_FILES 'GDC_full_sync_legacy_manifest_20190326_post_DR16_DCF.tsv' LOG_BUCKET 'xssxs'
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -35,6 +35,8 @@ spec:
             cpu: "8"
             memory: "16Gi"
         env:
+          - name: RELEASE
+            GEN3_RELEASE
           - name: IGNORED_FILE
             GEN3_IGNORED_FILE
           - name: MANIFEST_FILES
@@ -68,5 +70,6 @@ spec:
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
-            python scripts/replicate.py validate --global_config "{\"manifest_files\":\"$MANIFEST_FILES\", \"out_manifests\": \"$OUT_FILES\", \"log_bucket\": \"$LOG_BUCKET\", \"save_copied_objects\": 1}"
+            python scripts/replicate.py validate --global_config "{\"manifest_files\":\"$MANIFEST_FILES\", \"out_manifests\": \"$OUT_FILES\", \"log_bucket\": \"$LOG_BUCKET\", \"save_copied_objects\": 1}" > validation.log
+            aws s3 cp ./validation.log s3://$LOG_BUCKET/$RELEASE/
       restartPolicy: Never

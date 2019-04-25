@@ -55,7 +55,7 @@ class FileCopyingDoFn(beam.DoFn):
 
 def format_result(result):
     (fi, datalog) = result
-    return "%s %s %d %s %s %s %s %s %s" % (
+    return "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s" % (
         fi.get("id"),
         fi.get("file_name"),
         int(fi.get("size")),

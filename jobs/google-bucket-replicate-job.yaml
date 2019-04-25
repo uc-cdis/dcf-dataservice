@@ -1,5 +1,5 @@
 # run with 
-# Ex. gen3 job run jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 RELEASE DR16 MANIFEST_FILE gs://data-flow-code/input/GDC_full_active_manifest.tsv IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
+# Ex. gen3 job run jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 RELEASE DR16 MANIFEST_FILE gs://data-flow-code/input/GDC_full_sync_legacy_manifest_20190326_post_DR16.0.tsv IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -69,7 +69,7 @@ spec:
             fi
             if [[ "$type" == "active" || "$type" == "legacy" ]]; then
               rand_str="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 5 | head -n 1)"
-              python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --autoscaling_algorithm NONE --num_worker $MAX_WORKERS --maxNumWorkers $MAX_WORKERS --staging_location gs://$LOG_BUCKET/$RELEASE/staging --temp_location gs://$LOG_BUCKET/$RELEASE/temp --output gs://$LOG_BUCKET/$RELEASE/$type/output_$rand_str --setup_file ./setup.py --input $MANIFEST_FILE --global_config "{\"release\": $RELEASE/$type, \"log_bucket\": \"$LOG_BUCKET\"}" --extra_package indexclient-1.5.9.zip
+              python dataflow_pipeline.py  --runner DataflowRunner --project $PROJECT --job_name dcf-dataservice --autoscaling_algorithm NONE --num_worker $MAX_WORKERS --maxNumWorkers $MAX_WORKERS --staging_location gs://$LOG_BUCKET/$RELEASE/staging --temp_location gs://$LOG_BUCKET/$RELEASE/temp --output gs://$LOG_BUCKET/$RELEASE/$type/output_$rand_str --setup_file ./setup.py --input $MANIFEST_FILE --global_config "{\"release\": \"$RELEASE/$type\", \"log_bucket\": \"$LOG_BUCKET\"}" --extra_package indexclient-1.5.9.zip
             else
               echo "Neither active nor legacy manifest is provided. Please check the manifest name!!!"
             fi
