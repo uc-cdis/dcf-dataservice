@@ -3,6 +3,7 @@ import time
 
 import json
 import boto3
+import botocore
 from google.cloud import storage
 
 from cdislogging import get_logger
@@ -60,6 +61,15 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
         manifest(str): manifest file
         log_filename(str): the name of log file
     """
+    session = boto3.session.Session()
+    s3_sess = session.resource("s3")
+
+    try:
+        s3_sess.meta.client.head_bucket(Bucket=log_bucket)
+    except botocore.exceptions.ClientError as e:
+        logger.error("The bucket {} does not exist or you have no access. Detail {}".format(log_bucket, e))
+        return
+
     indexclient = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
