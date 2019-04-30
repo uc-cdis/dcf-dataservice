@@ -11,7 +11,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 import json
 
-from scripts.google_replicate import exec_google_copy
+from scripts.google_replicate import google_copy_wrapper
 from scripts.utils import (
     get_ignored_files,
     build_object_dataset_gs,
@@ -50,12 +50,12 @@ class FileCopyingDoFn(beam.DoFn):
         fi = dict(zip(FILE_HEADERS, words))
         fi["size"] = int(fi["size"])
 
-        return [(fi, exec_google_copy(fi, PipePrepare.ignored_dict, self.global_config))]
+        return [(fi, google_copy_wrapper(fi, PipePrepare.ignored_dict, self.global_config))]
 
 
 def format_result(result):
     (fi, datalog) = result
-    return "%s %s %d %s %s %s %s %s %s" % (
+    return "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s" % (
         fi.get("id"),
         fi.get("file_name"),
         int(fi.get("size")),
@@ -96,6 +96,9 @@ def run(argv=None):
     global_config = {}
     if known_args.global_config:
         global_config = json.loads(known_args.global_config)
+        if not global_config.get("log_bucket") or not global_config.get("release"):
+            print("Either log bucket or release params is missing")
+            return
 
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(SetupOptions).save_main_session = True
