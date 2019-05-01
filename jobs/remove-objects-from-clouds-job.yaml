@@ -1,5 +1,5 @@
 # run with 
-# gen3 job run jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET log_bucket IGNORED_FILE_S3 s3://bucket/ignored_files_manifest
+# gen3 job run jobs/remove-objects-from-clouds-job.yaml RELEASE DR16 MANIFEST_S3 s3://giang816test/GDC_sample_redact_manifest.tsv LOG_BUCKET log_bucket IGNORED_FILE_S3 s3://giang816test/ignored_files_manifest.csv
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -29,6 +29,8 @@ spec:
         image: quay.io/cdis/dcf-dataservice:master
         imagePullPolicy: Always
         env:
+          - name: RELEASE
+            GEN3_RELEASE
           - name: LOG_BUCKET
             GEN3_LOG_BUCKET
           - name: MANIFEST_S3
@@ -59,5 +61,5 @@ spec:
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             aws s3 cp $IGNORED_FILE_S3 /dcf-dataservice/ignored_files_manifest.csv
-            python scripts/replicate.py readact --redact_file $MANIFEST_S3 --log_bucket $LOG_BUCKET
+            python scripts/replicate.py readact --release $RELEASE --redact_file $MANIFEST_S3 --log_bucket $LOG_BUCKET
       restartPolicy: Never

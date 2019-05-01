@@ -3,11 +3,13 @@ import time
 
 import json
 import boto3
+import botocore
 from google.cloud import storage
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
+from aws_replicate import object_exists
 from settings import INDEXD, PROJECT_ACL
 from utils import (
     get_aws_bucket_name,
@@ -50,7 +52,7 @@ class DeletionLog(object):
         }
 
 
-def delete_objects_from_cloud_resources(manifest, log_bucket):
+def delete_objects_from_cloud_resources(manifest, log_bucket, release):
     """
     delete object from S3 and GS
     for safety use filename instead of file_name in manifest file
@@ -60,6 +62,15 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
         manifest(str): manifest file
         log_filename(str): the name of log file
     """
+    session = boto3.session.Session()
+    s3_sess = session.resource("s3")
+
+    try:
+        s3_sess.meta.client.head_bucket(Bucket=log_bucket)
+    except botocore.exceptions.ClientError as e:
+        logger.error("The bucket {} does not exist or you have no access. Detail {}".format(log_bucket, e))
+        return
+
     indexclient = IndexClient(
         INDEXD["host"],
         INDEXD["version"],
@@ -131,11 +142,11 @@ def delete_objects_from_cloud_resources(manifest, log_bucket):
         s3 = boto3.client("s3")
         with open(aws_filename, "w") as outfile:
             json.dump(aws_log_json, outfile)
-        s3.upload_file(aws_filename, log_bucket, basename(aws_filename))
+        s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
 
         with open(gs_filename, "w") as outfile:
             json.dump(gs_log_json, outfile)
-        s3.upload_file(gs_filename, log_bucket, basename(gs_filename))
+        s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
     except Exception as e:
         logger.error(e)
 
@@ -159,6 +170,9 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     full_path = join("s3://" + target_bucket, key)
     deleting_object = {"Key": key}
     deletion_log = DeletionLog(url=full_path)
+
+    if not object_exists(s3, target_bucket, key):
+        return deletion_log
 
     try:
         res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
