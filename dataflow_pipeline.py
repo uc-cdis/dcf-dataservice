@@ -15,9 +15,15 @@ from scripts.google_replicate import google_copy_wrapper
 from scripts.utils import (
     get_ignored_files,
     build_object_dataset_gs,
-    prepare_txt_manifest_google_dataflow
+    prepare_txt_manifest_google_dataflow,
+    get_bucket_name_map_from_gdc_dac
 )
 from scripts.settings import IGNORED_FILES, PROJECT_ACL
+
+try:
+    from scripts.settings import GDC_DAC_FILE
+except ImportError:
+    GDC_DAC_FILE = "/dcf-dataservice/GDC_datasets_access_control.csv"
 
 try:
     unicode  # pylint: disable=unicode-builtin
@@ -30,6 +36,7 @@ FILE_HEADERS = ["id", "file_name", "size", "md5", "acl", "project_id"]
 class PipePrepare(object):
     # class variable
     ignored_dict = get_ignored_files(IGNORED_FILES, "\t")
+    gdc_dac_dict = get_bucket_name_map_from_gdc_dac(GDC_DAC_FILE)
 
 
 class FileCopyingDoFn(beam.DoFn):
@@ -50,7 +57,7 @@ class FileCopyingDoFn(beam.DoFn):
         fi = dict(zip(FILE_HEADERS, words))
         fi["size"] = int(fi["size"])
 
-        return [(fi, google_copy_wrapper(fi, PipePrepare.ignored_dict, self.global_config))]
+        return [(fi, google_copy_wrapper(fi, PipePrepare.ignored_dict, PipePrepare.gdc_dac_dict, self.global_config))]
 
 
 def format_result(result):

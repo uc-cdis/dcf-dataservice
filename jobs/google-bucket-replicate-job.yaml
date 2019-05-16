@@ -1,6 +1,6 @@
 # run with 
-# Ex. gen3 job run jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 RELEASE DR16 MANIFEST_FILE gs://data-flow-code/input/GDC_full_sync_legacy_manifest_20190326_post_DR16.0.tsv IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
-# Ex. gen3 runjob  jobs/google-bucket-replicate-job.yaml PROJECT dcf-prod-buckets MAX_WORKERS 80 RELEASE DR16 MANIFEST_FILE gs://replication-input/GDC_full_sync_active_manifest_20190326_post_DR16.0.tsv IGNORED_FILE gs://replication-input/ignored_files_manifest.csv LOG_BUCKET datarefresh-log
+# Ex. gen3 job run jobs/google-bucket-replicate-job.yaml PROJECT cdis-test-188416 MAX_WORKERS 4 RELEASE DR16 MANIFEST_FILE gs://data-flow-code/input/GDC_full_sync_legacy_manifest_20190326_post_DR16.0.tsv GDC_DAC_GS gs://replication-input/GDC_datasets_access_control.csv IGNORED_FILE gs://data-flow-code/ignored/ignored_files_manifest.csv LOG_BUCKET data-flow-code
+# Ex. gen3 runjob  jobs/google-bucket-replicate-job.yaml PROJECT dcf-prod-buckets MAX_WORKERS 80 RELEASE DR16 MANIFEST_FILE gs://replication-input/GDC_full_sync_active_manifest_20190326_post_DR16.0.tsv GDC_DAC_GS gs://replication-input/GDC_datasets_access_control.csv IGNORED_FILE gs://replication-input/ignored_files_manifest.csv LOG_BUCKET datarefresh-log
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -43,6 +43,8 @@ spec:
             GEN3_IGNORED_FILE
           - name: LOG_BUCKET
             GEN3_LOG_BUCKET
+          - name: GDC_DAC_GS
+            GEN3_GDC_DAC_GS
         volumeMounts:
           - name: cred-volume
             mountPath: "/secrets/google_service_account_creds"
@@ -61,6 +63,7 @@ spec:
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
+            gsutil cp $GDC_DAC_GS /dcf-dataservice/GDC_datasets_access_control.csv
             if [[ "$MANIFEST_FILE" == *"active"* ]]; then
               type="active"
             elif [[ "$MANIFEST_FILE" == *"legacy"* ]]; then

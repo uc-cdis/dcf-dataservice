@@ -7,7 +7,7 @@ from indexclient.client import IndexClient
 import utils
 from errors import UserError
 from aws_replicate import bucket_exists, build_object_dataset_aws
-from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
+from settings import PROJECT_ACL, INDEXD, IGNORED_FILES, GDC_PROJECT_BUCKET_MAP
 
 logger = get_logger("Validation")
 

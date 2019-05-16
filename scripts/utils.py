@@ -8,12 +8,41 @@ from threading import Thread
 from urlparse import urlparse
 from errors import UserError
 
+# Backward compatibility
+try:
+    from settings import GDC_PROJECT_BUCKET_MAP
+except ImportError:
+    with open("/dcf-dataservice/GDC_datasets_access_control.csv", "rt") as f:
+        csvReader = csv.DictReader(f, delimiter=',')
+        for row in csvReader:
+            bucket_name = ""
+            if row["access control level"] == "program":
+                bucket_name = "gdc_{}_{}".format(
+                    row["program name"], row["program phsid"]
+                )
+            elif row["access control level"] == "project":
+                bucket_name = "gdc_{}_{}".format(
+                    row["Project ID"], row["project phsid"]
+                )
+            else:
+                continue
+            GDC_PROJECT_BUCKET_MAP[row["Project ID"]] = {
+                "aws_bucket_prefix": bucket_name.lower(),
+                "gs_bucket_prefix": bucket_name.lower(),
+            }
+
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id").split("-")[0]]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+        project_info = GDC_PROJECT_BUCKET_MAP.get(fi.get("project_id"))
+        if project_info is None:
+            raise UserError(
+                "Both PROJECT_ACL and GDC_PROJECT_BUCKET_MAP do not have {} key".format(
+                    fi.get("project_id")
+                )
+            )
 
     # bad hard code to support ccle buckets
     if "ccle" in project_info["aws_bucket_prefix"]:
@@ -32,7 +61,13 @@ def get_google_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id").split("-")[0]]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+        project_info = GDC_PROJECT_BUCKET_MAP.get(fi.get("project_id"))
+        if project_info is None:
+            raise UserError(
+                "Both PROJECT_ACL and GDC_PROJECT_BUCKET_MAP do not have {} key".format(
+                    fi.get("project_id")
+                )
+            )
     return project_info["gs_bucket_prefix"] + (
         "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
@@ -60,6 +95,7 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     list of file info dictionary (size, md5, etc.)
     """
     import subprocess
+
     cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
     subprocess.Popen(cmd, shell=True).wait()
 
@@ -126,7 +162,7 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
             key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
             if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
-                total_copying_data += fi["size"]*1.0/1024/1024/1024
+                total_copying_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
         copying_files = filtered_copying_files
 
     for idx in range(0, len(copying_files), chunk_size):
@@ -136,7 +172,11 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
 
 
 def prepare_txt_manifest_google_dataflow(
-    gs_manifest_file, local_manifest_txt_file, copied_objects=None, project_acl=None, ignored_dict=None
+    gs_manifest_file,
+    local_manifest_txt_file,
+    copied_objects=None,
+    project_acl=None,
+    ignored_dict=None,
 ):
     """
     Since Apache Beam does not support csv format, convert the csv to txt file
@@ -170,7 +210,10 @@ def prepare_txt_manifest_google_dataflow(
             )
 
     import subprocess
-    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt"))
+
+    cmd = "gsutil cp {} {}".format(
+        local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt")
+    )
     subprocess.Popen(cmd, shell=True).wait()
     return gs_manifest_file.replace(".tsv", ".txt")
 
@@ -271,6 +314,7 @@ def build_object_dataset_gs(PROJECT_ACL):
 def write_csv(filename, files, sorted_attr=None, fieldnames=None):
     def on_key(element):
         return element[sorted_attr]
+
     if sorted_attr:
         sorted_files = sorted(files, key=on_key)
     else:

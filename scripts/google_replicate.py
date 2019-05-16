@@ -193,11 +193,12 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
     return datalog
 
 
-def exec_google_copy(fi, ignored_dict, global_config):
+def exec_google_copy(fi, ignored_dict, gdc_dac_dict, global_config):
     """
     copy a file to google bucket.
     Args:
         fi(dict): a dictionary of a copying file
+        gdc_dac_dict(dict): GDC data access control
         global_config(dict): a configuration
             {
                 "chunk_size_download": 1024,
