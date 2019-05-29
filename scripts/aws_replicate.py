@@ -23,16 +23,21 @@ from indexclient.client import IndexClient
 
 from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 import utils
-from utils import (
-    generate_chunk_data_list,
-    prepare_data
-)
+from utils import generate_chunk_data_list, prepare_data
 from errors import UserError, APIError
 from indexd_utils import update_url
 
 global logger
 
 RETRIES_NUM = 5
+
+
+class ProcessingFile(object):
+    def __init__(self, id, size, copy_method, original_storage):
+        self.id = id
+        self.size = size
+        self.copy_method = copy_method
+        self.original_storage = original_storage
 
 
 def resume_logger(filename=None):
@@ -106,13 +111,17 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             pages = paginator.paginate(Bucket=bucket_name, RequestPayer="requester")
             for page in pages:
                 for obj in page["Contents"]:
-                    result[bucket_name+"/"+obj["Key"]] = {
+                    result[bucket_name + "/" + obj["Key"]] = {
                         "StorageClass": obj["StorageClass"],
                         "Size": obj["Size"],
                         "Bucket": bucket_name,
                     }
         except KeyError as e:
-            logger.error("Something wrong with listing objects in {}. Detail {}".format(bucket_name, e))
+            logger.error(
+                "Something wrong with listing objects in {}. Detail {}".format(
+                    bucket_name, e
+                )
+            )
         except botocore.exceptions.ClientError as e:
             logger.error(
                 "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
@@ -155,7 +164,11 @@ def bucket_exists(s3, bucket_name):
         s3.meta.client.head_bucket(Bucket=bucket_name)
         return True
     except botocore.exceptions.ClientError as e:
-        logger.error("The bucket {} does not exist or you have no access. Detail {}".format(bucket_name, e))
+        logger.error(
+            "The bucket {} does not exist or you have no access. Detail {}".format(
+                bucket_name, e
+            )
+        )
         return False
 
 
@@ -173,27 +186,39 @@ def object_exists(s3, bucket_name, key):
         Log in case that no access provided
     """
     try:
-        s3.meta.client.head_object(Bucket=bucket_name, Key=key, RequestPayer='requester')
+        s3.meta.client.head_object(
+            Bucket=bucket_name, Key=key, RequestPayer="requester"
+        )
         return True
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
         if error_code in {404, 403}:
             return False
         else:
-            logger.error("Something wrong with checking object {} in bucket {}. Detail {}".format(key, bucket_name,e))
+            logger.error(
+                "Something wrong with checking object {} in bucket {}. Detail {}".format(
+                    key, bucket_name, e
+                )
+            )
             raise
 
 
 def get_object_storage_class(s3, bucket_name, key):
     try:
-        meta = s3.meta.client.head_object(Bucket=bucket_name, Key=key, RequestPayer='requester')
+        meta = s3.meta.client.head_object(
+            Bucket=bucket_name, Key=key, RequestPayer="requester"
+        )
         return meta.get("StorageClass", "STANDARD")
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
         if error_code == 404:
             return None
         else:
-            logger.error("Something wrong with checking object class {} in bucket {}. Detail {}".format(key, bucket_name, e))
+            logger.error(
+                "Something wrong with checking object class {} in bucket {}. Detail {}".format(
+                    key, bucket_name, e
+                )
+            )
             raise
 
 
@@ -201,7 +226,7 @@ class JobInfo(object):
     def __init__(
         self,
         global_config,
-        files,
+        fi,
         total_files,
         total_copying_data,
         job_name,
@@ -227,7 +252,7 @@ class JobInfo(object):
         
         """
         self.bucket = bucket
-        self.files = files
+        self.fi = fi
         self.total_files = total_files
         self.total_copying_data = total_copying_data
         self.global_config = global_config
@@ -244,7 +269,7 @@ class JobInfo(object):
         )
 
 
-def exec_aws_copy(lock, jobinfo):
+def exec_aws_copy(lock, quick_test, jobinfo):
     """
     Copy a chunk of files from the source bucket to the target buckets.
     The target buckets are infered from PROJECT_ACL and project_id in the file
@@ -273,133 +298,159 @@ def exec_aws_copy(lock, jobinfo):
         None
     """
 
-    files = jobinfo.files
+    fi = jobinfo.fi
     session = boto3.session.Session()
     s3 = session.resource("s3")
 
-    for fi in files:
-        try:
-            target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        except UserError as e:
-            logger.warn(e)
-            continue
+    try:
+        target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+    except UserError as e:
+        logger.warn(e)
+        return
 
-        try:
-            if not bucket_exists(s3, target_bucket):
-                logger.error("There is no bucket with provided name {}\n".format(target_bucket))
-                continue
+    pFile = None
+    try:
+        if not bucket_exists(s3, target_bucket):
+            logger.error(
+                "There is no bucket with provided name {}\n".format(target_bucket)
+            )
+            return
 
-            object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+        object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
-            # object already exists in dcf but acl is changed
-            if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
-                logger.info("acl object is changed. Move object to the right bucket")
-                cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
-                    get_reversed_acl_bucket_name(target_bucket),
-                    object_key,
-                    target_bucket,
-                    object_key,
-                )
-                if not jobinfo.global_config.get("quiet", False):
-                    logger.info(cmd)
+        # object already exists in dcf but acl is changed
+        if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
+            logger.info("acl object is changed. Move object to the right bucket")
+            cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
+                get_reversed_acl_bucket_name(target_bucket),
+                object_key,
+                target_bucket,
+                object_key,
+            )
+            if not jobinfo.global_config.get("quiet", False):
+                logger.info(cmd)
+            if not quick_test:
                 subprocess.Popen(shlex.split(cmd)).wait()
                 try:
                     update_url(fi, jobinfo.indexclient)
                 except APIError as e:
                     logger.warn(e)
-                continue
+            else:
+                pFile = ProcessingFile(fi["id"], fi["size"], "AWS", None)
 
-            # only copy ones not exist in target buckets
-            if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
-                source_key = object_key
-                if not object_exists(s3, jobinfo.bucket, source_key):
-                    try:
-                        source_key = re.search(
-                            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
-                            fi["url"],
-                        ).group(0)
+        # only copy ones not exist in target buckets
+        elif "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
+            source_key = object_key
+            if not object_exists(s3, jobinfo.bucket, source_key):
+                try:
+                    source_key = re.search(
+                        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*$",
+                        fi["url"],
+                    ).group(0)
 
-                        if not object_exists(s3, jobinfo.bucket, source_key):
-                            source_key = None
-                    except (AttributeError, TypeError):
+                    if not object_exists(s3, jobinfo.bucket, source_key):
                         source_key = None
+                except (AttributeError, TypeError):
+                    source_key = None
 
-                    if source_key is None and object_exists(s3, jobinfo.bucket, fi["id"]):
-                        source_key = fi["id"]
+                if source_key is None and object_exists(s3, jobinfo.bucket, fi["id"]):
+                    source_key = fi["id"]
 
-                if not source_key:
-                    logger.info(
-                        "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
-                            fi["id"], jobinfo.bucket
-                        )
+            if not source_key:
+                logger.info(
+                    "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
+                        fi["id"], jobinfo.bucket
                     )
+                )
+                if not quick_test:
                     try:
-                        stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
+                        stream_object_from_gdc_api(
+                            fi, target_bucket, jobinfo.global_config
+                        )
                         update_url(fi, jobinfo.indexclient)
                     except Exception as e:
                         logger.warn(e)
-                    continue
+                else:
+                    pFile = ProcessingFile(fi["id"], fi["size"], "GDCAPI", None)
+                return
 
-                try:
-                    #storage_class = jobinfo.source_objects[source_key]["StorageClass"]
-                    storage_class = get_object_storage_class(s3, jobinfo.bucket, source_key)
-                except Exception as e:
-                    logger.warn(e)
-                    continue
+            try:
+                # storage_class = jobinfo.source_objects[source_key]["StorageClass"]
+                storage_class = get_object_storage_class(s3, jobinfo.bucket, source_key)
+            except Exception as e:
+                logger.warn(e)
+                return
 
-                # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-                if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
-                    if not jobinfo.global_config.get("quiet", False):
-                        logger.info(
-                            "Streaming: {}. Size {} (MB). Class {}".format(
-                                object_key,
-                                int(fi["size"] * 1.0 / 1024 / 1024),
-                                storage_class,
-                            )
+            # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
+                if not jobinfo.global_config.get("quiet", False):
+                    logger.info(
+                        "Streaming: {}. Size {} (MB). Class {}".format(
+                            object_key,
+                            int(fi["size"] * 1.0 / 1024 / 1024),
+                            storage_class,
                         )
+                    )
+                if not quick_test:
                     try:
-                        stream_object_from_gdc_api(fi, target_bucket, jobinfo.global_config)
+                        stream_object_from_gdc_api(
+                            fi, target_bucket, jobinfo.global_config
+                        )
                     except Exception as e:
                         # catch generic exception to prevent the code from terminating
                         # in the middle of replicating process
                         logger.warn(e)
                 else:
-                    logger.info("start aws copying {}".format(object_key))
-                    cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
-                        jobinfo.bucket, source_key, target_bucket, object_key
-                    )
-                    if not jobinfo.global_config.get("quiet", False):
-                        logger.info(cmd)
+                    pFile = ProcessingFile(fi["id"], fi["size"], "GDCAPI", None)
+
+            else:
+                logger.info("start aws copying {}".format(object_key))
+                cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
+                    jobinfo.bucket, source_key, target_bucket, object_key
+                )
+                if not jobinfo.global_config.get("quiet", False):
+                    logger.info(cmd)
+                if not quick_test:
                     # wait untill finish
                     subprocess.Popen(shlex.split(cmd)).wait()
-            else:
-                logger.info(
-                    "object {} is already copied to {}".format(object_key, target_bucket)
-                )
+                else:
+                    pFile = ProcessingFile(fi["id"], fi["size"], "AWS", storage_class)
+
+        else:
+            logger.info(
+                "object {} is already copied to {}".format(object_key, target_bucket)
+            )
+        if not quick_test:
             try:
                 update_url(fi, jobinfo.indexclient)
             except APIError as e:
                 logger.warn(e)
-        except Exception as e:
-            logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
+    except Exception as e:
+        logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
+
     lock.acquire()
-    jobinfo.manager_ns.total_processed_files += len(files)
-    jobinfo.manager_ns.total_copied_data += fi["size"]*1.0/1024/1024/1024
-    if jobinfo.manager_ns.total_processed_files % (5*len(files)) == 0:
+    jobinfo.manager_ns.total_processed_files += 1
+    jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
+    if pFile:
+        jobinfo.manager_ns.pFiles.append(pFile)
+    if not quick_test and jobinfo.manager_ns.total_processed_files % 5 == 0:
         try:
             session.client("s3").upload_file(
-                "./log.txt", jobinfo.global_config.get("log_bucket"), jobinfo.release + "/log.txt"
+                "./log.txt",
+                jobinfo.global_config.get("log_bucket"),
+                jobinfo.release + "/log.txt",
             )
         except Exception as e:
             logger.error(e)
     lock.release()
     logger.info(
         "{}/{} objects are processed and {}/{} (GiB) is copied".format(
-            jobinfo.manager_ns.total_processed_files, jobinfo.total_files, int(jobinfo.manager_ns.total_copied_data), int(jobinfo.total_copying_data)
+            jobinfo.manager_ns.total_processed_files,
+            jobinfo.total_files,
+            int(jobinfo.manager_ns.total_copied_data),
+            int(jobinfo.total_copying_data),
         )
     )
-
-    return len(files)
 
 
 def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
@@ -618,7 +669,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         )
 
 
-def validate_uploaded_data(fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received):
+def validate_uploaded_data(
+    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+):
     """
     validate uploaded data
 
@@ -693,7 +746,9 @@ def is_changed_acl_object(fi, copied_objects, target_bucket):
     check if the object has acl changed or not
     """
 
-    object_path = "{}/{}/{}".format(get_reversed_acl_bucket_name(target_bucket), fi.get("id"), fi.get("file_name"))
+    object_path = "{}/{}/{}".format(
+        get_reversed_acl_bucket_name(target_bucket), fi.get("id"), fi.get("file_name")
+    )
     if object_path in copied_objects:
         return True
 
@@ -735,16 +790,24 @@ def check_and_index_the_data(lock, jobinfo):
     return json_log
 
 
-def run(release, thread_num, global_config, job_name, manifest_file, bucket=None):
+def run(
+    release,
+    thread_num,
+    global_config,
+    job_name,
+    manifest_file,
+    quick_test=False,
+    bucket=None,
+):
     """
     start processes and log after they finish
     """
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
-    
+
     session = boto3.session.Session()
     s3_sess = session.resource("s3")
-    
+
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         return
 
@@ -752,7 +815,9 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
 
     s3 = boto3.client("s3")
     try:
-        s3.download_file(global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt")
+        s3.download_file(
+            global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt"
+        )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
 
@@ -764,7 +829,9 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
         logger.info("scan all copied objects")
         copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger, None)
 
-    tasks, total_files, total_copying_data = prepare_data(manifest_file, global_config, copied_objects, PROJECT_ACL)
+    tasks, total_files, total_copying_data = prepare_data(
+        manifest_file, global_config, copied_objects, PROJECT_ACL
+    )
 
     logger.info("Total files need to be replicated: {}".format(total_files))
 
@@ -772,13 +839,14 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     manager_ns = manager.Namespace()
     manager_ns.total_processed_files = 0
     manager_ns.total_copied_data = 0
+    manager_ns.pFiles = []
     lock = manager.Lock()
 
     jobInfos = []
     for task in tasks:
         job = JobInfo(
             global_config,
-            task,
+            task[0],
             total_files,
             total_copying_data,
             job_name,
@@ -798,7 +866,7 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
 
     try:
         if job_name == "copying":
-            part_func = partial(exec_aws_copy, lock)
+            part_func = partial(exec_aws_copy, quick_test, lock)
         elif job_name == "indexing":
             part_func = partial(check_and_index_the_data, lock)
         else:
@@ -812,9 +880,48 @@ def run(release, thread_num, global_config, job_name, manifest_file, bucket=None
     pool.close()
     pool.join()
 
-    try:
-        s3.upload_file(
-            "./log.txt", global_config.get("log_bucket"), release + "/" + log_filename
+    if not quick_test:
+        try:
+            s3.upload_file(
+                "./log.txt",
+                global_config.get("log_bucket"),
+                release + "/" + log_filename,
+            )
+        except Exception as e:
+            logger.error(e)
+    else:
+        logger.info("=======================SUMMARY=======================")
+        n_copying_gdcapi = 0
+        total_copying_gdcapi = 0
+        n_copying_aws_intelligent_tiering = 0
+        total_copying_aws_intelligent_tiering = 0
+        n_copying_aws_non_intelligent_tiering = 0
+        total_copying_aws_non_intelligent_tiering = 0
+        for pFile in manager_ns.pFiles:
+            if pFile.copy_method == "GDCAPI":
+                n_copying_gdcapi += 1
+                total_copying_gdcapi += pFile.size
+            elif pFile.original_storage == "INTELLIGENT_TIERING":
+                n_copying_aws_intelligent_tiering += 1
+                total_copying_aws_intelligent_tiering += pFile.size
+            else:
+                n_copying_aws_non_intelligent_tiering += 1
+                total_copying_aws_non_intelligent_tiering += pFile.size
+
+        logger.info(
+            "Total files are copied by GDC API {}. Total {}(GiB)".format(
+                n_copying_gdcapi, total_copying_gdcapi * 1.0 / 1024 / 1024 / 1024
+            )
         )
-    except Exception as e:
-        logger.error(e)
+        logger.info(
+            "Total files are copied by AWS CLI {} with intelligent tiering storage classes. Total {}(GiB)".format(
+                n_copying_aws_intelligent_tiering,
+                total_copying_aws_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
+            )
+        )
+        logger.info(
+            "Total files are copied by GDC API {}. Total {}(GiB)".format(
+                n_copying_aws_non_intelligent_tiering,
+                total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
+            )
+        )
