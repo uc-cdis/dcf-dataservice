@@ -15,6 +15,7 @@ def parse_arguments():
     aws_replicate_cmd = subparsers.add_parser("aws_replicate")
     aws_replicate_cmd.add_argument("--release", required=True)
     aws_replicate_cmd.add_argument("--global_config", required=True)
+    aws_replicate_cmd.add_argument("--quick_test", required=True)
     aws_replicate_cmd.add_argument("--bucket", required=True)
     aws_replicate_cmd.add_argument("--manifest_file", required=True)
     aws_replicate_cmd.add_argument("--thread_num", required=True)
