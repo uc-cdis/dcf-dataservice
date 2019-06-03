@@ -230,7 +230,7 @@ def test_call_aws_cli_called():
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
-            gen_mock_manifest_data()[0:1],
+            gen_mock_manifest_data()[0],
             1,
             1,
             "",
@@ -240,7 +240,7 @@ def test_call_aws_cli_called():
             "bucket",
         )
     
-    scripts.aws_replicate.exec_aws_copy(lock, job_info)
+    scripts.aws_replicate.exec_aws_copy(lock, False, job_info)
     assert subprocess.Popen.call_count == 1
 
 
@@ -269,7 +269,7 @@ def test_call_streamming_method_called():
 
     job_info = scripts.aws_replicate.JobInfo(
             {},
-            gen_mock_manifest_data()[0:1],
+            gen_mock_manifest_data()[0],
             1,
             1,
             "",
@@ -278,6 +278,6 @@ def test_call_streamming_method_called():
             manager_ns,
             "bucket",
         )
-    scripts.aws_replicate.exec_aws_copy(lock, job_info)
+    scripts.aws_replicate.exec_aws_copy(lock, False, job_info)
     assert subprocess.Popen.call_count == 0
     assert scripts.aws_replicate.stream_object_from_gdc_api.call_count == 1
