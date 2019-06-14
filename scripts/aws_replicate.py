@@ -866,7 +866,7 @@ def run(
 
     try:
         if job_name == "copying":
-            part_func = partial(exec_aws_copy, quick_test, lock)
+            part_func = partial(exec_aws_copy, lock, quick_test)
         elif job_name == "indexing":
             part_func = partial(check_and_index_the_data, lock)
         else:

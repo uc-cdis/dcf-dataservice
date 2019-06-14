@@ -53,7 +53,7 @@ spec:
           - name: MANIFEST_S3
             GEN3_MANIFEST_S3
           - name: QUICK_TEST
-            GEN3_QUICK_TEST |-value: "False"-|
+            GEN3_QUICK_TEST|-value: "False"-|
         volumeMounts:
           - name: cred-volume
             mountPath: "/root/.aws/credentials"
@@ -65,7 +65,7 @@ spec:
             mountPath: "/secrets/dcf_dataservice_credentials.json"
             subPath: "dcf_dataservice_credentials.json"
         command: ["/bin/bash" ]
-        args: 
+        args:
           - "-c"
           - |
             echo """
