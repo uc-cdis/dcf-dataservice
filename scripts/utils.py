@@ -115,7 +115,8 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
     if global_config.get("file_shuffle", False):
         random.shuffle(copying_files)
 
-    chunk_size = global_config.get("chunk_size", 1)
+    # Fix chunk size to 1. Do not change
+    chunk_size = 1
     tasks = []
     total_copying_data = 0
 
