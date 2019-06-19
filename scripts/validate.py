@@ -48,7 +48,7 @@ def run(global_config):
     """
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
-    
+
     s3 = boto3.client("s3")
 
     session = boto3.session.Session()
@@ -144,7 +144,8 @@ def run(global_config):
                     gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
                 )
             else:
-                object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fi["file_name"])
+                fixed_filename = fi["file_name"].replace(" ", "_")
+                object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
 
             if object_path not in gs_copied_objects and fi["size"] != 0:
                 total_gs_copy_failures += 1
