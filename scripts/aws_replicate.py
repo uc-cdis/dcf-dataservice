@@ -80,7 +80,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
     Load copied objects and source objects. The copied objects are obtained by
     listing the target buckets (derived from project_acl). The source objects are
     obtained by listing the objects in source bucket (GDC bucket)
-    
+
     Args:
         project_acl(dict): project access control lever. It contains target bucket infos:
             - project_id(str): map with project_id in manifest
@@ -249,7 +249,7 @@ class JobInfo(object):
             thread_num(int): number of threads
             job_name(str): copying|indexing
             bucket(str): source bucket
-        
+
         """
         self.bucket = bucket
         self.fi = fi
@@ -278,22 +278,22 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         - uuid/fname if not:
             extract key from url if not:
                 uuid if not None
-    
+
     There are some scenarios:
         - Object classes are "STANDARD", "REDUCED_REDUNDANCY": using aws cli
         - Object classes are not "STANDARD", "REDUCED_REDUNDANCY", using gdcapi
         - Object acl is changed, move objects to right bucket
 
-    Intergrity check: 
-        - Using awscli: We rely on aws 
-        - Streaming: 
+    Intergrity check:
+        - Using awscli: We rely on aws
+        - Streaming:
             +) Compute local etag and match with the one provided by aws
             +) Compute md5 on the fly to check the intergrity of streaming data
                 from gdcapi to local machine
 
     Args:
         jobinfo(JobInfo): Job info
-    
+
     Returns:
         None
     """
@@ -321,7 +321,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
-            cmd = "aws s3 mv s3://{}/{} s3://{}/{}".format(
+            cmd = "aws s3 mv \"s3://{}/{}\" \"s3://{}/{}\"".format(
                 get_reversed_acl_bucket_name(target_bucket),
                 object_key,
                 target_bucket,
@@ -405,7 +405,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
             else:
                 logger.info("start aws copying {}".format(object_key))
-                cmd = "aws s3 cp s3://{}/{} s3://{}/{} --request-payer requester".format(
+                cmd = "aws s3 cp \"s3://{}/{}\" \"s3://{}/{}\" --request-payer requester".format(
                     jobinfo.bucket, source_key, target_bucket, object_key
                 )
                 if not jobinfo.global_config.get("quiet", False):
@@ -455,7 +455,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
 def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     """
-    Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from 
+    Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from
     gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
 
     Args:
@@ -467,14 +467,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 "data_chunk_size": 1024*1024*5
             }
         endpoint(str): gdcapi
-    
+
     Returns:
         None
     """
 
     class ThreadControl(object):
         """
-        Class for thread synchronization 
+        Class for thread synchronization
         """
 
         def __init__(self):
