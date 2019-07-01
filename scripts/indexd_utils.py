@@ -60,6 +60,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
     try:
         doc = indexclient.get(fi.get("id", ""))
 
+        # record already exists: patch it
         if doc is not None:
             need_update = False
             if url not in doc.urls:
@@ -91,6 +92,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
             )
         )
 
+    # record does not already exist: create it
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("id", "")), url]
     acl = (
         ["*"]
