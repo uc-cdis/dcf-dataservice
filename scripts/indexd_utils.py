@@ -57,6 +57,14 @@ def update_url(fi, indexclient, provider="s3", url=None):
             )
         url = "{}://{}/{}".format(provider, bucket_name, s3_object_name)
 
+    if fi.get("acl") in {"[u'open']", "['open']"}:
+        acl = ["*"]
+    else:
+        acl = [
+            ace.strip().replace("u'", "").replace("'", "")
+            for ace in fi.get("acl", "").strip()[1:-1].split(",")
+        ]
+
     try:
         doc = indexclient.get(fi.get("id", ""))
 
@@ -67,15 +75,6 @@ def update_url(fi, indexclient, provider="s3", url=None):
                 doc, _ = _remove_changed_url(doc, url)
                 doc.urls.append(url)
                 need_update = True
-
-            if fi.get("acl") in {"[u'open']", "['open']"}:
-                acl = ["*"]
-            else:
-                L = fi.get("acl", "").strip()[1:-1].split(",")
-                acl = []
-                for ace in L:
-                    ace = ace.strip().replace("u'", "").replace("'", "")
-                    acl.append(ace)
 
             if set(doc.acl) != set(acl):
                 doc.acl = acl
@@ -94,11 +93,6 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
     # record does not already exist: create it
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("id", "")), url]
-    acl = (
-        ["*"]
-        if fi.get("acl") in {"[u'open']", "['open']"}
-        else fi.get("acl")[1:-1].split(",")
-    )
     try:
         doc = indexclient.create(
             did=fi.get("id"),
