@@ -59,10 +59,18 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
     if fi.get("acl") in {"[u'open']", "['open']"}:
         acl = ["*"]
+        authz = ["/open"]
     else:
         acl = [
             ace.strip().replace("u'", "").replace("'", "")
             for ace in fi.get("acl", "").strip()[1:-1].split(",")
+        ]
+        for ace in acl:
+            if not ace.startswith("phs"):
+                raise Exception('Only "open" and "phs[...]" ACLs are allowed. Got ACL "{}"'.format(ace))
+        authz = [
+            "/programs/{}".format(ace)
+            for ace in acl
         ]
 
     try:
@@ -78,6 +86,10 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
             if set(doc.acl) != set(acl):
                 doc.acl = acl
+                need_update = True
+
+            if set(doc.authz) != set(authz):
+                doc.authz = authz
                 need_update = True
 
             if need_update:
@@ -99,6 +111,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
             hashes={"md5": fi.get("md5")},
             size=fi.get("size", 0),
             acl=acl,
+            authz=authz,
             urls=urls,
         )
         return doc is not None
