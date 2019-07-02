@@ -43,6 +43,12 @@ spec:
             GEN3_IGNORED_FILE
           - name: LOG_BUCKET
             GEN3_LOG_BUCKET
+          - name: AUTH_NAMESPACE
+            valueFrom:
+              configMapKeyRef:
+                name: manifest-global
+                key: auth_namespace
+                optional: true
         volumeMounts:
           - name: cred-volume
             mountPath: "/secrets/google_service_account_creds"

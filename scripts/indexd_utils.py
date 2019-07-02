@@ -1,7 +1,20 @@
+from cdislogging import get_logger
 from errors import APIError, UserError
+import os
 import utils
 from settings import PROJECT_ACL
 from urlparse import urlparse
+
+
+logger = get_logger("IndexdUtils")
+
+
+NAMESPACE = ""
+if os.getenv("AUTH_NAMESPACE"):
+    NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").lstrip("/")
+    logger.info("using namespace {}".format(NAMESPACE))
+else:
+    logger.info("not using any auth namespace")
 
 
 def _remove_changed_url(doc, url):
@@ -69,7 +82,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
             if not ace.startswith("phs"):
                 raise Exception('Only "open" and "phs[...]" ACLs are allowed. Got ACL "{}"'.format(ace))
         authz = [
-            "/programs/{}".format(ace)
+            "{}/programs/{}".format(NAMESPACE, ace)
             for ace in acl
         ]
 
