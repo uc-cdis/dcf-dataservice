@@ -11,7 +11,7 @@ logger = get_logger("IndexdUtils")
 
 NAMESPACE = ""
 if os.getenv("AUTH_NAMESPACE"):
-    NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").lstrip("/")
+    NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").strip("/")
     logger.info("using namespace {}".format(NAMESPACE))
 else:
     logger.info("not using any auth namespace")
