@@ -1,7 +1,20 @@
+from cdislogging import get_logger
 from errors import APIError, UserError
+import os
 import utils
 from settings import PROJECT_ACL
 from urlparse import urlparse
+
+
+logger = get_logger("IndexdUtils")
+
+
+NAMESPACE = ""
+if os.getenv("AUTH_NAMESPACE"):
+    NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").strip("/")
+    logger.info("using namespace {}".format(NAMESPACE))
+else:
+    logger.info("not using any auth namespace")
 
 
 def _remove_changed_url(doc, url):
@@ -57,9 +70,26 @@ def update_url(fi, indexclient, provider="s3", url=None):
             )
         url = "{}://{}/{}".format(provider, bucket_name, s3_object_name)
 
+    if fi.get("acl") in {"[u'open']", "['open']"}:
+        acl = ["*"]
+        authz = ["/open"]
+    else:
+        acl = [
+            ace.strip().replace("u'", "").replace("'", "")
+            for ace in fi.get("acl", "").strip()[1:-1].split(",")
+        ]
+        for ace in acl:
+            if not ace.startswith("phs"):
+                raise Exception('Only "open" and "phs[...]" ACLs are allowed. Got ACL "{}"'.format(ace))
+        authz = [
+            "{}/programs/{}".format(NAMESPACE, ace)
+            for ace in acl
+        ]
+
     try:
         doc = indexclient.get(fi.get("id", ""))
 
+        # record already exists: patch it
         if doc is not None:
             need_update = False
             if url not in doc.urls:
@@ -67,17 +97,12 @@ def update_url(fi, indexclient, provider="s3", url=None):
                 doc.urls.append(url)
                 need_update = True
 
-            if fi.get("acl") in {"[u'open']", "['open']"}:
-                acl = ["*"]
-            else:
-                L = fi.get("acl", "").strip()[1:-1].split(",")
-                acl = []
-                for ace in L:
-                    ace = ace.strip().replace("u'", "").replace("'", "")
-                    acl.append(ace)
-
             if set(doc.acl) != set(acl):
                 doc.acl = acl
+                need_update = True
+
+            if set(doc.authz) != set(authz):
+                doc.authz = authz
                 need_update = True
 
             if need_update:
@@ -91,18 +116,15 @@ def update_url(fi, indexclient, provider="s3", url=None):
             )
         )
 
+    # record does not already exist: create it
     urls = ["https://api.gdc.cancer.gov/data/{}".format(fi.get("id", "")), url]
-    acl = (
-        ["*"]
-        if fi.get("acl") in {"[u'open']", "['open']"}
-        else fi.get("acl")[1:-1].split(",")
-    )
     try:
         doc = indexclient.create(
             did=fi.get("id"),
             hashes={"md5": fi.get("md5")},
             size=fi.get("size", 0),
             acl=acl,
+            authz=authz,
             urls=urls,
         )
         return doc is not None

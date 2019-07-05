@@ -7,5 +7,8 @@ google-cloud-storage==1.6.0
 google-cloud-dataflow==2.5.0
 setuptools==36.6.0
 -e git+https://git@github.com/uc-cdis/cdislogging.git@0.0.2#egg=cdislogging
--e git+https://git@github.com/uc-cdis/indexclient.git@1.5.9#egg=indexclient
+# For the Google script, indexclient source must also be available as a zip
+# file and fed to the script using option "--extra_package" (until package is
+# made available on pypi)
+-e git+https://git@github.com/uc-cdis/indexclient.git@1.6.0#egg=indexclient
 -e git+https://git@github.com/uc-cdis/cdiserrors.git@0.1.0#egg=cdiserrors
