@@ -195,13 +195,6 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     return deletion_log
 
 
-def _remove_gs_5aa_object(client, url, f):
-    """
-    """
-    logger.info("Ignore 5aa object with uuid {}".format(f["id"]))
-    return DeletionLog(url=url)
-
-
 def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     """
     remove object from gs
@@ -216,13 +209,10 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         list(DeletionLog)
 
     """
-    object_key = get_structured_object_key(f["id"], ignored_dict)
-    if object_key:
-        url = "gs://gdc-tcga-phs000178-controlled/{}".format(object_key)
-        return _remove_gs_5aa_object(client, url, f)
-
     logger.info("Start to remove {} from GS".format(f["id"]))
-    key = join(f.get("id"), f.get("filename"))
+    key = get_structured_object_key(f["id"], ignored_dict)
+    if not key:
+        key = join(f.get("id"), f.get("filename"))
     full_path = join("gs://" + target_bucket, key)
     deletion_log = DeletionLog(url=full_path)
     bucket = client.get_bucket(target_bucket)
