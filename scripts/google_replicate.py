@@ -111,7 +111,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
                 "id": "123",
                 "file_name": "abc.bam",
                 "size": 5,
-                ... 
+                ...
             }
     Returns:
         bool: indicating value if the blob is exist or not
@@ -138,7 +138,7 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 "id": "123",
                 "file_name": "abc.bam",
                 "size": 5,
-                ... 
+                ...
             }
     Returns:
         bool: indicating value if the blob is exist or not
@@ -163,11 +163,12 @@ def delete_object(sess, bucket_name, blob_name):
 
 
 def google_copy_wrapper(fi, ignored_dict, global_config):
+    return DataFlowLog(message="Testing new service account")
     try:
         datalog = exec_google_copy(fi, ignored_dict, global_config)
     except Exception as e:
         datalog = DataFlowLog(message="Internal error. Detail {}".format(e))
- 
+
     if global_config.get("log_bucket") and global_config.get("release"):
         with open(fi["id"], "w") as f:
             f.write(
@@ -189,7 +190,7 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
         )
         subprocess.Popen(cmd, shell=True).wait()
         time.sleep(1)
-    
+
     return datalog
 
 
@@ -327,7 +328,7 @@ def exec_google_cmd(lock, ignored_dict, jobinfo):
 
     Args:
         lock(SyncManageLock): lock for synchronization
-        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
+        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing
         gs url hash, size, etc.
         jobinfo(JobInfo): Job info object
 
@@ -429,7 +430,7 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
     Args:
         fi(dict): file info
         bucket_name(str): bucket name
-        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
+        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing
         gs url hash, size, etc.
         indexclient(indexdclient): indexd client
     Returns:
@@ -659,7 +660,7 @@ def run(thread_num, global_config, job_name, manifest_file, bucket=None):
             }
         job_name(str): job name
         manifest_file(str): the name of the manifest
-    
+
     Returns:
         None
 
