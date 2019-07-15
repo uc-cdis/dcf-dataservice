@@ -52,7 +52,7 @@ class DeletionLog(object):
         }
 
 
-def delete_objects_from_cloud_resources(manifest, log_bucket, release):
+def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=False):
     """
     delete object from S3 and GS
     for safety use filename instead of file_name in manifest file
@@ -103,7 +103,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
             )
             aws_target_bucket = None
 
-        if aws_target_bucket:
+        if aws_target_bucket and not dry_run:
             aws_deletion_logs.append(
                 _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
             )
@@ -118,9 +118,10 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
                 )
             )
             continue
-        gs_deletion_logs.append(
-            _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
-        )
+        if not dry_run:
+            gs_deletion_logs.append(
+                _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
+            )
 
     aws_log_list = []
     for log in aws_deletion_logs:
@@ -138,20 +139,21 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
     gs_filename = timestr + "gs_deletion_log.json"
     aws_filename = timestr + "aws_deletion_log.json"
 
-    try:
-        s3 = boto3.client("s3")
-        with open(aws_filename, "w") as outfile:
-            json.dump(aws_log_json, outfile)
-        s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
+    if not dry_run:
+        try:
+            s3 = boto3.client("s3")
+            with open(aws_filename, "w") as outfile:
+                json.dump(aws_log_json, outfile)
+            s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
 
-        with open(gs_filename, "w") as outfile:
-            json.dump(gs_log_json, outfile)
-        s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
-    except Exception as e:
-        logger.error(e)
+            with open(gs_filename, "w") as outfile:
+                json.dump(gs_log_json, outfile)
+            s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
+        except Exception as e:
+            logger.error(e)
 
 
-def _remove_object_from_s3(s3, indexclient, f, target_bucket):
+def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run):
     """
     remove object from s3
 
@@ -163,7 +165,6 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     Returns:
         list(DeletionLog): list of deletion logs
     """
-    logger.info("Start to remove {} from AWS".format(f["id"]))
     bucket = s3.Bucket(target_bucket)
 
     key = join(f.get("id"), f.get("filename"))
@@ -173,7 +174,8 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
 
     if not object_exists(s3, target_bucket, key):
         return deletion_log
-
+    if dry_run:
+        return
     try:
         res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
     except Exception as e:
