@@ -13,8 +13,8 @@ RUN apt-get update && apt-get upgrade -y \
       git \
       openssh-client \
       python3 \
-      python-dev \
-      python-pip \
+      python3-dev \
+      python3-pip \
       python-setuptools \
       vim \
       less \

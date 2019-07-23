@@ -3,7 +3,7 @@ requests>=2.20.0<3.0.0
 boto3>=1.9.111
 google-cloud==0.33.1
 google-resumable-media==0.3.2
-google-cloud-storage==1.16.0
+google-cloud-storage==1.6.0
 apache-beam==2.13.0
 setuptools==36.6.0
 -e git+https://git@github.com/uc-cdis/cdislogging.git@0.0.2#egg=cdislogging
