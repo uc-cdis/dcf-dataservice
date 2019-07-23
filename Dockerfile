@@ -12,7 +12,7 @@ RUN apt-get update && apt-get upgrade -y \
       gcc \
       git \
       openssh-client \
-      python2.7 \
+      python3 \
       python-dev \
       python-pip \
       python-setuptools \
