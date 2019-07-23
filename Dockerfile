@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM quay.io/cdis/python-nginx:pybase3-1.0.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -12,9 +12,6 @@ RUN apt-get update && apt-get upgrade -y \
       gcc \
       git \
       openssh-client \
-      python3 \
-      python3-dev \
-      python3-pip \
       python-setuptools \
       vim \
       less \
@@ -35,18 +32,7 @@ RUN export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
     apt-get update && \
     apt-get install -y google-cloud-sdk \
-        google-cloud-sdk-app-engine-python \
-        google-cloud-sdk-app-engine-java \
-        google-cloud-sdk-app-engine-go \
-        google-cloud-sdk-datalab \
-        google-cloud-sdk-datastore-emulator \
-        google-cloud-sdk-pubsub-emulator \
-        google-cloud-sdk-bigtable-emulator \
-        google-cloud-sdk-cbt \
-        kubectl && \
     gcloud config set core/disable_usage_reporting true && \
-    gcloud config set component_manager/disable_update_check true && \
-    gcloud config set metrics/environment github_docker_image && \
     gcloud --version 
  
  COPY . /dcf-dataservice
