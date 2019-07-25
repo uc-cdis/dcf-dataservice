@@ -115,6 +115,7 @@ def run(global_config):
         total_gs_index_failures = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
+        fail_list = []
         for fi in files:
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
@@ -123,6 +124,7 @@ def run(global_config):
             if not fi["indexd_url"]:
                 total_aws_index_failures += 1
                 total_gs_index_failures += 1
+                fail_list.append(fi)
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
             # validate aws
@@ -130,11 +132,13 @@ def run(global_config):
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
             if object_path not in aws_copied_objects and fi["size"] != 0:
                 total_aws_copy_failures += 1
+                fail_list.append(fi)
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
                 fi["aws_url"] = "s3://" + object_path
                 if fi["aws_url"] not in fi["indexd_url"]:
                     total_aws_index_failures += 1
+                    fail_list.append(fi)
                     logger.error("indexd does not have aws url of {}".format(fi["id"]))
 
             # validate google
@@ -149,6 +153,7 @@ def run(global_config):
 
             if object_path not in gs_copied_objects and fi["size"] != 0:
                 total_gs_copy_failures += 1
+                fail_list.append(fi)
                 logger.error(
                     "{} is not copied yet to google buckets".format(object_path)
                 )
@@ -156,6 +161,7 @@ def run(global_config):
                 fi["gs_url"] = "gs://" + object_path
                 if fi["gs_url"] not in fi["indexd_url"]:
                     total_gs_index_failures += 1
+                    fail_list.append(fi)
                     logger.error("indexd does not have gs url of {}".format(fi["id"]))
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
@@ -212,14 +218,17 @@ def run(global_config):
 
             utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
         else:
+            utils.write_csv("./tmp.csv", fail_list, fieldnames=HEADERS)
             logger.info("Can not generate the augmented manifest for {}. Please fix all the errors".format(manifest_file))
 
         if pass_validation:
             pass_validation = _pass
 
+        out_filename = out_manifests[idx].strip() if _pass else "FAIL_" + out_manifests[idx].strip()
+
         try:
             s3.upload_file(
-                "tmp.csv", global_config.get("log_bucket"), out_manifests[idx].strip()
+                "tmp.csv", global_config.get("log_bucket"), out_filename
             )
         except Exception as e:
             logger.error(e)
