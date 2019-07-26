@@ -61,14 +61,14 @@ def update_url(fi, indexclient, provider="s3", url=None):
                 bucket_name = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             else:
                 bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
-            s3_object_name = "{}/{}".format(fi.get("id"), fi.get("file_name"))
+            object_key = "{}/{}".format(fi.get("id"), fi.get("file_name"))
         except UserError as e:
             raise APIError(
                 "Can not get the bucket name of the record with uuid {}. Detail {}".format(
                     fi.get("id", ""), e
                 )
             )
-        url = "{}://{}/{}".format(provider, bucket_name, s3_object_name)
+        url = "{}://{}/{}".format(provider, bucket_name, object_key)
 
     if fi.get("acl") in {"[u'open']", "['open']"}:
         acl = ["*"]
