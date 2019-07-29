@@ -10,6 +10,7 @@ except ImportError:
 
 from multiprocessing import Manager
 
+import copy
 import pytest
 import google
 import scripts.aws_replicate
@@ -43,7 +44,7 @@ class MockIndexDRecord(object):
         pass
 
 
-RECORDS = {
+DEFAULT_RECORDS = {
             "uuid1": MockIndexDRecord(
                 uuid="uuid1",
                 urls=["s3://tcga-open/uuid1/filename1"],
@@ -60,22 +61,12 @@ RECORDS = {
             ),
         }
 
+RECORDS = {}
+
 @pytest.fixture(scope="function")
 def reset_records():
-    RECORDS ["uuid1"] = MockIndexDRecord(
-                uuid="uuid1",
-                urls=["s3://tcga-open/uuid1/filename1"],
-                urls_metadata={"s3://tcga-open/uuid1/filename1": {}},
-                acl=["*"],
-                authz=["/open"],
-            )
-    RECORDS["uuid2"] = MockIndexDRecord(
-                uuid="uuid2",
-                urls=["s3://tcga-controlled/uuid2/filename2"],
-                urls_metadata={"s3://tcga-controlled/uuid2/filename2": {}},
-                acl=["phs000128"],
-                authz=["/phs000128"],
-            )
+    global RECORDS
+    RECORDS = copy.deepcopy(DEFAULT_RECORDS)
 
 class MockIndexdClient(object):
 
@@ -344,33 +335,32 @@ def test_call_streamming_method_called(mock_aws):
 def test_remove_changed_url():
     """
     Test removing changed url for indexd
-    :return:
     """
-    urls = ["s3://tcga-open/uuid1/filname1", "gs://gdc-tcga-open/uuid1/filname1"]
+    urls = ["s3://tcga-open/uuid1/filename1", "gs://gdc-tcga-open/uuid1/filename1"]
     urls_metadata = {
-        "s3://tcga-open/uuid1/filname1": {},
-        "gs://gdc-tcga-open/uuid1/filname1": {},
+        "s3://tcga-open/uuid1/filename1": {},
+        "gs://gdc-tcga-open/uuid1/filename1": {},
     }
-    url = "s3://tcga-controlled/uuid1/filname1"
+    url = "s3://tcga-controlled/uuid1/filename1"
 
     doc = MockIndexDRecord(urls=urls, urls_metadata=urls_metadata)
     doc, modified = indexd_utils._remove_changed_url(doc, url)
     assert modified == True
-    assert doc.urls == ["gs://gdc-tcga-open/uuid1/filname1"]
-    assert doc.urls_metadata == {"gs://gdc-tcga-open/uuid1/filname1": {}}
+    assert doc.urls == ["gs://gdc-tcga-open/uuid1/filename1"]
+    assert doc.urls_metadata == {"gs://gdc-tcga-open/uuid1/filename1": {}}
 
-    urls = ["s3://ccle-open-access/uuid1/filname1", "gs://gdc-ccle-open/uuid1/filname1"]
+    urls = ["s3://ccle-open-access/uuid1/filename1", "gs://gdc-ccle-open/uuid1/filename1"]
     urls_metadata = {
-        "s3://ccle-open-access/uuid1/filname1": {},
-        "gs://gdc-ccle-open/uuid1/filname1": {},
+        "s3://ccle-open-access/uuid1/filename1": {},
+        "gs://gdc-ccle-open/uuid1/filename1": {},
     }
-    url = "s3://gdc-ccle-controlled/uuid1/filname1"
+    url = "s3://gdc-ccle-controlled/uuid1/filename1"
 
     doc = MockIndexDRecord(urls=urls, urls_metadata=urls_metadata)
     doc, modified = indexd_utils._remove_changed_url(doc, url)
     assert modified
-    assert doc.urls == ["gs://gdc-ccle-open/uuid1/filname1"]
-    assert doc.urls_metadata == {"gs://gdc-ccle-open/uuid1/filname1": {}}
+    assert doc.urls == ["gs://gdc-ccle-open/uuid1/filename1"]
+    assert doc.urls_metadata == {"gs://gdc-ccle-open/uuid1/filename1": {}}
 
 
 def test_is_changed_acl_object():
@@ -418,7 +408,7 @@ def test_update_url_with_new_acl(reset_records):
 @patch('scripts.indexd_utils.PROJECT_ACL', PROJECT_ACL)
 def test_update_url_with_new_url(reset_records):
     """
-    Test that update indexd with new url
+    Test that update indexd with new s3 url
     """
     mock_client = MockIndexdClient()
     fi = {
@@ -435,14 +425,16 @@ def test_update_url_with_new_url(reset_records):
 
 @patch('scripts.indexd_utils.PROJECT_ACL', PROJECT_ACL)
 def test_update_url_with_new_url2(reset_records):
-
+    """
+    Test that update indexd with new gs url
+    """
     mock_client = MockIndexdClient()
     fi = {
         "project_id": "TCGA-PNQS",
         "id": "uuid1",
         "file_name": "filename1",
         "acl": "['open']",
-        "url": "tcga-controlled/uuid1/filename1"
+        "url": "tcga-open/uuid1/filename1"
     }
     indexd_utils.update_url(fi, mock_client, provider="gs")
     doc = mock_client.get("uuid1")

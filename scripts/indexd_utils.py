@@ -19,7 +19,12 @@ else:
 
 def _remove_changed_url(doc, url):
     """
-    due to acl change, we need to update indexd to point to the right bucket
+    Sometime a file's acl is changed, the service need to move that file
+    from public to controlled bucket or vice versa) and update indexd.
+    To update indexd, the service goes through all the url and determine if
+    it is the one need to be removed (the one points to the bucket for the same
+    project but different acl) and remove it
+
     """
     res1 = urlparse(url)
     modified = False
