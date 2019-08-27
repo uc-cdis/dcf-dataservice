@@ -63,5 +63,5 @@ spec:
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             aws s3 cp $IGNORED_FILE_S3 /dcf-dataservice/ignored_files_manifest.csv
-            python scripts/replicate.py readact --dry_run $DRY_RUN --release $RELEASE --redact_file $MANIFEST_S3 --log_bucket $LOG_BUCKET
+            python scripts/replicate.py redact --dry_run $DRY_RUN --release $RELEASE --redact_file $MANIFEST_S3 --log_bucket $LOG_BUCKET
       restartPolicy: Never
