@@ -154,12 +154,11 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         except Exception as e:
             logger.error(e)
     else:
+        logger.info("All following files are for redaction.\nIf there is nothing below that means there is nothing to redact!!!\n\n")
         logger.info("url\n")
         for log in aws_log_list:
-            if log.deleted:
-                logger.info(log.url)
-
-
+            if log["deleted"]:
+                logger.info(log["url"])
 
 
 def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
@@ -174,7 +173,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     Returns:
         list(DeletionLog): list of deletion logs
     """
-    logger.info("Start to remove {} from AWS".format(f["id"]))
+    logger.info("Start to check if {} needs to be removed from AWS".format(f["id"]))
     bucket = s3.Bucket(target_bucket)
 
     key = join(f.get("id"), f.get("filename"))
@@ -225,7 +224,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         list(DeletionLog)
 
     """
-    logger.info("Start to remove {} from GS".format(f["id"]))
+    logger.info("Start to check if {} needs to be removed from GS".format(f["id"]))
     key = get_structured_object_key(f["id"], ignored_dict)
     if not key:
         key = join(f.get("id"), f.get("filename"))
