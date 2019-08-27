@@ -52,7 +52,7 @@ class DeletionLog(object):
         }
 
 
-def delete_objects_from_cloud_resources(manifest, log_bucket, release):
+def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=True):
     """
     delete object from S3 and GS
     for safety use filename instead of file_name in manifest file
@@ -61,6 +61,8 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
     Args:
         manifest(str): manifest file
         log_filename(str): the name of log file
+        release(str): data release
+        dry_run(bool): True the program does not really delete the file (for report purpose)
     """
     session = boto3.session.Session()
     s3_sess = session.resource("s3")
@@ -105,22 +107,23 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
 
         if aws_target_bucket:
             aws_deletion_logs.append(
-                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket)
+                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
             )
-
-        try:
-            google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
-        except UserError as e:
-            logger.warn(e)
-            gs_deletion_logs.append(
-                DeletionLog(
-                    url=fi.get("id") + "/" + fi.get("filename"), message=e.message
+        # Don't need to dry run on google since the data on both aws and google are identical
+        if not dry_run:
+            try:
+                google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
+            except UserError as e:
+                logger.warn(e)
+                gs_deletion_logs.append(
+                    DeletionLog(
+                        url=fi.get("id") + "/" + fi.get("filename"), message=e.message
+                    )
                 )
+                continue
+            gs_deletion_logs.append(
+                _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
             )
-            continue
-        gs_deletion_logs.append(
-            _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
-        )
 
     aws_log_list = []
     for log in aws_deletion_logs:
@@ -138,20 +141,28 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release):
     gs_filename = timestr + "gs_deletion_log.json"
     aws_filename = timestr + "aws_deletion_log.json"
 
-    try:
-        s3 = boto3.client("s3")
-        with open(aws_filename, "w") as outfile:
-            json.dump(aws_log_json, outfile)
-        s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
+    if not dry_run:
+        try:
+            s3 = boto3.client("s3")
+            with open(aws_filename, "w") as outfile:
+                json.dump(aws_log_json, outfile)
+            s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
 
-        with open(gs_filename, "w") as outfile:
-            json.dump(gs_log_json, outfile)
-        s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
-    except Exception as e:
-        logger.error(e)
+            with open(gs_filename, "w") as outfile:
+                json.dump(gs_log_json, outfile)
+            s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
+        except Exception as e:
+            logger.error(e)
+    else:
+        logger.info("url\n")
+        for log in aws_log_list:
+            if log.deleted:
+                logger.info(log.url)
 
 
-def _remove_object_from_s3(s3, indexclient, f, target_bucket):
+
+
+def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     """
     remove object from s3
 
@@ -174,23 +185,28 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket):
     if not object_exists(s3, target_bucket, key):
         return deletion_log
 
-    try:
-        res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
-    except Exception as e:
-        deletion_log.message = str(e)
-        return deletion_log
-
-    if res.get("Deleted"):
+    # if we really want to delete the file
+    if not dry_run:
         try:
-            deletion_log.deleted = True
-            remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
-            deletion_log.indexdUpdated = True
+            res = bucket.delete_objects(Delete={"Objects": [deleting_object]})
         except Exception as e:
             deletion_log.message = str(e)
-            logger.warn("Can not remove aws indexd url of {}. Detail {}".format(f["id"], e))
+            return deletion_log
+
+        if res.get("Deleted"):
+            try:
+                deletion_log.deleted = True
+                remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+                deletion_log.indexdUpdated = True
+            except Exception as e:
+                deletion_log.message = str(e)
+                logger.warn("Can not remove aws indexd url of {}. Detail {}".format(f["id"], e))
+        else:
+            logger.warn("Can not delete {} from AWS".format(f["id"]))
+            deletion_log.message = str(res.Errors)
     else:
-        logger.warn("Can not delete {} from AWS".format(f["id"]))
-        deletion_log.message = str(res.Errors)
+        # Just log it as deleted for pre-report purpose
+        deletion_log.deleted = True
 
     return deletion_log
 
