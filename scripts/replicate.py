@@ -46,7 +46,8 @@ def parse_arguments():
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
     aws_indexing_cmd.add_argument("--thread_num", required=True)
 
-    redact_cmd = subparsers.add_parser("readact")
+    redact_cmd = subparsers.add_parser("redact")
+    redact_cmd.add_argument("--dry_run", required=False)
     redact_cmd.add_argument("--redact_file", required=True)
     redact_cmd.add_argument("--log_bucket", required=True)
     redact_cmd.add_argument("--release", required=True)
@@ -86,8 +87,9 @@ if __name__ == "__main__":
             json.loads(args.global_config)
         )
 
-    elif args.action == "readact":
-        delete_objects_from_cloud_resources(args.redact_file, args.log_bucket, args.release)
+    elif args.action == "redact":
+        dry_run = False if args.dry_run == "False" else True
+        delete_objects_from_cloud_resources(args.redact_file, args.log_bucket, args.release, dry_run)
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))
