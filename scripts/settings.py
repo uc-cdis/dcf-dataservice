@@ -22,5 +22,6 @@ try:
         PROJECT_ACL = json.loads(f.read())
 except Exception as e:
     print("Can not read GDC_project_map.json file. Detail {}".format(e))
+    raise e
 
 IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
