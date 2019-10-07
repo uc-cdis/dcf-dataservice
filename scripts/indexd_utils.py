@@ -1,4 +1,4 @@
-from cdislogging import get_logger
+import logging as logger
 from errors import APIError, UserError
 import os
 import utils
@@ -6,7 +6,7 @@ from settings import PROJECT_ACL
 from urlparse import urlparse
 
 
-logger = get_logger("IndexdUtils")
+logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
 
 NAMESPACE = ""
