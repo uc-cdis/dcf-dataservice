@@ -25,7 +25,7 @@ TEST_URL = ["test_url1", "test_url2"]
 
 
 PROJECT_ACL = {
-    "TCGA": {
+    "TCGA-PNQS": {
         "aws_bucket_prefix": "tcga",
         "gs_bucket_prefix": "gdc-tcga-phs000178",
     }
@@ -67,6 +67,7 @@ RECORDS = {}
 def reset_records():
     global RECORDS
     RECORDS = copy.deepcopy(DEFAULT_RECORDS)
+
 
 class MockIndexdClient(object):
 
