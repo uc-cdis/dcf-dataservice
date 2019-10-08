@@ -13,7 +13,7 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+        raise UserError("PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(fi.get("project_id"), PROJECT_ACL.keys()))
 
     # bad hard code to support ccle buckets
     if "ccle" in project_info["aws_bucket_prefix"]:
@@ -32,7 +32,7 @@ def get_google_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key".format(fi.get("project_id")))
+        raise UserError("PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(fi.get("project_id"), PROJECT_ACL.keys()))
     return project_info["gs_bucket_prefix"] + (
         "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
