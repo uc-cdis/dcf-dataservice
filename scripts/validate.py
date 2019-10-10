@@ -9,7 +9,12 @@ from errors import UserError
 from aws_replicate import bucket_exists, build_object_dataset_aws
 from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
-logger = get_logger("Validation")
+global logger
+
+
+def resume_logger(filename=None):
+    global logger
+    logger = get_logger("Validation", filename)
 
 
 def get_indexd_records():
@@ -46,6 +51,7 @@ def run(global_config):
         bool
 
     """
+    resume_logger("./log.txt")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
@@ -218,7 +224,7 @@ def run(global_config):
 
             utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
         else:
-            utils.write_csv("./tmp.csv", fail_list, fieldnames=HEADERS)
+            utils.write_csv("./tmp.csv", fail_list)
             logger.info("Can not generate the augmented manifest for {}. Please fix all the errors".format(manifest_file))
 
         if pass_validation:
@@ -229,6 +235,15 @@ def run(global_config):
         try:
             s3.upload_file(
                 "tmp.csv", global_config.get("log_bucket"), out_filename
+            )
+        except Exception as e:
+            logger.error(e)
+        
+        try:
+            s3.upload_file(
+                "./log.txt",
+                global_config.get("log_bucket"),
+                global_config.get("release") + "/validation.log"
             )
         except Exception as e:
             logger.error(e)

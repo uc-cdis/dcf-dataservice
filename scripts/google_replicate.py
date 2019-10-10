@@ -28,8 +28,8 @@ logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
-DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
-DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
+DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
+DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
 
 # logger = get_logger("GoogleReplication")
@@ -262,27 +262,17 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     resumable_streaming_copy(
                         fi, client, bucket_name, blob_name, global_config
                     )
-                    break
-                except StreamError as e:
+                    if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
+                        delete_object(sess, bucket_name, blob_name)
+                    else:
+                        break
+                except Exception as e:
                     logger.warn(e)
                     tries += 1
             if tries == NUM_TRIES:
                 logger.error(
                     "Can not stream {} after multiple attemps".format(fi("id"))
                 )
-
-            if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
-                res = delete_object(sess, bucket_name, blob_name)
-                if res.status_code in (200, 204):
-                    logger.info(
-                        "Successfully delete failed upload object {}".format(fi["id"])
-                    )
-                else:
-                    logger.info(
-                        "Can not delete failed uploaded object {}. Satus code {}".format(
-                            fi["id"], res.status_code
-                        )
-                    )
             else:
                 logger.info(
                     "Finish streaming {}. Size {} (MB)".format(
@@ -308,7 +298,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)
     else:
-        msg = "can not copy {} to GOOGLE bucket".format(blob_name)
+        msg = "can not copy {} to GOOGLE bucket after multiple attempts. Check the error detail in logs".format(blob_name)
         logger.error(msg)
         return DataFlowLog(message=msg)
 
@@ -317,109 +307,6 @@ def exec_google_copy(fi, ignored_dict, global_config):
         index_success=True,
         message="object {} successfully copied ".format(blob_name),
     )
-
-
-def exec_google_cmd(lock, ignored_dict, jobinfo):
-    """
-    Stream a list of files from the gdcapi to the google buckets.
-    The target buckets are infered from PROJECT_ACL and project_id in the file
-    If the file is 5aa object, skip and only index the file
-
-    Args:
-        lock(SyncManageLock): lock for synchronization
-        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
-        gs url hash, size, etc.
-        jobinfo(JobInfo): Job info object
-
-    Returns:
-        int: Number of files processed
-    """
-
-    client = storage.Client()
-    sess = AuthorizedSession(client._credentials)
-
-    for fi in jobinfo.files:
-        try:
-            bucket_name = utils.get_google_bucket_name(fi, PROJECT_ACL)
-        except UserError as e:
-            msg = "can not copy {} to GOOGLE bucket. Detail {}".format(bucket_name, e)
-            logger.error(msg)
-            continue
-
-        if not bucket_exists(bucket_name):
-            msg = "There is no bucket with provided name {}\n".format(bucket_name)
-            logger.error(msg)
-            continue
-        # ignore object if they are in 5aa bucket
-        if fi["id"] in ignored_dict:
-            logger.info(
-                "{} is ignored. Start to check indexd for u5aa objects".format(fi["id"])
-            )
-            _update_indexd_for_5aa_object(
-                fi, bucket_name, ignored_dict, jobinfo.indexclient
-            )
-            continue
-
-        blob_name = fi.get("id") + "/" + fi.get("file_name")
-
-        _check_and_handle_changed_acl_object(fi)
-
-        # skip the object if it exists in bucket already
-        if blob_exists(bucket_name, blob_name):
-            logger.info("{} is already copied".format(fi["id"]))
-        else:
-            try:
-                logger.info(
-                    "Start to stream {}. Size {} (MB)".format(
-                        fi["id"], fi["size"] * 1.0 / 1000 / 1000
-                    )
-                )
-                try:
-                    resumable_streaming_copy(
-                        fi, client, bucket_name, blob_name, jobinfo.global_config
-                    )
-                except StreamError as e:
-                    logger.warn(e)
-                if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
-                    delete_object(sess, bucket_name, blob_name)
-                else:
-                    logger.info(
-                        "Finish streaming {}. Size {} (MB)".format(
-                            fi["id"], fi["size"] * 1.0 / 1000 / 1000
-                        )
-                    )
-            except APIError as e:
-                logger.error(e.message)
-            except Exception as e:
-                # Don't break (Not expected)
-                logger.error(e.message)
-
-        # only do indexing if the object exists
-        if blob_exists(bucket_name, blob_name):
-            try:
-                if indexd_utils.update_url(fi, jobinfo.indexclient, "gs"):
-                    logger.info("Successfully update indexd for {}".format(fi["id"]))
-                else:
-                    logger.info("Can not update indexd for {}".format(fi["id"]))
-            except APIError as e:
-                logger.error(e)
-            except Exception as e:
-                # Don't break (Not expected)
-                logger.error(e)
-        else:
-            msg = "can not copy {} to GOOGLE bucket".format(blob_name)
-            logger.error(msg)
-
-    lock.acquire()
-    jobinfo.manager_ns.total_processed_files += len(jobinfo.files)
-    lock.release()
-    logger.info(
-        "{}/{} object are processed/copying ".format(
-            jobinfo.manager_ns.total_processed_files, jobinfo.total_files
-        )
-    )
-
-    return len(jobinfo.files)
 
 
 def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
@@ -645,60 +532,3 @@ class JobInfo(object):
             INDEXD["version"],
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
-
-
-def run(thread_num, global_config, job_name, manifest_file, bucket=None):
-    """
-    start threads and log after they finish
-    Args:
-        thread_num(int): Number of threads/cores
-        global_config(dict): a configuration
-            {
-                "chunk_size_download": 1024,
-                "chunk_size_upload": 1024
-            }
-        job_name(str): job name
-        manifest_file(str): the name of the manifest
-    
-    Returns:
-        None
-
-    """
-    ignored_dict = utils.get_ignored_files(IGNORED_FILES)
-
-    if not ignored_dict:
-        raise UserError(
-            "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
-        )
-
-    tasks, _, _ = utils.prepare_data(manifest_file, global_config)
-
-    manager = Manager()
-    manager_ns = manager.Namespace()
-    manager_ns.total_processed_files = 0
-    lock = manager.Lock()
-
-    client = storage.Client()
-    sess = AuthorizedSession(client._credentials)
-
-    jobInfos = []
-    for task in tasks:
-        if global_config.get("scan_copied_objects", False):
-            if _is_completed_task(sess, task):
-                continue
-        job = JobInfo(global_config, task, len(tasks), job_name, {}, manager_ns, bucket)
-        jobInfos.append(job)
-
-    # Make the Pool of workers
-    pool = Pool(thread_num)
-
-    part_func = partial(exec_google_cmd, lock, ignored_dict)
-
-    try:
-        pool.map_async(part_func, jobInfos).get(9999999)
-    except KeyboardInterrupt:
-        pool.terminate()
-
-    # close the pool and wait for the work to finish
-    pool.close()
-    pool.join()
