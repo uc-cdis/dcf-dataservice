@@ -28,8 +28,8 @@ logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 
-DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
-DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
+DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 5
+DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 20
 NUM_TRIES = 30
 
 # logger = get_logger("GoogleReplication")
@@ -551,14 +551,14 @@ def streaming(
         chunk_size=chunk_size_upload,
     ) as s:
         progress = 0
-        number_upload = 0
+        number_download = 0
         for chunk in response.iter_content(chunk_size=chunk_size_download):
             if chunk:  # filter out keep-alive new chunks
                 progress += s.write(chunk)
-                number_upload += 1
+                number_download += 1
                 if (
-                    number_upload
-                    % int(10 * DEFAULT_CHUNK_SIZE_DOWNLOAD / chunk_size_download)
+                    number_download
+                    % int(1024*1024*2048/chunk_size_download)
                     == 0
                 ):
                     logger.info(
