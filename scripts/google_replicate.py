@@ -31,6 +31,7 @@ DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
+NUM_STREAMING_TRIES = 5
 
 # logger = get_logger("GoogleReplication")
 
@@ -257,7 +258,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
                 )
             )
             tries = 0
-            while tries < NUM_TRIES:
+            while tries < NUM_STREAMING_TRIES:
                 try:
                     resumable_streaming_copy(
                         fi, client, bucket_name, blob_name, global_config
@@ -269,7 +270,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
                 except Exception as e:
                     logger.warn(e)
                     tries += 1
-            if tries == NUM_TRIES:
+            if tries == NUM_STREAMING_TRIES:
                 logger.error(
                     "Can not stream {} after multiple attemps".format(fi("id"))
                 )
