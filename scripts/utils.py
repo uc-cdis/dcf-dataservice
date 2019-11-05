@@ -5,7 +5,12 @@ import random
 from google.cloud import storage
 import threading
 from threading import Thread
-from urlparse import urlparse
+
+try:
+    from urllib import parse as urlparse
+except ImportError:# Python 2.x
+    import urlparse
+
 from errors import UserError
 
 

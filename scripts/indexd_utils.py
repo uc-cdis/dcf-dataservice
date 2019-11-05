@@ -3,7 +3,10 @@ from errors import APIError, UserError
 import os
 import utils
 from settings import PROJECT_ACL
-from urlparse import urlparse
+try:
+    from urllib import parse as urlparse
+except ImportError:# Python 2.x
+    import urlparse
 
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")

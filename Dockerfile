@@ -1,6 +1,17 @@
-FROM quay.io/cdis/python-nginx:pybase3-1.0.0
+FROM python:3.7-slim-buster
 
-RUN apk add --update && apk add git jq curl bash vim
+RUN apt update && apt install -y git jq curl bash snapd groff python3-pip hub zip
+
+RUN curl -O https://bootstrap.pypa.io/get-pip.py
+
+RUN python3 get-pip.py
+
+RUN pip3 install awscli
+
+
+# FROM quay.io/cdis/python-nginx:pybase3-1.0.0
+
+# RUN apk add --update && apk add git jq curl bash vim
 
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install --upgrade setuptools
