@@ -3,13 +3,13 @@ import errno
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
 import time
-import os
+
 from functools import partial
 import subprocess
 import shlex
 import hashlib
 import re
-import urllib2
+import urllib
 
 import threading
 from threading import Thread
@@ -499,7 +499,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
-                req = urllib2.Request(
+                req = urllib.request(
                     data_endpoint,
                     headers={
                         "X-Auth-Token": GDC_TOKEN,
@@ -509,11 +509,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     },
                 )
 
-                chunk = urllib2.urlopen(req).read()
+                chunk = urllib.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
 
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 logger.warn(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e
