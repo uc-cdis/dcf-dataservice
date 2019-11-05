@@ -1,57 +1,22 @@
-FROM ubuntu:16.04
+FROM quay.io/cdis/python-nginx:pybase3-1.0.0
 
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apk add --update && apk add git jq curl bash vim
 
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y \
-      apt-utils \
-      apt-transport-https \
-      lsb-release \
-      curl \
-      dnsutils \
-      gcc \
-      git \
-      openssh-client \
-      python2.7 \
-      python-dev \
-      python-pip \
-      python-setuptools \
-      vim \
-      less \
-      jq \
-      ssh \
-      ftp \
-      wget
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install --upgrade setuptools
 
-RUN  easy_install -U pip \
-    && pip install --upgrade pip \
-    && pip install --upgrade setuptools \
-    && pip install -U crcmod \
-    && pip install awscli --upgrade \
-    && pip install yq --upgrade
+RUN pip3 install awscli
+# Installing gcloud package (includes gsutil)
+RUN curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tmp/google-cloud-sdk.tar.gz
+RUN mkdir -p /usr/local/gcloud \
+  && tar -C /usr/local/gcloud -xvf /tmp/google-cloud-sdk.tar.gz \
+  && /usr/local/gcloud/google-cloud-sdk/install.sh
+ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
 
-RUN export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
-    echo "deb https://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" > /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
-    apt-get update && \
-    apt-get install -y google-cloud-sdk \
-        google-cloud-sdk-app-engine-python \
-        google-cloud-sdk-app-engine-java \
-        google-cloud-sdk-app-engine-go \
-        google-cloud-sdk-datalab \
-        google-cloud-sdk-datastore-emulator \
-        google-cloud-sdk-pubsub-emulator \
-        google-cloud-sdk-bigtable-emulator \
-        google-cloud-sdk-cbt \
-        kubectl && \
-    gcloud config set core/disable_usage_reporting true && \
-    gcloud config set component_manager/disable_update_check true && \
-    gcloud config set metrics/environment github_docker_image && \
-    gcloud --version 
  
- COPY . /dcf-dataservice
- WORKDIR /dcf-dataservice
+COPY . /dcf-dataservice
+WORKDIR /dcf-dataservice
 
- RUN  pip install -r requirements.txt
+RUN  pip3 install -r requirements.txt
 
- CMD /bin/bash
+CMD /bin/bash
