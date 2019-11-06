@@ -9,7 +9,7 @@ import subprocess
 
 from google.cloud import storage
 from google.cloud.storage import Blob
-from google_resumable_upload import GCSObjectStreamUpload
+from scripts.google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
@@ -19,10 +19,10 @@ import logging as logger
 
 from indexclient.client import IndexClient
 
-import utils
-from errors import APIError, UserError, StreamError
-from settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
-import indexd_utils
+import scripts.utils as utils
+from scripts.errors import APIError, UserError, StreamError
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
+import scripts.indexd_utils as indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
@@ -118,7 +118,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
         bool: indicating value if the blob is exist or not
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
-        bucket_name, urllib.quote(blob_name, safe="")
+        bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     res = sess.request(method="GET", url=url)
     return (
@@ -145,7 +145,7 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
         bool: indicating value if the blob is exist or not
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
-        bucket_name, urllib.quote(blob_name, safe="")
+        bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     res = sess.request(method="GET", url=url)
     return res.status_code == 200 and base64.b64decode(res.json()["md5Hash"]).encode(
@@ -158,7 +158,7 @@ def delete_object(sess, bucket_name, blob_name):
     Delete object from cloud
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
-        bucket_name, urllib.quote(blob_name, safe="")
+        bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     return sess.request(method="DELETE", url=url)
 
@@ -281,12 +281,12 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     )
                 )
         except APIError as e:
-            logger.error(e.message)
-            return DataFlowLog(message=e.message)
+            logger.error(str(e))
+            return DataFlowLog(message=str(e))
         except Exception as e:
             # Don't break (Not expected)
-            logger.error(e.message)
-            return DataFlowLog(message=e.message)
+            logger.error(str(e))
+            return DataFlowLog(message=str(e))
 
     # Confirm that the object was copied
     if blob_exists(bucket_name, blob_name):

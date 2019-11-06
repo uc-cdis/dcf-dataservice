@@ -9,12 +9,14 @@ except ImportError:
     from mock import patch
 
 from multiprocessing import Manager
+import boto3
 
 import copy
 import pytest
 import google
 import scripts.aws_replicate
 from scripts.google_replicate import exec_google_copy, resumable_streaming_copy
+from google.cloud import storage
 
 from scripts.errors import APIError
 from scripts import utils, indexd_utils
@@ -140,6 +142,8 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
     mock_blob_exist.return_value = True
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     mock_get_google_bucket_name.return_value = "test"
+    google.cloud.storage.Client = MagicMock()
+
     exec_google_copy(
         {
             "id": "test_file_id",
@@ -279,6 +283,7 @@ def test_call_aws_cli_called(mock_aws):
     scripts.aws_replicate.object_exists = MagicMock()
     scripts.aws_replicate.object_exists.return_value = True
     scripts.aws_replicate.get_object_storage_class = MagicMock()
+    boto3.session.Session = MagicMock()
     scripts.aws_replicate.get_object_storage_class.return_value = "STANDARD"
 
     manager = Manager()

@@ -80,6 +80,6 @@ spec:
             """ > ~/.aws/config
             aws configure set default.s3.max_concurrent_requests 1000
             aws configure set default.s3.max_queue_size 10000
-            python scripts/replicate.py aws_replicate --release $RELEASE --quick_test $QUICK_TEST --bucket $GDC_BUCKET_NAME --thread_num $THREAD_NUM --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": $CHUNK_SIZE, \"log_bucket\": \"$LOG_BUCKET\"}"
+            python replicate.py aws_replicate --release $RELEASE --quick_test $QUICK_TEST --bucket $GDC_BUCKET_NAME --thread_num $THREAD_NUM --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": $CHUNK_SIZE, \"log_bucket\": \"$LOG_BUCKET\"}"
             # python scripts/replicate.py indexing  --thread_num 20 --manifest_file $MANIFEST_S3 --global_config "{\"chunk_size\": 3, \"log_bucket\": \"$LOG_BUCKET\"}"
       restartPolicy: Never

@@ -19,9 +19,9 @@ from google.auth.transport.requests import AuthorizedSession
 
 from cdislogging import get_logger
 
-from settings import GDC_TOKEN
+from scripts.settings import GDC_TOKEN
 
-from utils import (
+from scripts.utils import (
     generate_chunk_data_list,
 )
 
@@ -71,7 +71,7 @@ def get_object_metadata(sess, bucket_name, blob_name):
     get object metadata
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
-        bucket_name, urllib.quote(blob_name, safe="")
+        bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     tries = 0
     while tries < RETRIES_NUM:
@@ -92,7 +92,7 @@ def delete_object(sess, bucket_name, blob_name):
     Delete object from cloud
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}".format(
-        bucket_name, urllib.quote(blob_name, safe="")
+        bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     sess.request(method="DELETE", url=url)
 
@@ -160,7 +160,7 @@ def upload_compose_object_gs(sess, bucket_name, key, object_parts, data_size):
         http.Response
     """
     url = "https://www.googleapis.com/storage/v1/b/{}/o/{}/compose".format(
-        bucket_name, urllib.quote(key, safe="")
+        bucket_name, urllib.parse.quote(key, safe="")
     )
     payload = {"destination": {"contentType": "application/octet-stream"}}
     L = []

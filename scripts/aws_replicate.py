@@ -18,14 +18,19 @@ import json
 import boto3
 import botocore
 
+try:
+    from urllib.parse import urlparse
+except ImportError:# Python 2.x
+    from urlparse import urlparse
+
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
-import utils
-from utils import generate_chunk_data_list, prepare_data
-from errors import UserError, APIError
-from indexd_utils import update_url
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+import scripts.utils as utils
+from scripts.utils import generate_chunk_data_list, prepare_data
+from scripts.errors import UserError, APIError
+from scripts.indexd_utils import update_url
 
 global logger
 
@@ -50,7 +55,6 @@ def build_object_dataset_from_file(copied_objects_file, source_objects_file):
     Load copied objects and source objects in local files
     """
     s3 = boto3.resource("s3")
-    from urlparse import urlparse
 
     if copied_objects_file.startswith("s3://"):
         out = urlparse(copied_objects_file)
@@ -132,7 +136,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
 
     threads = []
     target_bucket_names = set()
-    for _, bucket_info in project_acl.iteritems():
+    for _, bucket_info in project_acl.items():
         # bad hard code to support ccle bucket name
         if "ccle" in bucket_info["aws_bucket_prefix"]:
             target_bucket_names.add("ccle-open-access")
@@ -297,7 +301,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     Returns:
         None
     """
-
     fi = jobinfo.fi
     session = boto3.session.Session()
     s3 = session.resource("s3")

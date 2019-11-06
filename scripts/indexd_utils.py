@@ -1,12 +1,12 @@
 import logging as logger
-from errors import APIError, UserError
+from scripts.errors import APIError, UserError
 import os
-import utils
-from settings import PROJECT_ACL
+import scripts.utils as utils
+from scripts.settings import PROJECT_ACL
 try:
-    from urllib import parse as urlparse
+    from urllib.parse import urlparse
 except ImportError:# Python 2.x
-    import urlparse
+    from urlparse import urlparse
 
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
