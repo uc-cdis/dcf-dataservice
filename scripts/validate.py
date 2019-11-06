@@ -126,7 +126,7 @@ def run(global_config):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
-            fi["indexd_url"] = indexd_records.get(fi.get("id"))
+            fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
             if not fi["indexd_url"]:
                 total_aws_index_failures += 1
                 total_gs_index_failures += 1
