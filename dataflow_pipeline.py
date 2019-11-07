@@ -4,7 +4,7 @@ import argparse
 import logging
 import timeit
 
-import apache_beam as beam
+from apache_beam import apache_beam as beam
 from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions
