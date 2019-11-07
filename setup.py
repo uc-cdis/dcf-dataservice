@@ -10,6 +10,7 @@ REQUIRED_PACKAGES = [
     "google-cloud==0.34.0",
     "google-resumable-media==0.3.1",
     "google-cloud-storage==1.6.0",
+    "apache-beam[gcp]==2.16.0",
     "setuptools==40.3.0",
 ]
 
