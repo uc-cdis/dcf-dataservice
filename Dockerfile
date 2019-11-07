@@ -1,6 +1,6 @@
 FROM python:3.7-slim-buster
 
-RUN apt update && apt install -y git jq curl bash snapd groff python3-pip hub zip
+RUN apt update && apt install -y git jq curl bash snapd groff python3-pip zip
 
 RUN curl -O https://bootstrap.pypa.io/get-pip.py
 

@@ -4,7 +4,7 @@ import argparse
 import logging
 import timeit
 
-from apache_beam import apache_beam as beam
+import apache_beam as beam
 from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions
@@ -34,7 +34,8 @@ class PipePrepare(object):
 
 class FileCopyingDoFn(beam.DoFn):
     def __init__(self, config):
-        super(FileCopyingDoFn, self).__init__()
+        #super(FileCopyingDoFn, self).__init__()
+        beam.DoFn.__init__(self)
         self.global_config = config
 
     def process(self, element):

@@ -21,9 +21,5 @@ setuptools.setup(
     version=PACKAGE_VERSION,
     description="required dependencies",
     install_requires=REQUIRED_PACKAGES,
-    # dependency_links = [
-    # "https://github.com/uc-cdis/indexclient@1.5.4#egg=indexclient",
-    # ],
-    # include_package_data=True,
     packages=setuptools.find_packages(),
 )
