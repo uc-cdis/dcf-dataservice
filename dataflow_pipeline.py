@@ -34,7 +34,6 @@ class PipePrepare(object):
 
 class FileCopyingDoFn(beam.DoFn):
     def __init__(self, config):
-        #super(FileCopyingDoFn, self).__init__()
         beam.DoFn.__init__(self)
         self.global_config = config
 

@@ -4,7 +4,7 @@ from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 
-import scripts.utils as utils
+from scripts import utils
 from scripts.errors import UserError
 from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
 from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES

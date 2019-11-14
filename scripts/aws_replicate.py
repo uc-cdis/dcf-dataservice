@@ -18,16 +18,13 @@ import json
 import boto3
 import botocore
 
-try:
-    from urllib.parse import urlparse
-except ImportError:# Python 2.x
-    from urlparse import urlparse
+from urllib.parse import urlparse
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
 from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
-import scripts.utils as utils
+from scripts import utils
 from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
 from scripts.indexd_utils import update_url

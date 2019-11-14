@@ -19,10 +19,10 @@ import logging as logger
 
 from indexclient.client import IndexClient
 
-import scripts.utils as utils
+from scripts import utils
 from scripts.errors import APIError, UserError, StreamError
 from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
-import scripts.indexd_utils as indexd_utils
+from scripts import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
