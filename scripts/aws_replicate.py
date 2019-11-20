@@ -3,13 +3,13 @@ import errno
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
 import time
-import os
+
 from functools import partial
 import subprocess
 import shlex
 import hashlib
 import re
-import urllib2
+import urllib
 
 import threading
 from threading import Thread
@@ -18,14 +18,16 @@ import json
 import boto3
 import botocore
 
+from urllib.parse import urlparse
+
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from settings import PROJECT_ACL, INDEXD, GDC_TOKEN
-import utils
-from utils import generate_chunk_data_list, prepare_data
-from errors import UserError, APIError
-from indexd_utils import update_url
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from scripts import utils
+from scripts.utils import generate_chunk_data_list, prepare_data
+from scripts.errors import UserError, APIError
+from scripts.indexd_utils import update_url
 
 global logger
 
@@ -50,7 +52,6 @@ def build_object_dataset_from_file(copied_objects_file, source_objects_file):
     Load copied objects and source objects in local files
     """
     s3 = boto3.resource("s3")
-    from urlparse import urlparse
 
     if copied_objects_file.startswith("s3://"):
         out = urlparse(copied_objects_file)
@@ -132,7 +133,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
 
     threads = []
     target_bucket_names = set()
-    for _, bucket_info in project_acl.iteritems():
+    for _, bucket_info in project_acl.items():
         # bad hard code to support ccle bucket name
         if "ccle" in bucket_info["aws_bucket_prefix"]:
             target_bucket_names.add("ccle-open-access")
@@ -297,7 +298,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     Returns:
         None
     """
-
     fi = jobinfo.fi
     session = boto3.session.Session()
     s3 = session.resource("s3")
@@ -499,7 +499,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
-                req = urllib2.Request(
+                req = urllib.request(
                     data_endpoint,
                     headers={
                         "X-Auth-Token": GDC_TOKEN,
@@ -509,11 +509,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     },
                 )
 
-                chunk = urllib2.urlopen(req).read()
+                chunk = urllib.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
 
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 logger.warn(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e

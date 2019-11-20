@@ -1,9 +1,10 @@
-import logging as logger
-from errors import APIError, UserError
 import os
-import utils
-from settings import PROJECT_ACL
-from urlparse import urlparse
+from urllib.parse import urlparse
+import logging as logger
+
+from scripts import utils
+from scripts.errors import APIError, UserError
+from scripts.settings import PROJECT_ACL
 
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")

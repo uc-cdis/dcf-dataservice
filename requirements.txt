@@ -1,11 +1,11 @@
-python_dateutil==2.6.1
+python_dateutil==2.8.0
 requests>=2.20.0<3.0.0
 boto3>=1.9.111
-google-cloud==0.33.1
+google-cloud==0.34.0
 google-resumable-media==0.3.1
 google-cloud-storage==1.6.0
-google-cloud-dataflow==2.5.0
-setuptools==36.6.0
+apache-beam[gcp]==2.16.0
+setuptools==40.3.0
 -e git+https://git@github.com/uc-cdis/cdislogging.git@0.0.2#egg=cdislogging
 # For the Google script, indexclient source must also be available as a zip
 # file and fed to the script using option "--extra_package" (until package is

@@ -5,8 +5,9 @@ import random
 from google.cloud import storage
 import threading
 from threading import Thread
-from urlparse import urlparse
-from errors import UserError
+from urllib.parse import urlparse
+
+from scripts.errors import UserError
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
@@ -46,7 +47,6 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
 
     s3 = boto3.resource("s3")
-    from urlparse import urlparse
 
     out = urlparse(url_manifest)
     s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
@@ -247,7 +247,7 @@ def build_object_dataset_gs(PROJECT_ACL):
 
     threads = []
     target_bucket_names = set()
-    for _, bucket_info in PROJECT_ACL.iteritems():
+    for _, bucket_info in PROJECT_ACL.items():
         for label in ["open", "controlled"]:
             bucket_name = bucket_info["gs_bucket_prefix"] + "-" + label
             target_bucket_names.add(bucket_name)

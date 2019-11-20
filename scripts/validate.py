@@ -4,10 +4,10 @@ from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 
-import utils
-from errors import UserError
-from aws_replicate import bucket_exists, build_object_dataset_aws
-from settings import PROJECT_ACL, INDEXD, IGNORED_FILES
+from scripts import utils
+from scripts.errors import UserError
+from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
+from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
@@ -31,9 +31,8 @@ def get_indexd_records():
     progress = 0
     for doc in it:
         progress += 1
-        if progress % 1000 == 0:
-            logger.info("INDEXD: get {} records".format(progress))
         results[doc.did] = doc.urls
+
     return results
 
 

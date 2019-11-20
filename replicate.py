@@ -2,10 +2,10 @@ import timeit
 import argparse
 import json
 
-import aws_replicate
-import google_replicate
-import validate
-from deletion import delete_objects_from_cloud_resources
+import scripts.aws_replicate as aws_replicate
+import scripts.google_replicate as google_replicate
+import scripts.validate as validate
+from scripts.deletion import delete_objects_from_cloud_resources
 
 
 def parse_arguments():
