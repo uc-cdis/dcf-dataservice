@@ -272,7 +272,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     tries += 1
             if tries == NUM_STREAMING_TRIES:
                 logger.error(
-                    "Can not stream {} after multiple attemps".format(fi("id"))
+                    "Can not stream {} after multiple attemps".format(fi.get("id"))
                 )
             else:
                 logger.info(
