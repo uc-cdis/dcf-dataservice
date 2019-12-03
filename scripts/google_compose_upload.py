@@ -45,7 +45,7 @@ class Worker(Thread):
             try:
                 func(*args, **kargs)
             except Exception, e:
-                logger.warn(e)
+                logger.warning(e)
             finally:
                 self.tasks.task_done()
 
@@ -136,7 +136,7 @@ def resumable_upload_chunk_to_gs(sess, chunk_data, bucket_name, key, part_number
         if meta_data_res.json().get("crc32c", "") != base64.b64encode(chunk_crc32.digest()):
             tries += 1
         elif int(meta_data_res.json().get("size", "0")) != len(chunk_data):
-            logger.warn("upload chunk fail. retries")
+            logger.warning("upload chunk fail. retries")
             tries += 1
         else:
             return res2
@@ -182,14 +182,14 @@ def upload_compose_object_gs(sess, bucket_name, key, object_parts, data_size):
             if res.status_code in {200, 201}:
                 meta_data = get_object_metadata(sess, bucket_name, key)
                 if int(meta_data.json().get("size", "0")) != data_size:
-                    logger.warn("upload compose fail")
+                    logger.warning("upload compose fail")
                     retries += 1
                 else:
                     return res
             else:
                 retries += 1
         except Exception as e:
-            logger.warn("Upload fail. Take a sleep and retry. Detail {}".format(e))
+            logger.warning("Upload fail. Take a sleep and retry. Detail {}".format(e))
             time.sleep(10)
             retries += 1
 
@@ -318,7 +318,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     request_success = True
 
             except urllib2.HTTPError as e:
-                logger.warn(
+                logger.warning(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e
                     )
@@ -327,13 +327,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 tries += 1
             except SocketError as e:
                 if e.errno != errno.ECONNRESET:
-                    logger.warn(
+                    logger.warning(
                         "Connection reset. Take a sleep and retry. Detail {}".format(e)
                     )
                     time.sleep(20)
                     tries += 1
             except Exception as e:
-                logger.warn("Take a sleep and retry. Detail {}".format(e))
+                logger.warning("Take a sleep and retry. Detail {}".format(e))
                 time.sleep(10)
                 tries += 1
 
@@ -443,13 +443,13 @@ def validate_uploaded_data(fi, sess, target_bucket, sig, crc32c):
         return False
 
     if int(meta_data.json().get("size", "0")) != fi["size"]:
-        logger.warn(
+        logger.warning(
             "Can not stream the object {}. {} vs {}. Size does not match".format(fi.get("id"), int(meta_data.json().get("size", "0")), fi["size"])
         )
         return False
 
     if meta_data.json().get("crc32c", "") != base64.b64encode(crc32c.digest()):
-        logger.warn(
+        logger.warning(
             "Can not stream the object {} to {}. crc32c check fails".format(
                 fi.get("id"), target_bucket
             )
@@ -457,7 +457,7 @@ def validate_uploaded_data(fi, sess, target_bucket, sig, crc32c):
         return False
 
     if sig.hexdigest() != fi.get("md5"):
-        logger.warn(
+        logger.warning(
             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
         )
         return False

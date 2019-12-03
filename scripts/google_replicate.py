@@ -124,7 +124,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
     return (
         res.status_code == 200
         and int(res.json()["size"]) == fi.get("size")
-        and base64.b64decode(res.json()["md5Hash"]).encode("hex") == fi.get("md5")
+        and base64.b64decode(res.json()["md5Hash"]).hex() == fi.get("md5")
     )
 
 
@@ -148,9 +148,7 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
         bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     res = sess.request(method="GET", url=url)
-    return res.status_code == 200 and base64.b64decode(res.json()["md5Hash"]).encode(
-        "hex"
-    ) != fi.get("md5")
+    return res.status_code == 200 and base64.b64decode(res.json()["md5Hash"]).hex() != fi.get("md5")
 
 
 def delete_object(sess, bucket_name, blob_name):
@@ -268,7 +266,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     else:
                         break
                 except Exception as e:
-                    logger.warn(e)
+                    logger.warning(e)
                     tries += 1
             if tries == NUM_STREAMING_TRIES:
                 logger.error(
@@ -463,7 +461,7 @@ def _is_completed_task(sess, task):
         try:
             target_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
-            logger.warn(e)
+            logger.warning(e)
             continue
         blob_name = "{}/{}".format(fi["id"], fi["file_name"])
         if not blob_exists(target_bucket, blob_name):
