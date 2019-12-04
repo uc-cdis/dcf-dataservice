@@ -649,7 +649,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     except botocore.exceptions.ClientError as error:
         logger.warning(
             "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
-                fi.get("Id"), error
+                fi.get("id"), error
             )
         )
         return
