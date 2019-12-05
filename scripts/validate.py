@@ -17,25 +17,6 @@ def resume_logger(filename=None):
     logger = get_logger("Validation", filename)
 
 
-def get_indexd_records():
-    """
-    """
-    results = {}
-    indexd_client = IndexClient(
-        INDEXD["host"],
-        INDEXD["version"],
-        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-    )
-    it = indexd_client.list(page_size=1000)
-
-    progress = 0
-    for doc in it:
-        progress += 1
-        results[doc.did] = doc.urls
-
-    return results
-
-
 def run(global_config):
     """
     Given manifests run validation process to check if all the objects exist and are indexed correctly
@@ -81,7 +62,7 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-    indexd_records = get_indexd_records()
+    indexd_records = utils.get_indexd_records()
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
