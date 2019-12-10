@@ -8,13 +8,19 @@ from threading import Thread
 from urllib.parse import urlparse
 
 from scripts.errors import UserError
+from indexclient.client import IndexClient
+from scripts.settings import INDEXD
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(fi.get("project_id"), PROJECT_ACL.keys()))
+        raise UserError(
+            "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
+                fi.get("project_id"), PROJECT_ACL.keys()
+            )
+        )
 
     # bad hard code to support ccle buckets
     if "ccle" in project_info["aws_bucket_prefix"]:
@@ -33,7 +39,11 @@ def get_google_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
-        raise UserError("PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(fi.get("project_id"), PROJECT_ACL.keys()))
+        raise UserError(
+            "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
+                fi.get("project_id"), PROJECT_ACL.keys()
+            )
+        )
     return project_info["gs_bucket_prefix"] + (
         "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
@@ -60,6 +70,7 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     list of file info dictionary (size, md5, etc.)
     """
     import subprocess
+
     cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
     subprocess.Popen(cmd, shell=True).wait()
 
@@ -127,7 +138,7 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
             key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
             if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
-                total_copying_data += fi["size"]*1.0/1024/1024/1024
+                total_copying_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
         copying_files = filtered_copying_files
 
     for idx in range(0, len(copying_files), chunk_size):
@@ -137,22 +148,40 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
 
 
 def prepare_txt_manifest_google_dataflow(
-    gs_manifest_file, local_manifest_txt_file, copied_objects=None, project_acl=None, ignored_dict=None
+    gs_manifest_file,
+    local_manifest_txt_file,
+    copied_objects=None,
+    project_acl=None,
+    ignored_dict=None,
 ):
     """
     Since Apache Beam does not support csv format, convert the csv to txt file
     """
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
+    indexd_records = get_indexd_records()
     if copied_objects:
         filtered_copying_files = []
         for fi in copying_files:
+            gs_bucket = get_google_bucket_name(fi, project_acl)
             if fi["id"] in ignored_dict:
+                object_path = "gs://{}/{}".format(
+                    gs_bucket, get_structured_object_key(fi["id"], ignored_dict)
+                )
+            else:
+                fixed_filename = fi["file_name"].replace(" ", "_")
+                object_path = "gs://{}/{}/{}".format(
+                    gs_bucket, fi["id"], fixed_filename
+                )
+
+            if fi["id"] in ignored_dict and object_path in indexd_records.get(
+                fi.get("id"), []
+            ):
                 continue
             target_bucket = get_google_bucket_name(fi, project_acl)
             if (
                 "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
                 not in copied_objects
-            ):
+            ) or object_path not in indexd_records.get(fi.get("id"), []):
                 filtered_copying_files.append(fi)
         copying_files = filtered_copying_files
 
@@ -171,7 +200,10 @@ def prepare_txt_manifest_google_dataflow(
             )
 
     import subprocess
-    cmd = "gsutil cp {} {}".format(local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt"))
+
+    cmd = "gsutil cp {} {}".format(
+        local_manifest_txt_file, gs_manifest_file.replace(".tsv", ".txt")
+    )
     subprocess.Popen(cmd, shell=True).wait()
     return gs_manifest_file.replace(".tsv", ".txt")
 
@@ -272,6 +304,7 @@ def build_object_dataset_gs(PROJECT_ACL):
 def write_csv(filename, files, sorted_attr=None, fieldnames=None):
     def on_key(element):
         return element[sorted_attr]
+
     if sorted_attr:
         sorted_files = sorted(files, key=on_key)
     else:
@@ -286,3 +319,23 @@ def write_csv(filename, files, sorted_attr=None, fieldnames=None):
 
         for f in sorted_files:
             writer.writerow(f)
+
+
+def get_indexd_records():
+    """
+    Get all indexd records
+    """
+    results = {}
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+    it = indexd_client.list(page_size=1000)
+
+    progress = 0
+    for doc in it:
+        progress += 1
+        results[doc.did] = doc.urls
+
+    return results

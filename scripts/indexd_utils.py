@@ -1,6 +1,7 @@
 import os
 from urllib.parse import urlparse
 import logging as logger
+from retry import retry
 
 from scripts import utils
 from scripts.errors import APIError, UserError
@@ -53,6 +54,7 @@ def _remove_changed_url(doc, url):
     return doc, modified
 
 
+@retry(APIError, tries=10, delay=2)
 def update_url(fi, indexclient, provider="s3", url=None):
     """
     update a record to indexd
@@ -143,6 +145,7 @@ def update_url(fi, indexclient, provider="s3", url=None):
         )
 
 
+@retry(APIError, tries=10, delay=2)
 def remove_url_from_indexd_record(uuid, urls, indexclient):
     """
     remove url from indexd record

@@ -114,7 +114,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
             except UserError as e:
-                logger.warn(e)
+                logger.warning(e)
                 gs_deletion_logs.append(
                     DeletionLog(
                         url=fi.get("id") + "/" + fi.get("filename"), message=e.message
@@ -199,9 +199,9 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
                 deletion_log.indexdUpdated = True
             except Exception as e:
                 deletion_log.message = str(e)
-                logger.warn("Can not remove aws indexd url of {}. Detail {}".format(f["id"], e))
+                logger.warning("Can not remove aws indexd url of {}. Detail {}".format(f["id"], e))
         else:
-            logger.warn("Can not delete {} from AWS".format(f["id"]))
+            logger.warning("Can not delete {} from AWS".format(f["id"]))
             deletion_log.message = str(res.Errors)
     else:
         # Just log it as deleted for pre-report purpose
@@ -237,7 +237,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         blob.delete()
         deletion_log.deleted = True
     except Exception as e:
-        logger.warn("Can not delete {} from GS. Detail {}".format(f["id"], e))
+        logger.warning("Can not delete {} from GS. Detail {}".format(f["id"], e))
         deletion_log.message = str(e)
         return deletion_log
 
@@ -246,7 +246,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
         deletion_log.indexdUpdated = True
     except Exception as e:
-        logger.warn("Can not remove gs indexd url of {}. Detail {}".format(f["id"], e))
+        logger.warning("Can not remove gs indexd url of {}. Detail {}".format(f["id"], e))
         deletion_log.message = str(e)
 
     return deletion_log

@@ -305,7 +305,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     try:
         target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
     except UserError as e:
-        logger.warn(e)
+        logger.warning(e)
         return
 
     pFile = None
@@ -334,7 +334,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 try:
                     update_url(fi, jobinfo.indexclient)
                 except APIError as e:
-                    logger.warn(e)
+                    logger.warning(e)
             else:
                 pFile = ProcessingFile(fi["id"], fi["size"], "AWS", None)
 
@@ -369,7 +369,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                         )
                         update_url(fi, jobinfo.indexclient)
                     except Exception as e:
-                        logger.warn(e)
+                        logger.warning(e)
                 else:
                     pFile = ProcessingFile(fi["id"], fi["size"], "GDCAPI", None)
                 return
@@ -378,7 +378,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 # storage_class = jobinfo.source_objects[source_key]["StorageClass"]
                 storage_class = get_object_storage_class(s3, jobinfo.bucket, source_key)
             except Exception as e:
-                logger.warn(e)
+                logger.warning(e)
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
@@ -399,7 +399,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                     except Exception as e:
                         # catch generic exception to prevent the code from terminating
                         # in the middle of replicating process
-                        logger.warn(e)
+                        logger.warning(e)
                 else:
                     pFile = ProcessingFile(fi["id"], fi["size"], "GDCAPI", None)
 
@@ -424,7 +424,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
             try:
                 update_url(fi, jobinfo.indexclient)
             except APIError as e:
-                logger.warn(e)
+                logger.warning(e)
     except Exception as e:
         logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
 
@@ -514,7 +514,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                     request_success = True
 
             except urllib.error.HTTPError as e:
-                logger.warn(
+                logger.warning(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e
                     )
@@ -525,13 +525,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 tries += 1
             except SocketError as e:
                 if e.errno != errno.ECONNRESET:
-                    logger.warn(
+                    logger.warning(
                         "Connection reset. Take a sleep and retry. Detail {}".format(e)
                     )
                     time.sleep(60)
                     tries += 1
             except Exception as e:
-                logger.warn(e)
+                logger.warning(e)
                 time.sleep(5)
                 tries += 1
 
@@ -578,11 +578,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 return res, chunk_info["part_number"], md5, len(chunk)
 
             except botocore.exceptions.ClientError as e:
-                logger.warn(e)
+                logger.warning(e)
                 time.sleep(5)
                 tries += 1
             except Exception as e:
-                logger.warn(e)
+                logger.warning(e)
                 time.sleep(5)
                 tries += 1
 
@@ -647,9 +647,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             RequestPayer="requester",
         )
     except botocore.exceptions.ClientError as error:
-        logger.warn(
+        logger.warning(
             "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
-                fi.get("Id"), error
+                fi.get("id"), error
             )
         )
         return
@@ -662,7 +662,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         try:
             thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
         except botocore.exceptions.ClientError as error:
-            logger.warn(error)
+            logger.warning(error)
     else:
         logger.info(
             "successfully stream file {} to {}".format(object_path, target_bucket)
@@ -693,7 +693,7 @@ def validate_uploaded_data(
     etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
 
     if total_bytes_received != fi.get("size"):
-        logger.warn(
+        logger.warning(
             "Can not stream the object {}. Size does not match".format(fi.get("id"))
         )
         return False
@@ -701,23 +701,23 @@ def validate_uploaded_data(
     try:
         meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
     except botocore.exceptions.ClientError as error:
-        logger.warn(
+        logger.warning(
             "Can not get meta data of {}. Detail {}".format(fi.get("id"), error)
         )
         return False
 
     if meta_data.get("ETag") is None:
-        logger.warn("Can not get etag of {}".format(fi.get("id")))
+        logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
 
     if sig.hexdigest() != fi.get("md5"):
-        logger.warn(
+        logger.warning(
             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
         )
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
-        logger.warn(
+        logger.warning(
             "Can not stream the object {} to {}. Etag check fails".format(
                 fi.get("id"), target_bucket
             )
