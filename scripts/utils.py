@@ -337,5 +337,7 @@ def get_indexd_records():
     for doc in it:
         progress += 1
         results[doc.did] = {"url": doc.urls, "size": doc.size}
+        if progress >= 1000:
+            break
 
     return results
