@@ -336,6 +336,6 @@ def get_indexd_records():
     progress = 0
     for doc in it:
         progress += 1
-        results[doc.did] = doc.urls
+        results[doc.did] = {"url": doc.urls, "size": doc.size}
 
     return results

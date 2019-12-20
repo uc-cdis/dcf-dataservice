@@ -63,35 +63,20 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = utils.get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
-    if global_config.get("save_copied_objects"):
-        with open("./indexd_records.json", "w") as outfile:
-            json.dump(indexd_records, outfile)
-        with open("./aws_copied_objects.json", "w") as outfile:
-            json.dump(aws_copied_objects, outfile)
-        with open("./gs_copied_objects.json", "w") as outfile:
-            json.dump(gs_copied_objects, outfile)
+    with open("./indexd_records.json", "w") as outfile:
+        json.dump(indexd_records, outfile)
 
-        try:
-            s3.upload_file(
-                "indexd_records.json",
-                global_config.get("log_bucket"),
-                "indexd_records.json",
-            )
-            s3.upload_file(
-                "aws_copied_objects.json",
-                global_config.get("log_bucket"),
-                "aws_copied_objects.json",
-            )
-            s3.upload_file(
-                "gs_copied_objects.json",
-                global_config.get("log_bucket"),
-                "gs_copied_objects.json",
-            )
-        except Exception as e:
-            logger.error(e)
+    try:
+        s3.upload_file(
+            "indexd_records.json",
+            global_config.get("log_bucket"),
+            "indexd_records.json",
+        )
+    except Exception as e:
+        logger.error(e)
+
+    return False
 
     pass_validation = True
     for idx, manifest_file in enumerate(manifest_files):
