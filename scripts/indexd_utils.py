@@ -170,3 +170,16 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
                     uuid, e
                 )
             )
+
+@retry(APIError, tries=10, delay=2)
+def delete_record_from_indexd(uuid, indexclient):
+    """
+    remove url from indexd record
+
+    Args:
+        uuid(str): did
+        indexclient(IndexClient): indexd client
+    """
+    doc = indexclient.get(uuid)
+    if doc:
+        doc.delete()
