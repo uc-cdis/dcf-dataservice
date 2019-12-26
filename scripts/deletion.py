@@ -19,7 +19,7 @@ from scripts.utils import (
     get_ignored_files,
     get_structured_object_key,
 )
-from scripts.indexd_utils import remove_url_from_indexd_record
+from scripts.indexd_utils import remove_url_from_indexd_record, delete_record_from_indexd
 from scripts.errors import UserError
 from scripts.settings import IGNORED_FILES
 
@@ -105,12 +105,11 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             )
             aws_target_bucket = None
 
-        if aws_target_bucket:
-            aws_deletion_logs.append(
-                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
-            )
-        # Don't need to dry run on google since the data on both aws and google are identical
         if not dry_run:
+            if aws_target_bucket:
+                aws_deletion_logs.append(
+                    _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
+                )
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
             except UserError as e:
@@ -124,6 +123,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             gs_deletion_logs.append(
                 _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
             )
+            delete_record_from_indexd(fi.get("id"), indexclient)
 
     aws_log_list = []
     for log in aws_deletion_logs:
