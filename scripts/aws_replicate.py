@@ -160,6 +160,68 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
     return copied_objects, source_objects
 
 
+def move_tcga_bucket():
+    def list_objects(bucket_name):
+        """
+        build object dataset for lookup with key is s3 object key and value contains
+        storage class, size and md5
+        to avoid list object operations
+        """
+        result = {}
+        client = boto3.client("s3")
+        try:
+            paginator = client.get_paginator("list_objects_v2")
+            print("start to list objects in {}".format(bucket_name))
+            pages = paginator.paginate(Bucket=bucket_name, RequestPayer="requester")
+            for page in pages:
+                for obj in page["Contents"]:
+                    result[bucket_name + "/" + obj["Key"]] = {
+                        "StorageClass": obj["StorageClass"],
+                        "Size": obj["Size"],
+                        "Bucket": bucket_name,
+                    }
+        except KeyError as e:
+            logger.error(
+                "Something wrong with listing objects in {}. Detail {}".format(
+                    bucket_name, e
+                )
+            )
+        except botocore.exceptions.ClientError as e:
+            logger.error(
+                "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
+            )
+        return result
+    
+    
+
+    def exec_cp(object_key):
+        cmd = "aws s3 cp \"s3://tcga-open/{}\" \"s3://tcga-open-tmp/{}\"".format(
+                object_key,
+                object_key,
+            )
+        logger.info(cmd)
+    
+    tcga_open = list_objects("tcga-open")
+    tcga_open_tmp = list_objects("tcga-open-tmp")
+
+    L = []
+    for key in tcga_open:
+        if key not in tcga_open_tmp:
+            L.append(key.split("/")[-1])
+            if len(L)>=100:
+                break
+    
+    pool = ThreadPool(thread_num)
+
+    try:
+        pool.map(exec_cp, L).get(9999999)
+    except KeyboardInterrupt:
+        pool.terminate()
+
+    # close the pool and wait for the work to finish
+    pool.close()
+    pool.join()
+
 def bucket_exists(s3, bucket_name):
     try:
         s3.meta.client.head_bucket(Bucket=bucket_name)

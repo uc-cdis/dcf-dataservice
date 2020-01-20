@@ -2,6 +2,7 @@ import timeit
 import argparse
 import json
 
+import scripts
 import scripts.aws_replicate as aws_replicate
 import scripts.google_replicate as google_replicate
 import scripts.validate as validate
@@ -60,18 +61,19 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     if args.action == "aws_replicate" or args.action == "indexing":
-        job_name = "copying" if args.action == "aws_replicate" else "indexing"
-        source_bucket = args.bucket if job_name == "copying" else None
-        quick_test = True if args.quick_test == "True" else False
-        aws_replicate.run(
-            args.release,
-            int(args.thread_num),
-            json.loads(args.global_config),
-            job_name,
-            args.manifest_file,
-            quick_test,
-            source_bucket,
-        )
+        scripts.aws_replicate.move_tcga_bucket()
+        # job_name = "copying" if args.action == "aws_replicate" else "indexing"
+        # source_bucket = args.bucket if job_name == "copying" else None
+        # quick_test = True if args.quick_test == "True" else False
+        # aws_replicate.run(
+        #     args.release,
+        #     int(args.thread_num),
+        #     json.loads(args.global_config),
+        #     job_name,
+        #     args.manifest_file,
+        #     quick_test,
+        #     source_bucket,
+        # )
     elif args.action == "google_replicate":
         job_name = "copying"
 
