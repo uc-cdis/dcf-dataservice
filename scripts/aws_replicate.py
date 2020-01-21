@@ -181,13 +181,13 @@ def move_tcga_bucket():
                         "Bucket": bucket_name,
                     }
         except KeyError as e:
-            logger.error(
+            print(
                 "Something wrong with listing objects in {}. Detail {}".format(
                     bucket_name, e
                 )
             )
         except botocore.exceptions.ClientError as e:
-            logger.error(
+            print(
                 "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
             )
         return result
@@ -199,7 +199,8 @@ def move_tcga_bucket():
                 object_key,
                 object_key,
             )
-        logger.info(cmd)
+        subprocess.Popen(shlex.split(cmd)).wait()
+        print(cmd)
     
     tcga_open = list_objects("tcga-open")
     tcga_open_tmp = list_objects("tcga-open-tmp")
@@ -207,14 +208,13 @@ def move_tcga_bucket():
     L = []
     for key in tcga_open:
         if key not in tcga_open_tmp:
-            L.append(key.split("/")[-1])
-            if len(L)>=100:
-                break
-    
-    pool = ThreadPool(30)
+            words = key.split("/")
+            L.append(words[-2]+"/"+words[-1])
+
+    pool = ThreadPool(50)
 
     try:
-        pool.map(exec_cp, L).get(9999999)
+        pool.map(exec_cp, L)
     except KeyboardInterrupt:
         pool.terminate()
 
