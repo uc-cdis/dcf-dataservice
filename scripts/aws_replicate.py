@@ -211,7 +211,7 @@ def move_tcga_bucket():
             if len(L)>=100:
                 break
     
-    pool = ThreadPool(thread_num)
+    pool = ThreadPool(30)
 
     try:
         pool.map(exec_cp, L).get(9999999)
