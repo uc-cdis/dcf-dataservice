@@ -2,12 +2,18 @@ from socket import error as SocketError
 import errno
 import time
 import hashlib
-import urllib2
+
+# python 2 and 3 compatible
+try:
+    import urllib.request as urllib2
+except ImportError:
+    import urllib2
+
 import urllib
 import base64
 import crcmod
 import requests
-from Queue import Queue
+from queue import Queue
 
 import threading
 from threading import Thread
@@ -44,7 +50,7 @@ class Worker(Thread):
             func, args, kargs = self.tasks.get()
             try:
                 func(*args, **kargs)
-            except Exception, e:
+            except Exception as e:
                 logger.warning(e)
             finally:
                 self.tasks.task_done()

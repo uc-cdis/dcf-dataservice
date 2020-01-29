@@ -263,6 +263,7 @@ def exec_google_copy(fi, ignored_dict, global_config):
                     )
                     if fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                         delete_object(sess, bucket_name, blob_name)
+                        tries += 1
                     else:
                         break
                 except Exception as e:
