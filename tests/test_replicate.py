@@ -15,9 +15,10 @@ import copy
 import pytest
 import google
 import scripts.aws_replicate
-from scripts.google_replicate import exec_google_copy, resumable_streaming_copy
+from scripts.google_replicate import exec_google_copy, resumable_streaming_copy, NUM_STREAMING_TRIES, NUM_TRIES
 from google.cloud import storage
 
+from scripts.google_compose_upload import finish_compose_upload_gs, stream_object_from_gdc_api
 from scripts.errors import APIError
 from scripts import utils, indexd_utils
 
@@ -104,14 +105,13 @@ def gen_mock_manifest_data():
 @patch("scripts.google_replicate.blob_exists")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called(
-    mock_bucket_exists, mock_blob_exist, mock_client, mock_get_google_bucket_name
+    mock_bucket_exists, mock_blob_exists, mock_client, mock_get_google_bucket_name
 ):
     """
     test that resumable_streaming_function is called
     """
-
     mock_bucket_exists.return_value = True
-    mock_blob_exist.side_effect = [False, False]
+    mock_blob_exists.side_effect = [False, False]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
     mock_get_google_bucket_name.side_effect = ["test", "test"]
@@ -133,13 +133,13 @@ def test_resumable_streaming_copy_called(
 @patch("scripts.google_replicate.blob_exists")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_not_called_due_to_existed_blob(
-    mock_bucket_exists, mock_blob_exist, mock_get_google_bucket_name, mock_update_url
+    mock_bucket_exists, mock_blob_exists, mock_get_google_bucket_name, mock_update_url
 ):
     """
     test that streaming function is not called due to the existed object
     """
     mock_bucket_exists.return_value = True
-    mock_blob_exist.return_value = True
+    mock_blob_exists.return_value = True
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     mock_get_google_bucket_name.return_value = "test"
     google.cloud.storage.Client = MagicMock()
@@ -190,14 +190,14 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
 @patch("scripts.google_replicate.blob_exists")
 @patch("scripts.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called_one_time(
-    mock_bucket_exists, mock_blob_exist, mock_update_url, mock_get_google_bucket_name
+    mock_bucket_exists, mock_blob_exists, mock_update_url, mock_get_google_bucket_name
 ):
     """
     test that the streaming called only one time
     The object is successfully copied
     """
     mock_bucket_exists.return_value = True
-    mock_blob_exist.side_effect = [False, True]
+    mock_blob_exists.side_effect = [False, True]
     scripts.google_replicate.resumable_streaming_copy = MagicMock()
     scripts.google_replicate.fail_resumable_copy_blob = MagicMock()
     scripts.google_replicate.fail_resumable_copy_blob.return_value = False
@@ -217,6 +217,120 @@ def test_resumable_streaming_copy_called_one_time(
     assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
     assert mock_update_url.call_count == 1
 
+
+
+@patch("scripts.utils.get_google_bucket_name")
+@patch("google.cloud.storage.Client")
+@patch("scripts.google_replicate.blob_exists")
+@patch("scripts.google_replicate.bucket_exists")
+def test_update_indexd_for_5aa_object_called(
+    mock_bucket_exists, mock_blob_exists, mock_client, mock_get_google_bucket_name
+    ):
+    """
+    if fi["id"] in ignored_dict then check if _update_indexd_for_5aa_object is called 
+    """
+    scripts.google_replicate._update_indexd_for_5aa_object = MagicMock()
+
+    # scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
+
+    file_id = "ignored_file_id"
+
+    exec_google_copy(
+        {
+            "id": file_id,
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {file_id: "test"},
+        {},
+    )
+    assert scripts.google_replicate._update_indexd_for_5aa_object.called == True
+
+
+@patch("scripts.utils.get_google_bucket_name")
+@patch("scripts.google_replicate.blob_exists")
+@patch("scripts.google_replicate.bucket_exists")
+@patch("scripts.google_replicate.fail_resumable_copy_blob")
+def test_google_replicate_delete_object_called(
+    mock_resumable_copy_blob, mock_bucket_exists, mock_blob_exists, mock_get_google_bucket_name
+):
+    mock_bucket_exists.return_value = True
+    scripts.google_replicate.delete_object = MagicMock()
+    mock_blob_exists.side_effect = [False, False]
+    mock_blob_exists.return_value = True
+    mock_resumable_copy_blob.return_value = True
+
+    exec_google_copy(
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {"11111111": "test"},
+        {},
+    )
+
+    assert scripts.google_replicate.delete_object.called == True
+
+
+@patch("scripts.utils.get_google_bucket_name")
+@patch("scripts.google_replicate.blob_exists")
+@patch("scripts.google_replicate.bucket_exists")
+@patch("scripts.google_replicate.fail_resumable_copy_blob")
+def test_google_replicate_delete_object_five_retries(
+    mock_resumable_copy_blob, mock_bucket_exists, mock_blob_exists, mock_get_google_bucket_name
+):
+    mock_bucket_exists.return_value = True
+    scripts.google_replicate.delete_object = MagicMock()
+    mock_blob_exists.side_effect = [False, False]
+    mock_blob_exists.return_value = True
+    mock_resumable_copy_blob.return_value = True
+
+    exec_google_copy(
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {"11111111": "test"},
+        {},
+    )
+
+    assert scripts.google_replicate.delete_object.call_count == NUM_STREAMING_TRIES
+
+
+@patch("scripts.utils.get_google_bucket_name")
+@patch("scripts.google_replicate.blob_exists")
+@patch("scripts.google_replicate.bucket_exists")
+def test_resumable_streaming_copy_not_called_due_to_empty_file(
+    mock_bucket_exists, mock_blob_exists, mock_get_google_bucket_name
+    ):
+    """
+    if fi["id"] in ignored_dict then check if _update_indexd_for_5aa_object is called 
+    """
+    mock_bucket_exists.return_value = True
+    mock_blob_exists.return_value = True
+    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    mock_get_google_bucket_name.return_value = "test"
+
+    exec_google_copy(
+        {
+            "id": "test",
+            "file_name": "test file name",
+            "size": 0,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        {"11111111": "test"},
+        {},
+    )
+    assert scripts.google_replicate.resumable_streaming_copy.called == False
 
 @patch("google.cloud.storage.Client")
 @patch("requests.get")
@@ -446,3 +560,108 @@ def test_update_url_with_new_url2(reset_records):
     indexd_utils.update_url(fi, mock_client, provider="gs")
     doc = mock_client.get("uuid1")
     assert doc.urls == ['s3://tcga-open/uuid1/filename1', 'gs://gdc-tcga-phs000178-open/uuid1/filename1']
+
+"""
+---------------------------------Tests for google_compose_upload-----------------------------------
+
+@patch("scripts.utils.get_google_bucket_name")
+def test_stream_object_from_gdc_api_called(mock_get_google_bucket_name):
+
+    # mock_bucket_exists.return_value = True
+    # mock_blob_exists.side_effect = [False, False]
+    mock_get_google_bucket_name.side_effect = ["test","test"]
+
+    stream_object_from_gdc_api = MagicMock()
+    stream_object_from_gdc_api(
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        mock_get_google_bucket_name,
+        {}
+    )
+
+    assert stream_object_from_gdc_api.called == True
+
+
+@patch("scripts.utils.get_google_bucket_name")
+def test_validate_uploaded_data_called(mock_get_google_bucket_name):
+
+    mock_get_google_bucket_name.return_value = "test"
+
+    scripts.google_compose_upload.validate_uploaded_data = MagicMock()
+    
+    stream_object_from_gdc_api(
+    {
+        "id": "test_file_id",
+        "file_name": "test file name",
+        "size": 1,
+        "project_id": "TCGA",
+        "acl": "[u'open']",
+    },
+    mock_get_google_bucket_name,
+    {},
+    )
+
+    assert scripts.google_compose_upload.validate_uploaded_data.called == True
+
+@patch("scripts.google_compose_upload.validate_uploaded_data")
+@patch("scripts.utils.get_google_bucket_name")
+@patch("scripts.google_replicate.bucket_exists")
+def test_delete_object_called(
+    mock_bucket_exists, mock_get_google_bucket_name, mock_sig_check_pass
+):
+
+    mock_bucket_exists.return_value = True
+
+    mock_sig_check_pass.return_value = False
+
+    scripts.google_compose_upload.delete_object = MagicMock()
+
+    mock_get_google_bucket_name.return_value = "test"
+
+    scripts.google_compose_upload.resumable_upload_chunk_to_gs = MagicMock()
+    stream_object_from_gdc_api(
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        mock_get_google_bucket_name,
+        {},
+    )
+
+    assert scripts.google_compose_upload.delete_object.called == True
+
+
+@patch("scripts.utils.get_google_bucket_name")
+@patch("scripts.google_replicate.bucket_exists")
+def test_finish_compose_upload_gs_called(
+    mock_bucket_exists, mock_get_google_bucket_name
+):
+    #Still needs some work
+
+    mock_bucket_exists.return_value = True
+    mock_get_google_bucket_name.return_value = "test"
+
+    scripts.google_compose_upload.finish_compose_upload_gs = MagicMock()
+
+    stream_object_from_gdc_api(
+        {
+            "id": "test_file_id",
+            "file_name": "test file name",
+            "size": 1,
+            "project_id": "TCGA",
+            "acl": "[u'open']",
+        },
+        mock_get_google_bucket_name,
+        {},
+    )
+
+    assert scripts.google_compose_upload.finish_compose_upload_gs.called == True
+"""
