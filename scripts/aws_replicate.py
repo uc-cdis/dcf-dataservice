@@ -140,6 +140,8 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("gdc-ccle-controlled")
             continue
         for label in ["open", "controlled"]:
+            if label == "controlled" and bucket_info["aws_bucket_prefix"][-2:] == "-2":
+                continue
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 
     for target_bucket_name in target_bucket_names:
