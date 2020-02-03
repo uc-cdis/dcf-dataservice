@@ -141,6 +141,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         #     continue
         if "target" == bucket_info["aws_bucket_prefix"]:
             target_bucket_names.add("gdc-target-phs000218-2-open")
+            target_bucket_names.add("target-controlled")
             continue
         for label in ["2-open", "controlled"]:
             if "tcga" in bucket_info["aws_bucket_prefix"]:
