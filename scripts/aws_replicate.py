@@ -139,7 +139,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         #     target_bucket_names.add("ccle-open-access")
         #     target_bucket_names.add("gdc-ccle-controlled")
         #     continue
-        if "target" == bucket_info["aws_bucket_prefix"]:
+        if "target" in bucket_info["aws_bucket_prefix"]:
             target_bucket_names.add("gdc-target-phs000218-2-open")
             target_bucket_names.add("target-controlled")
             continue
