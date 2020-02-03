@@ -23,15 +23,21 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
         )
 
     # bad hard code to support ccle buckets
-    if "ccle" in project_info["aws_bucket_prefix"]:
-        return (
-            "ccle-open-access"
+    # if "ccle" in project_info["aws_bucket_prefix"]:
+    #     return (
+    #         "ccle-open-access"
+    #         if fi.get("acl") in {"[u'open']", "['open']"}
+    #         else "gdc-ccle-controlled"
+    #     )
+    if "target" in project_info["aws_bucket_prefix"]:
+        return(
+            "gdc-target-phs000218-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-ccle-controlled"
+            else "target-controlled"
         )
 
     return project_info["aws_bucket_prefix"] + (
-        "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
+        "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
 
 

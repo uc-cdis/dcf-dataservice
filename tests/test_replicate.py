@@ -385,7 +385,7 @@ def test_is_changed_acl_object():
     assert scripts.aws_replicate.is_changed_acl_object(fi, copied_objects, "tcga-open")
 
     copied_objects = {
-        "ccle-open-access/test_id/test_file_name": {
+        "gdc-ccle-2-open/test_id/test_file_name": {
             "id": "test_id",
             "file_name": "test_file_name",
         }

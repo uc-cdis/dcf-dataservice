@@ -135,13 +135,16 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
     target_bucket_names = set()
     for _, bucket_info in project_acl.items():
         # bad hard code to support ccle bucket name
-        if "ccle" in bucket_info["aws_bucket_prefix"]:
-            target_bucket_names.add("ccle-open-access")
-            target_bucket_names.add("gdc-ccle-controlled")
+        # if "ccle" in bucket_info["aws_bucket_prefix"]:
+        #     target_bucket_names.add("ccle-open-access")
+        #     target_bucket_names.add("gdc-ccle-controlled")
+        #     continue
+        if "target" == bucket_info["aws_bucket_prefix"]:
+            target_bucket_names.add("gdc-target-phs000218-2-open")
             continue
-        for label in ["open", "controlled"]:
-            if label == "controlled" and bucket_info["aws_bucket_prefix"][-2:] == "-2":
-                continue
+        for label in ["2-open", "controlled"]:
+            if "tcga" in bucket_info["aws_bucket_prefix"]:
+                label = "open"
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 
     for target_bucket_name in target_bucket_names:
@@ -733,14 +736,22 @@ def get_reversed_acl_bucket_name(target_bucket):
     """
     Get reversed acl bucket name
     """
-    if target_bucket == "ccle-open-access":
-        return "gdc-ccle-controlled"
-    if target_bucket == "gdc-ccle-controlled":
-        return "ccle-open-access"
-    if "open" in target_bucket:
-        return target_bucket[:-4] + "controlled"
+    if "target" in target_bucket:
+        if "open" in target_bucket:
+            return "target-controlled"
+        else:
+            return "gdc-target-phs000218-2-open"
 
-    return target_bucket[:-10] + "open"
+    if "tcga" in target_bucket:
+        if "open" in target_bucket:
+            return target_bucket[:-4] + "controlled"
+        else:
+            return target_bucket[:-10] + "open"
+
+    if "open" in target_bucket:
+        return target_bucket[:-6] + "controlled"
+
+    return target_bucket[:-10] + "2-open"
 
 
 def is_changed_acl_object(fi, copied_objects, target_bucket):
