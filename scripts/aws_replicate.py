@@ -144,7 +144,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("target-controlled")
             continue
         for label in ["2-open", "controlled"]:
-            if "tcga" in bucket_info["aws_bucket_prefix"]:
+            if "tcga" in bucket_info["aws_bucket_prefix"] and label == "2-open":
                 label = "open"
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 

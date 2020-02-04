@@ -30,6 +30,14 @@ PROJECT_ACL = {
     "TCGA-PNQS": {
         "aws_bucket_prefix": "tcga",
         "gs_bucket_prefix": "gdc-tcga-phs000178",
+    },
+    "TARGET-PNQS": {
+        "aws_bucket_prefix": "target",
+        "gs_bucket_prefix": "gdc-target-phs000218",
+    },
+     "CCLE-MNPO": {
+        "aws_bucket_prefix": "gdc-ccle",
+        "gs_bucket_prefix": "gdc-ccle",
     }
 }
 
@@ -446,3 +454,21 @@ def test_update_url_with_new_url2(reset_records):
     indexd_utils.update_url(fi, mock_client, provider="gs")
     doc = mock_client.get("uuid1")
     assert doc.urls == ['s3://tcga-open/uuid1/filename1', 'gs://gdc-tcga-phs000178-open/uuid1/filename1']
+
+
+def test_get_reversed_acl_bucket_name():
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-target-phs000218-2-open") == "target-controlled"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("target-controlled") == "gdc-target-phs000218-2-open"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-open") == "tcga-controlled"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-controlled") == "tcga-open"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-controlled") == "gdc-ccle-2-open"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-2-open") == "gdc-ccle-controlled"
+
+def test_get_aws_bucket_name():
+    assert utils.get_aws_bucket_name({"project_id": "TCGA-PNQS", "id": "1", "acl": "[phs000178]"}, PROJECT_ACL) == "tcga-controlled"
+    assert utils.get_aws_bucket_name( {"project_id": "TCGA-PNQS", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "tcga-open"
+    assert utils.get_aws_bucket_name( {"project_id": "TARGET-PNQS", "id": "1", "acl": "['phs000178']"}, PROJECT_ACL) == "target-controlled"
+    assert utils.get_aws_bucket_name( {"project_id": "TARGET-PNQS", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "gdc-target-phs000218-2-open"
+    assert utils.get_aws_bucket_name( {"project_id": "CCLE-MNPO", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "gdc-ccle-2-open"
+    assert utils.get_aws_bucket_name( {"project_id": "CCLE-MNPO", "id": "1", "acl": "['phs0001']"}, PROJECT_ACL) == "gdc-ccle-controlled"
+
