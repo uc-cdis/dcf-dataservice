@@ -118,8 +118,8 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                         "Bucket": bucket_name,
                     }
         except KeyError as e:
-            logger.error(
-                "Something wrong with listing objects in {}. Detail {}".format(
+            logger.warning(
+                "{} is empty. Detail {}".format(
                     bucket_name, e
                 )
             )
