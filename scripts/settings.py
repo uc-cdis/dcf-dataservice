@@ -24,3 +24,5 @@ except Exception as e:
     print("Can not read GDC_project_map.json file. Detail {}".format(e))
 
 IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
+
+DATA_ENDPT = "https://api.gdc.cancer.gov/data/"

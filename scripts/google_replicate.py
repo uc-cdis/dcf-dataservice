@@ -21,12 +21,12 @@ from indexclient.client import IndexClient
 
 from scripts import utils
 from scripts.errors import APIError, UserError, StreamError
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA_ENDPT
 from scripts import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
-DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
+DATA_ENDPT = DATA_ENDPT
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
