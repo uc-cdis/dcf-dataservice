@@ -26,7 +26,6 @@ from scripts import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
-DATA_ENDPT = DATA_ENDPT
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
