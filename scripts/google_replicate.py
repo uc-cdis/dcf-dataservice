@@ -378,8 +378,7 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             tries += 1
         except Exception as e:
             raise APIError(
-                "Can not setup connection to gdcapi for {}. Detail {}".format(fi["id"]),
-                e,
+                "Can not setup connection to gdcapi for {}. Detail {}".format(fi["id"],e)
             )
 
     if tries == NUM_TRIES:
