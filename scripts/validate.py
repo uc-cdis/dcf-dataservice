@@ -77,6 +77,7 @@ def run(global_config):
     indexd_records = utils.get_indexd_records() # here. checking if files have been indexd?
     #wont be needing to upload any file hopefully
     if global_config.get("save_copied_objects") and False:
+        print("YOOOOOO")
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
         with open("./aws_copied_objects.json", "w") as outfile:
