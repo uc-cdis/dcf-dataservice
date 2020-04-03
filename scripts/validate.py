@@ -110,7 +110,8 @@ def run(global_config):
         total_aws_index_failures = 0
         total_gs_index_failures = 0
         manifest_file = manifest_file.strip()
-        files = utils.get_fileinfo_list_from_s3_manifest(manifest_file) # lists all the gz zipped files
+        # files = utils.get_fileinfo_list_from_s3_manifest(manifest_file) # lists all the gz zipped files
+        files = manifest_file
         fail_list = []
         
         for fi in files: # HERE
