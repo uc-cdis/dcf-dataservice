@@ -70,8 +70,9 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
 
     s3 = boto3.resource("s3")
-
+    print("URL MANIFEST!! {}".format(url_manifest))
     out = urlparse(url_manifest)
+    print("OUT PATH!!!! {}".format(out))
     s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
     return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
 
