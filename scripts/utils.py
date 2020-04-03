@@ -70,8 +70,9 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
 
     s3 = boto3.resource("s3")
-
+    print("URL MANIFEST!! {}".format(url_manifest))
     out = urlparse(url_manifest)
+    print("OUT PATH!!!! {}".format(out))
     s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
     return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
 
@@ -245,7 +246,6 @@ def get_ignored_files(ignored_filename, delimiter=","):
 def get_structured_object_key(uuid, ignored_dict):
     """
     Given an uuid return the url of the object in the 5aa bucket
-
     Args:
         uuid(str): object uuid
         ignore_dict(dict): a dictionary of 5aa bucket object

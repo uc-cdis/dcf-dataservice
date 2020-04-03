@@ -9,6 +9,8 @@ from scripts.errors import UserError
 from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
 from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
+import time
+
 global logger
 
 
@@ -18,6 +20,7 @@ def resume_logger(filename=None):
 
 
 def run(global_config):
+    total_time_start = time.time()
     """
     Given manifests run validation process to check if all the objects exist and are indexed correctly
     Args:
@@ -26,10 +29,8 @@ def run(global_config):
             'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
             'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
         }
-
     Returns:
         bool
-
     """
     resume_logger("./log.txt")
     if not global_config.get("log_bucket"):
@@ -62,11 +63,19 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-    indexd_records = utils.get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
+    # should check if these are running 
+    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger) #here
+    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL) #here
 
-    if global_config.get("save_copied_objects"):
+    print("COPIED OBJECTS CHECK-------------------------------------------")
+    print(aws_copied_objects)
+    print(gs_copied_objects)
+    print("---------------------------------------------------------------")
+
+    indexd_records = utils.get_indexd_records() # here. checking if files have been indexd?
+    #wont be needing to upload any file hopefully
+    if global_config.get("save_copied_objects") and False:
+        print("YOOOOOO")
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
         with open("./aws_copied_objects.json", "w") as outfile:
@@ -94,41 +103,52 @@ def run(global_config):
             logger.error(e)
 
     pass_validation = True
-    for idx, manifest_file in enumerate(manifest_files):
+    # Could possibly async this since this does take a while and would be waiting on the first manifest to be done
+    for idx, manifest_file in enumerate(manifest_files): # Just the two manifest_files so no need to worry about this too much.
         total_aws_copy_failures = 0
         total_gs_copy_failures = 0
         total_aws_index_failures = 0
         total_gs_index_failures = 0
         manifest_file = manifest_file.strip()
-        files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
+        files = utils.get_fileinfo_list_from_s3_manifest(manifest_file) # lists all the gz zipped files
         fail_list = []
-        for fi in files:
+        
+        for fi in files: # HERE
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
+            # could possibly do some parts of aws and gs validation at the same time. 
 
-            fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
-            if not fi["indexd_url"]:
+            fi["indexd_url"] = indexd_records.get(fi.get("id"), []) #adds indexd_url to the fi by chekcing if its in the indexd_records. Not super sure if this is gonna work for testing
+            if not fi["indexd_url"]: # [KEY]
                 total_aws_index_failures += 1
                 total_gs_index_failures += 1
                 fail_list.append(fi)
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
+            # could possibly do some parts of aws and gs validation at the same time. 
+
+            # Use asyncio to parallelize validate aws and validate google. Seperate those to two different functions. 
+            aws_time_start = time.time()
             # validate aws
-            aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-            object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
-            if object_path not in aws_copied_objects and fi["size"] != 0:
+            aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL) # get aws_bucket name according to fi
+            print("AWS BUCKET NAME: {0}".format(aws_bucket))
+            object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"]) # this should be the object path
+            print("OBJECT PATH: {}".format(object_path))
+            if object_path not in aws_copied_objects and fi["size"] != 0: # HERE [KEY] check if object path in aws_copied_object list
                 total_aws_copy_failures += 1
                 fail_list.append(fi)
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
-            elif fi["size"] != 0:
+            elif fi["size"] != 0: # if file in aws_copied_object list and in indexd_record 
                 fi["aws_url"] = "s3://" + object_path
-                if fi["aws_url"] not in fi["indexd_url"]:
-                    total_aws_index_failures += 1
-                    fail_list.append(fi)
-                    logger.error("indexd does not have aws url of {}".format(fi["id"]))
+                total_aws_index_failures += 1
+                fail_list.append(fi)
+                logger.error("indexd does not have aws url of {}".format(fi["id"]))
+            aws_time_end = time.time()
 
+            google_time_start = time.time()
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
+            # just to include different paths for files in ignored manifest vs regular 
             if fi["id"] in ignored_dict:
                 object_path = "{}/{}".format(
                     gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
@@ -137,7 +157,7 @@ def run(global_config):
                 fixed_filename = fi["file_name"].replace(" ", "_")
                 object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
 
-            if object_path not in gs_copied_objects and fi["size"] != 0:
+            if object_path not in gs_copied_objects and fi["size"] != 0: # same thing as aws 
                 total_gs_copy_failures += 1
                 fail_list.append(fi)
                 logger.error(
@@ -145,10 +165,10 @@ def run(global_config):
                 )
             elif fi["size"] != 0:
                 fi["gs_url"] = "gs://" + object_path
-                if fi["gs_url"] not in fi["indexd_url"]:
-                    total_gs_index_failures += 1
-                    fail_list.append(fi)
-                    logger.error("indexd does not have gs url of {}".format(fi["id"]))
+                total_gs_index_failures += 1
+                fail_list.append(fi)
+                logger.error("indexd does not have gs url of {}".format(fi["id"]))
+            google_time_end = time.time()
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
@@ -227,5 +247,12 @@ def run(global_config):
             )
         except Exception as e:
             logger.error(e)
+    total_time_end = time.time()
+
+    print("////////////////////////////////////////////////////////////////////////////////////////")
+    print("AWS_TIME: {0}".format(aws_time_end - aws_time_start))
+    print("GOOGLE_TIME: {0}".format(google_time_end - google_time_start))
+    print("TOTAL_TIME: {0}".format(total_time_end - total_time_start))
+    print("////////////////////////////////////////////////////////////////////////////////////////")
 
     return pass_validation
