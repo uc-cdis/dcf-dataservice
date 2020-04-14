@@ -438,8 +438,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     jobinfo.manager_ns.total_processed_files += 1
     jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
     if pFile:
-        logger.info("add pFile to list")
-        jobinfo.manager_ns.pFiles.append(pFile)
+        jobinfo.manager_ns.pFiles = jobinfo.manager_ns.pFiles + [pFile]
     if not quick_test and jobinfo.manager_ns.total_processed_files % 5 == 0:
         try:
             session.client("s3").upload_file(
