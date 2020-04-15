@@ -438,7 +438,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     jobinfo.manager_ns.total_processed_files += 1
     jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
     if pFile:
-        jobinfo.manager_ns.pFiles.append(pFile)
+        jobinfo.manager_ns.pFiles = jobinfo.manager_ns.pFiles + [pFile]
     if not quick_test and jobinfo.manager_ns.total_processed_files % 5 == 0:
         try:
             session.client("s3").upload_file(
@@ -911,6 +911,7 @@ def run(
         total_copying_aws_intelligent_tiering = 0
         n_copying_aws_non_intelligent_tiering = 0
         total_copying_aws_non_intelligent_tiering = 0
+        logger.info("Total size of pFiles: {}".format(len(manager_ns.pFiles)))
         for pFile in manager_ns.pFiles:
             if pFile.copy_method == "GDCAPI":
                 n_copying_gdcapi += 1
@@ -934,7 +935,7 @@ def run(
             )
         )
         logger.info(
-            "Total files are copied by GDC API {}. Total {}(GiB)".format(
+            "Total files are copied by AWS CLI {} with non-intelligent tiering storage classes. Total {}(GiB)".format(
                 n_copying_aws_non_intelligent_tiering,
                 total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
             )
