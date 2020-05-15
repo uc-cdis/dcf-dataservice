@@ -12,6 +12,7 @@ REQUIRED_PACKAGES = [
     "google-cloud-storage==1.6.0",
     "apache-beam[gcp]==2.16.0",
     "setuptools==40.3.0",
+    "gen3>=2.3.1",
 ]
 
 PACKAGE_NAME = "scripts"
