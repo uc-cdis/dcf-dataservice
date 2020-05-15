@@ -62,7 +62,7 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-    indexd_records = utils.get_indexd_records()
+    indexd_records = utils.async_get_indexd_records()
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
