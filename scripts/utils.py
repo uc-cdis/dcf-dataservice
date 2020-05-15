@@ -1,15 +1,15 @@
 import os
-# import boto3
+import boto3
 import csv
 import random
-# from google.cloud import storage
+from google.cloud import storage
 import threading
 from threading import Thread
 from urllib.parse import urlparse
 
-# from scripts.errors import UserError
+from scripts.errors import UserError
 from indexclient.client import IndexClient
-# from scripts.settings import INDEXD
+from scripts.settings import INDEXD
 import asyncio
 import time
 from gen3.tools.indexing.download_manifest import async_download_object_manifest
