@@ -14,6 +14,7 @@ import asyncio
 import time
 from gen3.tools.indexing.download_manifest import async_download_object_manifest
 
+
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
@@ -32,14 +33,14 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     #         else "gdc-ccle-controlled"
     #     )
     if "target" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "gdc-target-phs000218-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "target-controlled"
         )
-    
+
     if "tcga" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "tcga-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "tcga-controlled"
@@ -356,10 +357,12 @@ def get_indexd_records():
 
     return results
 
+
 def async_get_indexd_records():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(async_download_object_manifest(INDEXD["host"]))
     return _get_indexd_records_csv("object-manifest.csv")
+
 
 def _get_indexd_records_csv(manifest):
     """

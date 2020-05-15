@@ -19,7 +19,10 @@ from scripts.utils import (
     get_ignored_files,
     get_structured_object_key,
 )
-from scripts.indexd_utils import remove_url_from_indexd_record, delete_record_from_indexd
+from scripts.indexd_utils import (
+    remove_url_from_indexd_record,
+    delete_record_from_indexd,
+)
 from scripts.errors import UserError
 from scripts.settings import IGNORED_FILES
 
@@ -70,7 +73,11 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
     try:
         s3_sess.meta.client.head_bucket(Bucket=log_bucket)
     except botocore.exceptions.ClientError as e:
-        logger.error("The bucket {} does not exist or you have no access. Detail {}".format(log_bucket, e))
+        logger.error(
+            "The bucket {} does not exist or you have no access. Detail {}".format(
+                log_bucket, e
+            )
+        )
         return
 
     indexclient = IndexClient(
@@ -108,7 +115,9 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         if not dry_run:
             if aws_target_bucket:
                 aws_deletion_logs.append(
-                    _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
+                    _remove_object_from_s3(
+                        s3, indexclient, fi, aws_target_bucket, dry_run
+                    )
                 )
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
@@ -121,7 +130,9 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
                 )
                 continue
             gs_deletion_logs.append(
-                _remove_object_from_gs(gs_client, indexclient, fi, google_target_bucket, ignored_dict)
+                _remove_object_from_gs(
+                    gs_client, indexclient, fi, google_target_bucket, ignored_dict
+                )
             )
             delete_record_from_indexd(fi.get("id"), indexclient)
 
@@ -146,15 +157,21 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             s3 = boto3.client("s3")
             with open(aws_filename, "w") as outfile:
                 json.dump(aws_log_json, outfile)
-            s3.upload_file(aws_filename, log_bucket, release + "/" + basename(aws_filename))
+            s3.upload_file(
+                aws_filename, log_bucket, release + "/" + basename(aws_filename)
+            )
 
             with open(gs_filename, "w") as outfile:
                 json.dump(gs_log_json, outfile)
-            s3.upload_file(gs_filename, log_bucket, release + "/" + basename(gs_filename))
+            s3.upload_file(
+                gs_filename, log_bucket, release + "/" + basename(gs_filename)
+            )
         except Exception as e:
             logger.error(e)
     else:
-        logger.info("All following files are for redaction.\nIf there is nothing below that means there is nothing to redact!!!\n\n")
+        logger.info(
+            "All following files are for redaction.\nIf there is nothing below that means there is nothing to redact!!!\n\n"
+        )
         logger.info("url\n")
         for log in aws_log_list:
             if log["deleted"]:
@@ -199,7 +216,9 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
                 deletion_log.indexdUpdated = True
             except Exception as e:
                 deletion_log.message = str(e)
-                logger.warning("Can not remove aws indexd url of {}. Detail {}".format(f["id"], e))
+                logger.warning(
+                    "Can not remove aws indexd url of {}. Detail {}".format(f["id"], e)
+                )
         else:
             logger.warning("Can not delete {} from AWS".format(f["id"]))
             deletion_log.message = str(res.Errors)
@@ -246,7 +265,9 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
         deletion_log.indexdUpdated = True
     except Exception as e:
-        logger.warning("Can not remove gs indexd url of {}. Detail {}".format(f["id"], e))
+        logger.warning(
+            "Can not remove gs indexd url of {}. Detail {}".format(f["id"], e)
+        )
         deletion_log.message = str(e)
 
     return deletion_log
