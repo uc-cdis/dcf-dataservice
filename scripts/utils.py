@@ -379,5 +379,5 @@ def _get_indexd_records_csv(manifest):
             print("row: {}".format(row))
             row["urls"] = row["urls"].split(" ") if row["urls"] else []
             res[row["guid"]] = [url.replace("%20", " ") for url in row["urls"]]
-    os.remove("object-manifest.csv")
+    # os.remove("object-manifest.csv")
     return res
