@@ -361,9 +361,8 @@ def get_indexd_records():
 def async_get_indexd_records():
     loop = asyncio.get_event_loop()
     indexd = urlparse(INDEXD["host"])
-    loop.run_until_complete(async_download_object_manifest(indexd.netloc))
-    return _get_indexd_records_csv("/dcf-dataservice/object-manifest.csv")
-
+    loop.run_until_complete(async_download_object_manifest(indexd.scheme + "://" + indexd.netloc))
+    return _get_indexd_records_csv("object-manifest.csv")
 
 def _get_indexd_records_csv(manifest):
     """
@@ -378,5 +377,5 @@ def _get_indexd_records_csv(manifest):
         for row in csvReader:
             row["urls"] = row["urls"].split(" ") if row["urls"] else []
             res[row["guid"]] = [url.replace("%20", " ") for url in row["urls"]]
-    # os.remove("object-manifest.csv")
+    os.remove("object-manifest.csv")
     return res
