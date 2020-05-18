@@ -361,7 +361,7 @@ def get_indexd_records():
 def async_get_indexd_records():
     loop = asyncio.get_event_loop()
     print("HOST: {}".format(INDEXD["host"]))
-    loop.run_until_complete(async_download_object_manifest(INDEXD["host"]))
+    loop.run_until_complete(async_download_object_manifest(INDEXD["host"].replace("index/index", "")))
     return _get_indexd_records_csv("/dcf-dataservice/object-manifest.csv")
 
 
