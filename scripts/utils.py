@@ -360,6 +360,7 @@ def get_indexd_records():
 
 def async_get_indexd_records():
     loop = asyncio.get_event_loop()
+    print("HOST: {}".format(INDEXD["host"]))
     loop.run_until_complete(async_download_object_manifest(INDEXD["host"]))
     return _get_indexd_records_csv("object-manifest.csv")
 
@@ -375,6 +376,7 @@ def _get_indexd_records_csv(manifest):
     with open(manifest, "rt") as csvfile:
         csvReader = csv.DictReader(csvfile, delimiter=",")
         for row in csvReader:
+            print("row: {}".format(row))
             row["urls"] = row["urls"].split(" ") if row["urls"] else []
             res[row["guid"]] = [url.replace("%20", " ") for url in row["urls"]]
     os.remove("object-manifest.csv")
