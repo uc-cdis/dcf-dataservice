@@ -749,6 +749,12 @@ def get_reversed_acl_bucket_name(target_bucket):
         else:
             return target_bucket[:-10] + "open"
 
+    if "gdc-cgci-phs000235" in target_bucket:
+        if "open" in target_bucket:
+            return "gdc-cgci-phs000235-2-controlled"
+        else:
+            return "gdc-cgci-phs000235-2-open"
+
     if "open" in target_bucket:
         return target_bucket[:-6] + "controlled"
 
