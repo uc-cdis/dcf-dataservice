@@ -10,6 +10,9 @@ from urllib.parse import urlparse
 from scripts.errors import UserError
 from indexclient.client import IndexClient
 from scripts.settings import INDEXD
+import asyncio
+import time
+from gen3.tools.indexing.download_manifest import async_download_object_manifest
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
@@ -30,14 +33,14 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     #         else "gdc-ccle-controlled"
     #     )
     if "target" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "gdc-target-phs000218-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "target-controlled"
         )
-    
+
     if "tcga" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "tcga-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "tcga-controlled"
@@ -171,7 +174,7 @@ def prepare_txt_manifest_google_dataflow(
     Since Apache Beam does not support csv format, convert the csv to txt file
     """
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
-    indexd_records = get_indexd_records()
+    indexd_records = async_get_indexd_records()
     if copied_objects:
         filtered_copying_files = []
         for fi in copying_files:
@@ -349,6 +352,31 @@ def get_indexd_records():
     progress = 0
     for doc in it:
         progress += 1
-        results[doc.did] = doc.urls
+        urls = [url.replace("%20", " ") for url in doc.urls]
+        results[doc.did] = urls
 
     return results
+
+
+def async_get_indexd_records():
+    loop = asyncio.get_event_loop()
+    indexd = urlparse(INDEXD["host"])
+    print(indexd.scheme + "://" + indexd.netloc)
+    loop.run_until_complete(async_download_object_manifest(indexd.scheme + "://" + indexd.netloc))
+    return _get_indexd_records_csv("object-manifest.csv")
+
+def _get_indexd_records_csv(manifest):
+    """
+    structure:
+    {
+        guid: [location],
+    }
+    """
+    res = {}
+    with open(manifest, "rt") as csvfile:
+        csvReader = csv.DictReader(csvfile, delimiter=",")
+        for row in csvReader:
+            row["urls"] = row["urls"].split(" ") if row["urls"] else []
+            res[row["guid"]] = [url.replace("%20", " ") for url in row["urls"]]
+    # os.remove("object-manifest.csv")
+    return res

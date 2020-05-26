@@ -83,13 +83,13 @@ if __name__ == "__main__":
             None,
         )
     elif args.action == "validate":
-        validate.run(
-            json.loads(args.global_config)
-        )
+        validate.run(json.loads(args.global_config))
 
     elif args.action == "redact":
         dry_run = False if args.dry_run == "False" else True
-        delete_objects_from_cloud_resources(args.redact_file, args.log_bucket, args.release, dry_run)
+        delete_objects_from_cloud_resources(
+            args.redact_file, args.log_bucket, args.release, dry_run
+        )
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))

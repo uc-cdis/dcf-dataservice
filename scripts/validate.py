@@ -62,7 +62,9 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-    indexd_records = utils.get_indexd_records()
+    indexd_records = utils.async_get_indexd_records()
+    print("length of indexd records: {}".format(len(indexd_records)))
+
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
@@ -152,7 +154,9 @@ def run(global_config):
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
-                "All the objects in {} are replicated to GS and indexed correctly!!!".format(manifest_file)
+                "All the objects in {} are replicated to GS and indexed correctly!!!".format(
+                    manifest_file
+                )
             )
         else:
             if total_gs_index_failures > 0:
@@ -170,7 +174,9 @@ def run(global_config):
 
         if total_aws_index_failures + total_aws_copy_failures == 0:
             logger.info(
-                "All the objects in {} are replicated to AWS and indexed correctly!!!".format(manifest_file)
+                "All the objects in {} are replicated to AWS and indexed correctly!!!".format(
+                    manifest_file
+                )
             )
         else:
             if total_aws_index_failures > 0:
@@ -195,7 +201,22 @@ def run(global_config):
         )
 
         if _pass:
-            HEADERS = ["id", "file_name", "md5", "size", "state", "project_id", "baseid", "version", "release", "acl", "type", "deletereason", "gs_url", "indexd_url"]
+            HEADERS = [
+                "id",
+                "file_name",
+                "md5",
+                "size",
+                "state",
+                "project_id",
+                "baseid",
+                "version",
+                "release",
+                "acl",
+                "type",
+                "deletereason",
+                "gs_url",
+                "indexd_url",
+            ]
             isb_files = []
             for fi in files:
                 del fi["aws_url"]
@@ -205,25 +226,31 @@ def run(global_config):
             utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
         else:
             utils.write_csv("./tmp.csv", fail_list)
-            logger.info("Can not generate the augmented manifest for {}. Please fix all the errors".format(manifest_file))
+            logger.info(
+                "Can not generate the augmented manifest for {}. Please fix all the errors".format(
+                    manifest_file
+                )
+            )
 
         if pass_validation:
             pass_validation = _pass
 
-        out_filename = out_manifests[idx].strip() if _pass else "FAIL_" + out_manifests[idx].strip()
+        out_filename = (
+            out_manifests[idx].strip()
+            if _pass
+            else "FAIL_" + out_manifests[idx].strip()
+        )
 
         try:
-            s3.upload_file(
-                "tmp.csv", global_config.get("log_bucket"), out_filename
-            )
+            s3.upload_file("tmp.csv", global_config.get("log_bucket"), out_filename)
         except Exception as e:
             logger.error(e)
-        
+
         try:
             s3.upload_file(
                 "./log.txt",
                 global_config.get("log_bucket"),
-                global_config.get("release") + "/validation.log"
+                global_config.get("release") + "/validation.log",
             )
         except Exception as e:
             logger.error(e)

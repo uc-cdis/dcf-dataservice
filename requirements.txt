@@ -7,6 +7,7 @@ google-resumable-media==0.3.1
 google-cloud-storage==1.6.0
 apache-beam[gcp]==2.16.0
 setuptools==40.3.0
+gen3>=2.3.1
 -e git+https://git@github.com/uc-cdis/cdislogging.git@0.0.2#egg=cdislogging
 # For the Google script, indexclient source must also be available as a zip
 # file and fed to the script using option "--extra_package" (until package is
