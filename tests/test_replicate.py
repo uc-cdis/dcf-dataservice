@@ -57,15 +57,15 @@ class MockIndexDRecord(object):
 DEFAULT_RECORDS = {
             "uuid1": MockIndexDRecord(
                 uuid="uuid1",
-                urls=["s3://tcga-open/uuid1/filename1"],
-                urls_metadata={"s3://tcga-open/uuid1/filename1": {}},
+                urls=["s3://tcga-2-open/uuid1/filename1"],
+                urls_metadata={"s3://tcga-2-open/uuid1/filename1": {}},
                 acl=["*"],
                 authz=["/open"],
             ),
             "uuid2": MockIndexDRecord(
                 uuid="uuid2",
-                urls=["s3://tcga-controlled/uuid2/filename2"],
-                urls_metadata={"s3://tcga-controlled/uuid2/filename2": {}},
+                urls=["s3://tcga-2-controlled/uuid2/filename2"],
+                urls_metadata={"s3://tcga-2-controlled/uuid2/filename2": {}},
                 acl=["phs000128"],
                 authz=["/phs000128"],
             ),
@@ -431,11 +431,11 @@ def test_update_url_with_new_url(reset_records):
         "id": "uuid1",
         "file_name": "filename1",
         "acl": "['phs000218',  'phs000219']",
-        "url": "tcga-controlled/uuid1/filename1"
+        "url": "tcga-2-controlled/uuid1/filename1"
     }
     indexd_utils.update_url(fi, mock_client)
     doc = mock_client.get("uuid1")
-    assert doc.urls == ['s3://tcga-controlled/uuid1/filename1']
+    assert doc.urls == ['s3://tcga-2-controlled/uuid1/filename1']
 
 
 @patch('scripts.indexd_utils.PROJECT_ACL', PROJECT_ACL)
@@ -449,24 +449,24 @@ def test_update_url_with_new_url2(reset_records):
         "id": "uuid1",
         "file_name": "filename1",
         "acl": "['open']",
-        "url": "tcga-open/uuid1/filename1"
+        "url": "tcga-2-open/uuid1/filename1"
     }
     indexd_utils.update_url(fi, mock_client, provider="gs")
     doc = mock_client.get("uuid1")
-    assert doc.urls == ['s3://tcga-open/uuid1/filename1', 'gs://gdc-tcga-phs000178-open/uuid1/filename1']
+    assert doc.urls == ['s3://tcga-2-open/uuid1/filename1', 'gs://gdc-tcga-phs000178-open/uuid1/filename1']
 
 
 def test_get_reversed_acl_bucket_name():
     assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-target-phs000218-2-open") == "target-controlled"
     assert scripts.aws_replicate.get_reversed_acl_bucket_name("target-controlled") == "gdc-target-phs000218-2-open"
-    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-open") == "tcga-controlled"
-    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-controlled") == "tcga-open"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-2-open") == "tcga-2-controlled"
+    assert scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-2-controlled") == "tcga-2-open"
     assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-controlled") == "gdc-ccle-2-open"
     assert scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-2-open") == "gdc-ccle-controlled"
 
 def test_get_aws_bucket_name():
-    assert utils.get_aws_bucket_name({"project_id": "TCGA-PNQS", "id": "1", "acl": "[phs000178]"}, PROJECT_ACL) == "tcga-controlled"
-    assert utils.get_aws_bucket_name( {"project_id": "TCGA-PNQS", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "tcga-open"
+    assert utils.get_aws_bucket_name({"project_id": "TCGA-PNQS", "id": "1", "acl": "[phs000178]"}, PROJECT_ACL) == "tcga-2-controlled"
+    assert utils.get_aws_bucket_name( {"project_id": "TCGA-PNQS", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "tcga-2-open"
     assert utils.get_aws_bucket_name( {"project_id": "TARGET-PNQS", "id": "1", "acl": "['phs000178']"}, PROJECT_ACL) == "target-controlled"
     assert utils.get_aws_bucket_name( {"project_id": "TARGET-PNQS", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "gdc-target-phs000218-2-open"
     assert utils.get_aws_bucket_name( {"project_id": "CCLE-MNPO", "id": "1", "acl": "['open']"}, PROJECT_ACL) == "gdc-ccle-2-open"
