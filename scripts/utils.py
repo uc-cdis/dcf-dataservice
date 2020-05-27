@@ -42,6 +42,13 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "tcga-2-controlled"
         )
+        
+    if "gdc-cgci-phs000235" in project_info["aws_bucket_prefix"]:
+        return(
+            "gdc-cgci-phs000235-2-open"
+            if fi.get("acl") in {"[u'open']", "['open']"}
+            else "gdc-cgci-phs000235-2-controlled"
+        )
 
     return project_info["aws_bucket_prefix"] + (
         "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
