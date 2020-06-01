@@ -5,7 +5,7 @@ import setuptools
 
 REQUIRED_PACKAGES = [
     "python_dateutil==2.8.0",
-    "requests>=2.21.0<3.0.0",
+    "requests>=2.23.0<3.0.0",
     "boto3>=1.9.111",
     "google-cloud==0.34.0",
     "google-resumable-media==0.3.1",
