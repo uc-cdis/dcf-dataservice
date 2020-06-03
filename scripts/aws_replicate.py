@@ -31,7 +31,7 @@ from scripts.indexd_utils import update_url
 
 global logger
 
-RETRIES_NUM = 5
+RETRIES_NUM = 6
 
 
 class ProcessingFile(object):
