@@ -32,6 +32,7 @@ global logger
 RETRIES_NUM = 5
 
 
+
 class ProcessingFile(object):
     def __init__(self, id, size, copy_method, original_storage):
         self.id = id
