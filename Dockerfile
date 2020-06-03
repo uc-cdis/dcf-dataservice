@@ -1,43 +1,24 @@
-FROM quay.io/cdis/python-nginx:pybase3-1.0.0
+FROM python:3.7-slim-buster
 
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y git jq curl bash snapd groff python3-pip zip
 
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y \
-      apt-utils \
-      apt-transport-https \
-      lsb-release \
-      curl \
-      dnsutils \
-      gcc \
-      git \
-      openssh-client \
-      python-setuptools \
-      vim \
-      less \
-      jq \
-      ssh \
-      ftp \
-      wget
+RUN curl -O https://bootstrap.pypa.io/get-pip.py
 
-RUN  easy_install -U pip \
-    && pip install --upgrade pip \
-    && pip install --upgrade setuptools \
-    && pip install -U crcmod \
-    && pip install awscli --upgrade \
-    && pip install yq --upgrade
+RUN python3 get-pip.py
 
-RUN export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
-    echo "deb https://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" > /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
-    apt-get update && \
-    apt-get install -y google-cloud-sdk \
-    gcloud config set core/disable_usage_reporting true && \
-    gcloud --version 
+RUN pip3 install awscli
+
+# Installing gcloud package (includes gsutil)
+RUN curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tmp/google-cloud-sdk.tar.gz
+RUN mkdir -p /usr/local/gcloud \
+  && tar -C /usr/local/gcloud -xvf /tmp/google-cloud-sdk.tar.gz \
+  && /usr/local/gcloud/google-cloud-sdk/install.sh
+ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
+
  
- COPY . /dcf-dataservice
- WORKDIR /dcf-dataservice
+COPY . /dcf-dataservice
+WORKDIR /dcf-dataservice
 
- RUN  pip install -r requirements.txt
+RUN  pip3 install -r requirements.txt
 
- CMD /bin/bash
+CMD /bin/bash
