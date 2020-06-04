@@ -66,6 +66,8 @@ spec:
             cat /secrets/dcf_dataservice_settings > ./scripts/settings.py
             gcloud auth activate-service-account --key-file=/secrets/google_service_account_creds
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
+            export http_proxy='http://cloud-proxy.internal.io:3128'
+            export https_proxy='http://cloud-proxy.internal.io:3128/'
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
             if [[ "$MANIFEST_FILE" == *"active"* ]]; then
               type="active"
