@@ -68,9 +68,6 @@ spec:
             export GOOGLE_APPLICATION_CREDENTIALS=/secrets/google_service_account_creds
             export http_proxy='http://cloud-proxy.internal.io:3128'
             export https_proxy='http://cloud-proxy.internal.io:3128/'
-            #export no_proxy='localhost,127.0.0.1,localaddress,169.254.169.254,.internal.io,logs.us-east-1.amazonaws.com,.es.amazonaws.com,kibana.planx-pla.net'
-            #export no_proxy='localhost,127.0.0.1,localaddress,169.254.169.254,.internal.io,logs.us-east-1.amazonaws.com'
-            export no_proxy='localhost,127.0.0.1,169.254.169.254,.internal.io,logs.us-east-1.amazonaws.com,kibana.planx-pla.net,.eks.amazonaws.com'
             gsutil cp $IGNORED_FILE /dcf-dataservice/ignored_files_manifest.csv
             if [[ "$MANIFEST_FILE" == *"active"* ]]; then
               type="active"
