@@ -13,6 +13,9 @@ global logger
 
 
 def resume_logger(filename=None):
+    """
+    Resume global logger
+    """
     global logger
     logger = get_logger("Validation", filename)
 
