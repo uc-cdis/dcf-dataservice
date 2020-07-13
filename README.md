@@ -122,8 +122,6 @@ While aws cli runs on server side, user have to deal with throughput issues when
 
 ### GS bucket replication
 
-### GS bucket replication
-
 The followings is an example of configuration for running google replication with google dataflow.
 
 ```
