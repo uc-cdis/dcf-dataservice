@@ -1,10 +1,10 @@
 # dcf-dataservice
- Copy data buckets from GDC to AWS and Google buckets. The jobs need to be run inside a setup kubeneste cluster.
+ Jobs to replicate data from GDC data center to AWS and Google buckets. The jobs need to be run inside a kubeneste cluster.
 
  GDC has two different data storages: Data center and AWS backup bucket which are synchronized continuously with each other. Every one or two months, GDC releases new/updated/deleted data in manifest files, the goal is to deploy two separated jobs which copy the data to AWS, GOOGLE cloud respectively.
 
 ## GDC AWS bucket to DCF AWS buckets
- Simply using AWS API to sync in-AWS buckets. To boost up the performance, we deploy multiple-thread aws s3 copying.
+ Simply using AWS API to sync in-AWS buckets. To boost up the performance, we deploy multiple-thread aws s3 cli.
 
 ## GDC data center to DCF GOOGLE buckets
  Deploy a data-flow job that copies data from GDC to GCP buckets. The `copy` transform of the data-flow pipeline streams objects from GDC data center to GOOGLE buckets.
