@@ -118,7 +118,7 @@ There are two modes for running the replicating process: multiple processes and 
 
 (*) It is quite costly to check if the object exist or not by asking aws bucket, user can build dictionaries for both DCF bucket and GDC bucket for look up purpose and save as json files. The trade-off is the memory cost.
 
-While aws cli runs on server side, user have to deal with throughput issues when streaming data from gdc api. GDC currently configure each VM can not get more than 250 concurrently. The user should pay attention to make sure that `number of process/thread * multi_part_upload_threads < 250`
+While aws cli runs on server side, users have to deal with throughput issues when streaming data from gdc api. GDC currently configures each VM can not get more than 250 concurrently. The user should pay attention to make sure that `number of process/thread * multi_part_upload_threads < 250`
 
 ### GS bucket replication
 
