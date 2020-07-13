@@ -81,7 +81,7 @@ gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/man
 
 ### Manifest formats
 
-Both the `sync manifest` and `redaction manifest` have the same format as descibed below.
+Both the `sync manifest` and `redaction manifest` have the same format as described below.
 ```
 id	file_name	md5	size	state	project_id	baseid	version	release	acl	type	deletereason	url
 ada53c3d-16ff-4e2a-8646-7cf78baf7aff	ada53c3d-16ff-4e2a-8646-7cf78baf7aff.vcf.gz	ff53a02d67fd28fcf5b8cd609cf51b06	137476	released	TCGA-LGG	6230cd6d-8610-4db4-94f4-2f87592c949b	1	12.0	[u'phs000xxx']	active		s3://xxxx/ada53c3d-16ff-4e2a-8646-7cf78baf7aff
@@ -99,7 +99,7 @@ gcs_object_size	gcs_object_time_stamp	md5sum	acl	gcs_object_url	gdc_uuid
 ## Configuration
 ### AWS bucket replication
 At this version, the script is supporting replicating the data using both aws cli and streaming from gdcapi. If object storage classes are Glacier or Infrequent access standard they are replicated by streaming from gdc api; otherwise they are directly replicated using aws cli.
-There are two modes for running the replicating process: multiple processes and multiple threads. Each process/thread will handle one file at a time. Mutiple processes, recommended for multiple-core VMs, can utilize much better bandwidth than multiple thread.
+There are two modes for running the replicating process: multiple processes and multiple threads. Each process/thread will handle one file at a time. Multiple processes, recommended for multiple-core VMs, can utilize much better bandwidth than multiple thread.
 
 ```
 {
@@ -107,7 +107,7 @@ There are two modes for running the replicating process: multiple processes and 
     "log_bucket": "bucketname".
     "mode": "process|thread", # multiple process or multiple thread. Default: thread
     "quiet": 1|0, # specify if we want to print all the logs or not. Default: 0
-    "from_local": 1|0, # specify how we want to check if object exist or not (*). On the fly or from json dictionary. Deault 0
+    "from_local": 1|0, # specify how we want to check if object exist or not (*). On the fly or from json dictionary. Default 0
     "copied_objects": "path_to_the_file", # specify json file containing all copied objects
     "source_objects": "path_to_the_file", # specify json file containing all source objects (gdcbackup),
     "data_chunk_size": 1024 * 1024 * 128, # chunk size with multipart download and upload. Default 1024 * 1024 * 128
@@ -118,7 +118,7 @@ There are two modes for running the replicating process: multiple processes and 
 
 (*) It is quite costly to check if the object exist or not by asking aws bucket, user can build dictionaries for both DCF bucket and GDC bucket for look up purpose and save as json files. The trade-off is the memory cost.
 
-While aws cli runs on server side, user have to deal with throughput issues when streaming data from gdc api. GDC currently configure each VM can not get more than 250 concurency. The user should pay attention to make sure that `number of process/thread * multi_part_upload_threads < 250`
+While aws cli runs on server side, user have to deal with throughput issues when streaming data from gdc api. GDC currently configure each VM can not get more than 250 concurrently. The user should pay attention to make sure that `number of process/thread * multi_part_upload_threads < 250`
 
 ### GS bucket replication
 
