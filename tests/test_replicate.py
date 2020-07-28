@@ -36,6 +36,10 @@ PROJECT_ACL = {
         "gs_bucket_prefix": "gdc-target-phs000218",
     },
     "CCLE-MNPO": {"aws_bucket_prefix": "gdc-ccle", "gs_bucket_prefix": "gdc-ccle",},
+    "BEATAML1.0-COHORT": {
+        "aws_bucket_prefix": "gdc-beataml1-cohort-phs001657",
+        "gs_bucket_prefix": "gdc-beataml1-cohort-phs001657",
+    },
 }
 
 
@@ -487,6 +491,16 @@ def test_get_reversed_acl_bucket_name():
         scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-2-open")
         == "gdc-ccle-controlled"
     )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-cgci-phs000235-2-open")
+        == "gdc-cgci-phs000235-2-controlled"
+    )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-cgci-phs000235-2-controlled"
+        )
+        == "gdc-cgci-phs000235-2-open"
+    )
 
 
 def test_get_aws_bucket_name():
@@ -526,4 +540,18 @@ def test_get_aws_bucket_name():
             {"project_id": "CCLE-MNPO", "id": "1", "acl": "['phs0001']"}, PROJECT_ACL
         )
         == "gdc-ccle-controlled"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "BEATAML1.0-COHORT", "id": "1", "acl": "['open']"},
+            PROJECT_ACL,
+        )
+        == "gdc-beataml1-cohort-phs001657-2-open"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "BEATAML1.0-COHORT", "id": "1", "acl": "['phs001657']"},
+            PROJECT_ACL,
+        )
+        == "gdc-beataml1-cohort-phs001657-2-controlled"
     )
