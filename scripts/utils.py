@@ -30,21 +30,21 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     #         else "gdc-ccle-controlled"
     #     )
     if "target" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "gdc-target-phs000218-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "target-controlled"
         )
-    
+
     if "tcga" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "tcga-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "tcga-2-controlled"
         )
-        
+
     if "gdc-cgci-phs000235" in project_info["aws_bucket_prefix"]:
-        return(
+        return (
             "gdc-cgci-phs000235-2-open"
             if fi.get("acl") in {"[u'open']", "['open']"}
             else "gdc-cgci-phs000235-2-controlled"
@@ -72,7 +72,7 @@ def get_google_bucket_name(fi, PROJECT_ACL):
 def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
     Get the manifest from s3
-    pass to get_fileinfo_list_from_manifest to get 
+    pass to get_fileinfo_list_from_manifest to get
     list of file info dictionary (size, md5, etc.)
     """
 
@@ -86,7 +86,7 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
 def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     """
     Get the manifest from gs
-    pass to get_fileinfo_list_from_manifest to get 
+    pass to get_fileinfo_list_from_manifest to get
     list of file info dictionary (size, md5, etc.)
     """
     import subprocess

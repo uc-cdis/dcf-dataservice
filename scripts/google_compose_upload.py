@@ -21,9 +21,7 @@ from cdislogging import get_logger
 
 from scripts.settings import GDC_TOKEN
 
-from scripts.utils import (
-    generate_chunk_data_list,
-)
+from scripts.utils import generate_chunk_data_list
 
 
 logger = get_logger("GoogleReplication")
@@ -33,6 +31,7 @@ RETRIES_NUM = 10
 
 class Worker(Thread):
     """Thread executing tasks from a given tasks queue"""
+
     def __init__(self, tasks):
         Thread.__init__(self)
         self.tasks = tasks
@@ -52,6 +51,7 @@ class Worker(Thread):
 
 class ThreadPool:
     """Pool of threads consuming tasks from a queue"""
+
     def __init__(self, num_threads):
         self.tasks = Queue(num_threads)
         for _ in range(num_threads):
@@ -109,7 +109,7 @@ def resumable_upload_chunk_to_gs(sess, chunk_data, bucket_name, key, part_number
         bucket_name, object_part_name
     )
     headers = {
-        "Content-Length": '0',
+        "Content-Length": "0",
     }
     tries = 0
     while tries < RETRIES_NUM:
@@ -124,16 +124,23 @@ def resumable_upload_chunk_to_gs(sess, chunk_data, bucket_name, key, part_number
 
     tries = 0
     while tries < RETRIES_NUM:
-        res2 = sess.request(method="PUT", url=res.headers['Location'], data=chunk_data, headers={"Content-Length": str(len(chunk_data))})
+        res2 = sess.request(
+            method="PUT",
+            url=res.headers["Location"],
+            data=chunk_data,
+            headers={"Content-Length": str(len(chunk_data))},
+        )
         if res2.status_code not in {200, 201}:
             tries += 1
             continue
 
         meta_data_res = get_object_metadata(sess, bucket_name, object_part_name)
-        chunk_crc32 = crcmod.predefined.Crc('crc-32c')
+        chunk_crc32 = crcmod.predefined.Crc("crc-32c")
         chunk_crc32.update(chunk_data)
 
-        if meta_data_res.json().get("crc32c", "") != base64.b64encode(chunk_crc32.digest()):
+        if meta_data_res.json().get("crc32c", "") != base64.b64encode(
+            chunk_crc32.digest()
+        ):
             tries += 1
         elif int(meta_data_res.json().get("size", "0")) != len(chunk_data):
             logger.warning("upload chunk fail. retries")
@@ -209,12 +216,13 @@ def finish_compose_upload_gs(sess, bucket_name, key, chunk_sizes):
     Return:
         http.Response
     """
+
     def exec_compose_objects(objects, bucket_name, key):
         L = []
         total_size = 0
         for obj in objects:
             L.append(obj["key"])
-            total_size += obj['size']
+            total_size += obj["size"]
 
         tries = 0
         while tries < RETRIES_NUM:
@@ -237,7 +245,11 @@ def finish_compose_upload_gs(sess, bucket_name, key, chunk_sizes):
             while first < len(objects):
                 last = min(len(objects) - 1, first + 31)
                 new_key = objects[first]["key"] + "-1"
-                results.append(exec_compose_objects(objects[first: last + 1], bucket_name, new_key))
+                results.append(
+                    exec_compose_objects(
+                        objects[first : last + 1], bucket_name, new_key
+                    )
+                )
                 first = last + 1
             return recursive_compose_objects(results, bucket_name, key)
 
@@ -276,19 +288,22 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             self.chunk_nums = 0
             self.let_exit = False
             self.chunk_sizes = []
-    
+
     def _call_back(chunk_info, chunk):
 
-        while thead_control.sig_update_turn != chunk_info["part_number"] and not thead_control.let_exit:
+        while (
+            thead_control.sig_update_turn != chunk_info["part_number"]
+            and not thead_control.let_exit
+        ):
             time.sleep(3)
         if thead_control.let_exit:
             raise Exception("One of thread fails. Exit now!!!")
-        
+
         thead_control.mutexLock.acquire()
 
         sig.update(chunk)
         crc32c.update(chunk)
-        thead_control.sig_update_turn +=1
+        thead_control.sig_update_turn += 1
         thead_control.chunk_sizes.append(len(chunk))
 
         thead_control.mutexLock.release()
@@ -373,7 +388,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
         if thead_control.chunk_nums % 10 == 0 and not global_config.get("quiet"):
             logger.info(
                 "Streamming {}. Received {} MB".format(
-                    fi["id"], thead_control.chunk_nums * 1.0 / 1024 / 1024 * chunk_data_size
+                    fi["id"],
+                    thead_control.chunk_nums * 1.0 / 1024 / 1024 * chunk_data_size,
                 )
             )
         _call_back(chunk_info, chunk)
@@ -388,7 +404,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     )
 
     sig = hashlib.md5()
-    crc32c = crcmod.predefined.Crc('crc-32c')
+    crc32c = crcmod.predefined.Crc("crc-32c")
 
     chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 256)
 
@@ -407,12 +423,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
 
     if thead_control.chunk_nums > 1:
         finish_compose_upload_gs(
-            sess=sess, bucket_name=target_bucket, key=object_path, chunk_sizes=thead_control.chunk_sizes
+            sess=sess,
+            bucket_name=target_bucket,
+            key=object_path,
+            chunk_sizes=thead_control.chunk_sizes,
         )
 
-    sig_check_pass = validate_uploaded_data(
-        fi, sess, target_bucket, sig, crc32c
-    )
+    sig_check_pass = validate_uploaded_data(fi, sess, target_bucket, sig, crc32c)
 
     if not sig_check_pass:
         delete_object(sess, target_bucket, object_path)
@@ -444,7 +461,9 @@ def validate_uploaded_data(fi, sess, target_bucket, sig, crc32c):
 
     if int(meta_data.json().get("size", "0")) != fi["size"]:
         logger.warning(
-            "Can not stream the object {}. {} vs {}. Size does not match".format(fi.get("id"), int(meta_data.json().get("size", "0")), fi["size"])
+            "Can not stream the object {}. {} vs {}. Size does not match".format(
+                fi.get("id"), int(meta_data.json().get("size", "0")), fi["size"]
+            )
         )
         return False
 

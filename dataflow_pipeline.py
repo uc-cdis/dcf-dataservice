@@ -15,7 +15,7 @@ from scripts.google_replicate import google_copy_wrapper
 from scripts.utils import (
     get_ignored_files,
     build_object_dataset_gs,
-    prepare_txt_manifest_google_dataflow
+    prepare_txt_manifest_google_dataflow,
 )
 from scripts.settings import IGNORED_FILES, PROJECT_ACL
 
@@ -50,7 +50,9 @@ class FileCopyingDoFn(beam.DoFn):
         fi = dict(zip(FILE_HEADERS, words))
         fi["size"] = int(fi["size"])
 
-        return [(fi, google_copy_wrapper(fi, PipePrepare.ignored_dict, self.global_config))]
+        return [
+            (fi, google_copy_wrapper(fi, PipePrepare.ignored_dict, self.global_config))
+        ]
 
 
 def format_result(result):
@@ -110,13 +112,11 @@ def run(argv=None):
         "./data_flow_input.txt",
         copied_objects,
         PROJECT_ACL,
-        PipePrepare.ignored_dict
+        PipePrepare.ignored_dict,
     )
 
     # Read the text file[pattern] into a PCollection.
-    lines = p | "read" >> ReadFromText(
-        file_pattern=input_path, skip_header_lines=1
-    )
+    lines = p | "read" >> ReadFromText(file_pattern=input_path, skip_header_lines=1)
     result = lines | "copy" >> beam.ParDo(FileCopyingDoFn(global_config))
     formated_result = result | "format" >> beam.Map(format_result)
     formated_result | "write" >> WriteToText(known_args.output)
