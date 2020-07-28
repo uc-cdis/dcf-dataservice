@@ -111,7 +111,7 @@ def check_blob_name_exists_and_match_md5_size(sess, bucket_name, blob_name, fi):
                 "id": "123",
                 "file_name": "abc.bam",
                 "size": 5,
-                ... 
+                ...
             }
     Returns:
         bool: indicating value if the blob is exist or not
@@ -138,7 +138,7 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
                 "id": "123",
                 "file_name": "abc.bam",
                 "size": 5,
-                ... 
+                ...
             }
     Returns:
         bool: indicating value if the blob is exist or not
@@ -147,7 +147,9 @@ def fail_resumable_copy_blob(sess, bucket_name, blob_name, fi):
         bucket_name, urllib.parse.quote(blob_name, safe="")
     )
     res = sess.request(method="GET", url=url)
-    return res.status_code == 200 and base64.b64decode(res.json()["md5Hash"]).hex() != fi.get("md5")
+    return res.status_code == 200 and base64.b64decode(
+        res.json()["md5Hash"]
+    ).hex() != fi.get("md5")
 
 
 def delete_object(sess, bucket_name, blob_name):
@@ -165,7 +167,7 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
         datalog = exec_google_copy(fi, ignored_dict, global_config)
     except Exception as e:
         datalog = DataFlowLog(message="Internal error. Detail {}".format(e))
- 
+
     if global_config.get("log_bucket") and global_config.get("release"):
         with open(fi["id"], "w") as f:
             f.write(
@@ -187,7 +189,7 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
         )
         subprocess.Popen(cmd, shell=True).wait()
         time.sleep(1)
-    
+
     return datalog
 
 
@@ -296,7 +298,9 @@ def exec_google_copy(fi, ignored_dict, global_config):
             logger.error(e)
             return DataFlowLog(copy_success=True, message=e)
     else:
-        msg = "can not copy {} to GOOGLE bucket after multiple attempts. Check the error detail in logs".format(blob_name)
+        msg = "can not copy {} to GOOGLE bucket after multiple attempts. Check the error detail in logs".format(
+            blob_name
+        )
         logger.error(msg)
         return DataFlowLog(message=msg)
 
@@ -314,7 +318,7 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
     Args:
         fi(dict): file info
         bucket_name(str): bucket name
-        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing 
+        ignored_dict(dict): dictionary of 5aa objects with key is id and value containing
         gs url hash, size, etc.
         indexclient(indexdclient): indexd client
     Returns:
@@ -378,7 +382,9 @@ def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
             tries += 1
         except Exception as e:
             raise APIError(
-                "Can not setup connection to gdcapi for {}. Detail {}".format(fi["id"],e)
+                "Can not setup connection to gdcapi for {}. Detail {}".format(
+                    fi["id"], e
+                )
             )
 
     if tries == NUM_TRIES:
@@ -440,11 +446,7 @@ def streaming(
             if chunk:  # filter out keep-alive new chunks
                 progress += s.write(chunk)
                 number_download += 1
-                if (
-                    number_download
-                    % int(1024*1024*2048/chunk_size_download)
-                    == 0
-                ):
+                if number_download % int(1024 * 1024 * 2048 / chunk_size_download) == 0:
                     logger.info(
                         "Uploading {}. Size {} (MB). Progress {}%".format(
                             blob_name,

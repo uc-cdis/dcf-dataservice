@@ -118,11 +118,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                         "Bucket": bucket_name,
                     }
         except KeyError as e:
-            logger.warning(
-                "{} is empty. Detail {}".format(
-                    bucket_name, e
-                )
-            )
+            logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
             logger.error(
                 "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
@@ -144,7 +140,14 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("target-controlled")
             continue
         for label in ["2-open", "controlled"]:
-            if (("gdc-cgci-phs000235" in bucket_info["aws_bucket_prefix"] or "tcga" in bucket_info["aws_bucket_prefix"]) and label == "controlled"):
+            # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this
+            if (
+                "gdc-cgci-phs000235" in bucket_info["aws_bucket_prefix"]
+                or "tcga" in bucket_info["aws_bucket_prefix"]
+                or "gdc-organoid-pancreatic-phs001611"
+                in bucket_info["aws_bucket_prefix"]
+                or "gdc-beataml1-cohort-phs001657" in bucket_info["aws_bucket_prefix"]
+            ) and label == "controlled":
                 label = "2-controlled"
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 
@@ -327,7 +330,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
-            cmd = "aws s3 mv \"s3://{}/{}\" \"s3://{}/{}\"".format(
+            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}"'.format(
                 get_reversed_acl_bucket_name(target_bucket),
                 object_key,
                 target_bucket,
@@ -411,7 +414,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
             else:
                 logger.info("start aws copying {}".format(object_key))
-                cmd = "aws s3 cp \"s3://{}/{}\" \"s3://{}/{}\" --request-payer requester".format(
+                cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --request-payer requester'.format(
                     jobinfo.bucket, source_key, target_bucket, object_key
                 )
                 if not jobinfo.global_config.get("quiet", False):

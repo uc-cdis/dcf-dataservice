@@ -41,7 +41,7 @@ def _remove_changed_url(doc, url):
             doc.urls_metadata.pop(element, None)
             modified = True
             continue
-        # Check if bucket1 and bucket2 are from the same project. 
+        # Check if bucket1 and bucket2 are from the same project.
         # gdc_project_phs_controlled and gdc_project_phs_open are from the same project since
         # the prefixes are the same
         bucket1 = bucket1[:-5] if bucket1.endswith("-open") else bucket1[:-11]
@@ -88,11 +88,12 @@ def update_url(fi, indexclient, provider="s3", url=None):
         ]
         for ace in acl:
             if not ace.startswith("phs"):
-                raise Exception('Only "open" and "phs[...]" ACLs are allowed. Got ACL "{}"'.format(ace))
-        authz = [
-            "{}/programs/{}".format(NAMESPACE, ace)
-            for ace in acl
-        ]
+                raise Exception(
+                    'Only "open" and "phs[...]" ACLs are allowed. Got ACL "{}"'.format(
+                        ace
+                    )
+                )
+        authz = ["{}/programs/{}".format(NAMESPACE, ace) for ace in acl]
 
     try:
         doc = indexclient.get(fi.get("id", ""))
@@ -170,6 +171,7 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
                     uuid, e
                 )
             )
+
 
 @retry(APIError, tries=10, delay=2)
 def delete_record_from_indexd(uuid, indexclient):
