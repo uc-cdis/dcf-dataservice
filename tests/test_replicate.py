@@ -40,6 +40,10 @@ PROJECT_ACL = {
         "aws_bucket_prefix": "gdc-beataml1-cohort-phs001657",
         "gs_bucket_prefix": "gdc-beataml1-cohort-phs001657",
     },
+    "ORGANOID-PANDREATIC": {
+        "aws_bucket_prefix": "gdc-organoid-pancreatic-phs001611",
+        "gs_bucket_prefix": "gdc-organoid-pancreatic-phs001611",
+    },
 }
 
 
@@ -501,6 +505,30 @@ def test_get_reversed_acl_bucket_name():
         )
         == "gdc-cgci-phs000235-2-open"
     )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-beataml1-cohort-phs001657-2-controlled"
+        )
+        == "gdc-beataml1-cohort-phs001657-2-open"
+    )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-beataml1-cohort-phs001657-2-open"
+        )
+        == "gdc-beataml1-cohort-phs001657-2-controlled"
+    )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-organoid-pancreatic-phs001611-2-controlled"
+        )
+        == "gdc-organoid-pancreatic-phs001611-2-open"
+    )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-organoid-pancreatic-phs001611-2-open"
+        )
+        == "gdc-organoid-pancreatic-phs001611-2-controlled"
+    )
 
 
 def test_get_aws_bucket_name():
@@ -554,4 +582,18 @@ def test_get_aws_bucket_name():
             PROJECT_ACL,
         )
         == "gdc-beataml1-cohort-phs001657-2-controlled"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "ORGANOID-PANDREATIC", "id": "1", "acl": "['phs001657']"},
+            PROJECT_ACL,
+        )
+        == "gdc-organoid-pancreatic-phs001611-2-controlled"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "ORGANOID-PANDREATIC", "id": "1", "acl": "['open']"},
+            PROJECT_ACL,
+        )
+        == "gdc-organoid-pancreatic-phs001611-2-open"
     )
