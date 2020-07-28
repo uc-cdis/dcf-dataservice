@@ -140,7 +140,8 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("target-controlled")
             continue
         for label in ["2-open", "controlled"]:
-            # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this
+            # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this.
+            # REMINDER: if changing things here, change in get_reverse_acl and scripts.utils.get_aws_bucket_name as well.
             if (
                 "gdc-cgci-phs000235" in bucket_info["aws_bucket_prefix"]
                 or "tcga" in bucket_info["aws_bucket_prefix"]
@@ -757,6 +758,18 @@ def get_reversed_acl_bucket_name(target_bucket):
             return "gdc-cgci-phs000235-2-controlled"
         else:
             return "gdc-cgci-phs000235-2-open"
+
+    if "gdc-beataml1-cohort-phs001657" in target_bucket:
+        if "open" in target_bucket:
+            return "gdc-beataml1-cohort-phs001657-2-controlled"
+        else:
+            return "gdc-beataml1-cohort-phs001657-2-open"
+
+    if "gdc-organoid-pancreatic-phs001611" in target_bucket:
+        if "open" in target_bucket:
+            return "gdc-organoid-pancreatic-phs001611-2-controlled"
+        else:
+            return "gdc-organoid-pancreatic-phs001611-2-open"
 
     if "open" in target_bucket:
         return target_bucket[:-6] + "controlled"
