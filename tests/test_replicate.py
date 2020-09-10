@@ -44,6 +44,10 @@ PROJECT_ACL = {
         "aws_bucket_prefix": "gdc-organoid-pancreatic-phs001611",
         "gs_bucket_prefix": "gdc-organoid-pancreatic-phs001611",
     },
+    "CMI": {
+        "aws_bucket_prefix": "gdc-cmi-mbc-phs001709",
+        "gs_bucket_prefix": "gdc-cmi-mbc-phs001709",
+    },
 }
 
 
@@ -529,6 +533,16 @@ def test_get_reversed_acl_bucket_name():
         )
         == "gdc-organoid-pancreatic-phs001611-2-controlled"
     )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-cmi-mbc-phs001709-open")
+        == "gdc-cmi-mbc-phs001709-controlled"
+    )
+    assert (
+        scripts.aws_replicate.get_reversed_acl_bucket_name(
+            "gdc-cmi-mbc-phs001709-controlled"
+        )
+        == "gdc-cmi-mbc-phs001709-open"
+    )
 
 
 def test_get_aws_bucket_name():
@@ -596,4 +610,16 @@ def test_get_aws_bucket_name():
             PROJECT_ACL,
         )
         == "gdc-organoid-pancreatic-phs001611-2-open"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "CMI", "id": "1", "acl": "['open']"}, PROJECT_ACL,
+        )
+        == "gdc-cmi-mbc-phs001709-open"
+    )
+    assert (
+        utils.get_aws_bucket_name(
+            {"project_id": "CMI", "id": "1", "acl": "['phs001657']"}, PROJECT_ACL,
+        )
+        == "gdc-cmi-mbc-phs001709-controlled"
     )

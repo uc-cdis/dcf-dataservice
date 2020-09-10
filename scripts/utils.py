@@ -64,6 +64,20 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
             else "gdc-organoid-pancreatic-phs001611-2-controlled"
         )
 
+    if "gdc-cmi-mbc-phs001709" in project_info["aws_bucket_prefix"]:
+        return (
+            "gdc-cmi-mbc-phs001709-open"
+            if fi.get("acl") in {"[u'open']", "['open']"}
+            else "gdc-cmi-mbc-phs001709-controlled"
+        )
+
+    if "gdc-cmi-asc-phs001931" in project_info["aws_bucket_prefix"]:
+        return (
+            "gdc-cmi-asc-phs001931-open"
+            if fi.get("acl") in {"[u'open']", "['open']"}
+            else "gdc-cmi-asc-phs001931-controlled"
+        )
+
     return project_info["aws_bucket_prefix"] + (
         "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )

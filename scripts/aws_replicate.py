@@ -33,6 +33,16 @@ global logger
 
 RETRIES_NUM = 5
 
+# list of buckets that have both -2-open and -2-controlled postfix
+postfix_2_exception = [
+    "gdc-cgci-phs000235",
+    "tcga",
+    "gdc-organoid-pancreatic-phs001611",
+    "gdc-beataml1-cohort-phs001657",
+]
+# list of buckets that have -open and -controlled postfix
+postfix_1_exception = ["gdc-cmi-mbc-phs001709", "gdc-cmi-asc-phs001931"]
+
 
 class ProcessingFile(object):
     def __init__(self, id, size, copy_method, original_storage):
@@ -143,13 +153,13 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this.
             # REMINDER: if changing things here, change in get_reverse_acl and scripts.utils.get_aws_bucket_name as well.
             if (
-                "gdc-cgci-phs000235" in bucket_info["aws_bucket_prefix"]
-                or "tcga" in bucket_info["aws_bucket_prefix"]
-                or "gdc-organoid-pancreatic-phs001611"
-                in bucket_info["aws_bucket_prefix"]
-                or "gdc-beataml1-cohort-phs001657" in bucket_info["aws_bucket_prefix"]
+                list_contains(postfix_2_exception, bucket_info["aws_bucket_prefix"])
             ) and label == "controlled":
                 label = "2-controlled"
+            if (
+                list_contains(postfix_1_exception, bucket_info["aws_bucket_prefix"])
+            ) and label == "2-open":
+                label = "open"
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 
     for target_bucket_name in target_bucket_names:
@@ -212,6 +222,16 @@ def object_exists(s3, bucket_name, key):
                 )
             )
             raise
+
+
+def list_contains(list1, list2):
+
+    set1 = set(list1)
+    set2 = set(list2)
+    if set1.intersection(set2):
+        return True
+    else:
+        return False
 
 
 def get_object_storage_class(s3, bucket_name, key):
@@ -770,6 +790,15 @@ def get_reversed_acl_bucket_name(target_bucket):
             return "gdc-organoid-pancreatic-phs001611-2-controlled"
         else:
             return "gdc-organoid-pancreatic-phs001611-2-open"
+
+    if (
+        "gdc-cmi-mbc-phs001709" in target_bucket
+        or "gdc-cmi-asc-phs001931" in target_bucket
+    ):
+        if "controlled" in target_bucket:
+            return target_bucket[:-10] + "open"
+        if "open" in target_bucket:
+            return target_bucket[:-4] + "controlled"
 
     if "open" in target_bucket:
         return target_bucket[:-6] + "controlled"
