@@ -153,11 +153,11 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this.
             # REMINDER: if changing things here, change in get_reverse_acl and scripts.utils.get_aws_bucket_name as well.
             if (
-                list_contains(postfix_2_exception, bucket_info["aws_bucket_prefix"])
+                bucket_info["aws_bucket_prefix"] in postfix_2_exception
             ) and label == "controlled":
                 label = "2-controlled"
             if (
-                list_contains(postfix_1_exception, bucket_info["aws_bucket_prefix"])
+                bucket_info["aws_bucket_prefix"] in postfix_1_exception
             ) and label == "2-open":
                 label = "open"
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
@@ -222,16 +222,6 @@ def object_exists(s3, bucket_name, key):
                 )
             )
             raise
-
-
-def list_contains(list1, list2):
-
-    set1 = set(list1)
-    set2 = set(list2)
-    if set1.intersection(set2):
-        return True
-    else:
-        return False
 
 
 def get_object_storage_class(s3, bucket_name, key):
