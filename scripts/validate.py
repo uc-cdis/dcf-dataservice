@@ -64,15 +64,15 @@ def run(global_config):
     
     s3.download_file(global_config.get("log_bucket"), 'indexd_records.json', './indexd_records.json')
     s3.download_file(global_config.get("log_bucket"), 'aws_copied_objects.json', './aws_copied_objects.json')
-    s3.download_file(global_config.get("log_bucket"), 'gs_copied_objects', './gs_copied_objects.json')
+    s3.download_file(global_config.get("log_bucket"), 'gs_copied_objects.json', './gs_copied_objects.json')
 
-    with open("aws_copied_objects.json", "r") as fread:
+    with open("./aws_copied_objects.json", "r") as fread:
         aws_copied_objects = json.load(fread)
 
     with open("./indexd_records.json", "r") as fread:
         indexd_records = json.load(fread)
     
-    with open("/Users/giangbui/Projects/TESTS/gs_copied_objects.json") as fread:
+    with open("./gs_copied_objects.json") as fread:
         gs_copied_objects = json.load(fread)
 
     # indexd_records = utils.get_indexd_records()
