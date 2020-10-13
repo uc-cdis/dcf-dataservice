@@ -125,7 +125,11 @@ def run(global_config):
                 if fi["aws_url"] not in fi["indexd_url"]:
                     total_aws_index_failures += 1
                     fail_list.append(fi)
-                    logger.error("indexd does not have aws url of {}".format(fi["id"]))
+                    logger.error(
+                        "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                            fi["id"], fi["aws_url"], fi["indexd_url"]
+                        )
+                    )
 
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
@@ -148,7 +152,11 @@ def run(global_config):
                 if fi["gs_url"] not in fi["indexd_url"]:
                     total_gs_index_failures += 1
                     fail_list.append(fi)
-                    logger.error("indexd does not have gs url of {}".format(fi["id"]))
+                    logger.error(
+                        "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
+                            fi["id"], fi["gs_url"], fi["indexd_urls"]
+                        )
+                    )
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
