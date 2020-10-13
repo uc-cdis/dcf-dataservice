@@ -62,36 +62,52 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-    indexd_records = utils.get_indexd_records()
-    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
+   
+    aws_copied_objects = json.load(fread)
+    
+    s3.download_file(global_config.get("log_bucket"), 'indexd_records.json', './indexd_records.json')
+    s3.download_file(global_config.get("log_bucket"), 'aws_copied_objects', './aws_copied_objects.json')
+    s3.download_file(global_config.get("log_bucket"), 'gs_copied_objects', './gs_copied_objects.json')
 
-    if global_config.get("save_copied_objects"):
-        with open("./indexd_records.json", "w") as outfile:
-            json.dump(indexd_records, outfile)
-        with open("./aws_copied_objects.json", "w") as outfile:
-            json.dump(aws_copied_objects, outfile)
-        with open("./gs_copied_objects.json", "w") as outfile:
-            json.dump(gs_copied_objects, outfile)
+     with open("aws_copied_objects.json", "r") as fread:
+        aws_copied_objects = json.load(fread)
 
-        try:
-            s3.upload_file(
-                "indexd_records.json",
-                global_config.get("log_bucket"),
-                "indexd_records.json",
-            )
-            s3.upload_file(
-                "aws_copied_objects.json",
-                global_config.get("log_bucket"),
-                "aws_copied_objects.json",
-            )
-            s3.upload_file(
-                "gs_copied_objects.json",
-                global_config.get("log_bucket"),
-                "gs_copied_objects.json",
-            )
-        except Exception as e:
-            logger.error(e)
+    with open("./indexd_records.json", "r") as fread:
+        indexd_records = json.load(fread)
+    
+    with open("/Users/giangbui/Projects/TESTS/gs_copied_objects.json") as fread:
+        gs_copied_objects = json.load(fread)
+
+    # indexd_records = utils.get_indexd_records()
+    # aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+    # gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
+
+    # if global_config.get("save_copied_objects"):
+    #     with open("./indexd_records.json", "w") as outfile:
+    #         json.dump(indexd_records, outfile)
+    #     with open("./aws_copied_objects.json", "w") as outfile:
+    #         json.dump(aws_copied_objects, outfile)
+    #     with open("./gs_copied_objects.json", "w") as outfile:
+    #         json.dump(gs_copied_objects, outfile)
+
+    #     try:
+    #         s3.upload_file(
+    #             "indexd_records.json",
+    #             global_config.get("log_bucket"),
+    #             "indexd_records.json",
+    #         )
+    #         s3.upload_file(
+    #             "aws_copied_objects.json",
+    #             global_config.get("log_bucket"),
+    #             "aws_copied_objects.json",
+    #         )
+    #         s3.upload_file(
+    #             "gs_copied_objects.json",
+    #             global_config.get("log_bucket"),
+    #             "gs_copied_objects.json",
+    #         )
+    #     except Exception as e:
+    #         logger.error(e)
 
     pass_validation = True
     for idx, manifest_file in enumerate(manifest_files):
@@ -121,7 +137,7 @@ def run(global_config):
                 fail_list.append(fi)
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
-                fi["aws_url"] = "s3://" + object_path
+                fi["aws_url"] = "s3://" + object_path.replace("gdc-cgci-blgsp-phs000235-controlled", "gdc-cgci-phs000235-2-controlled")
                 if fi["aws_url"] not in fi["indexd_url"]:
                     total_aws_index_failures += 1
                     fail_list.append(fi)
@@ -254,3 +270,27 @@ def run(global_config):
             logger.error(e)
 
     return pass_validation
+
+
+def _pass_preliminary_check(project_acl, manifest_files):
+
+    session = boto3.session.Session()
+    s3 = session.resource("s3")
+
+    for key in manifest_files:
+        try:
+            s3.meta.client.head_object(
+                Bucket=bucket_name, Key=key
+            )
+        except botocore.exceptions.ClientError as e:
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 404:
+                return False
+            else:
+                logger.error(
+                    "Something wrong with checking object {} in bucket {}. Detail {}".format(
+                        key, bucket_name, e
+                    )
+                )
+                raise
+    return True
