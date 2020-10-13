@@ -1,27 +1,23 @@
-from socket import error as SocketError
+import json
 import errno
-from multiprocessing import Pool, Manager
-from multiprocessing.dummy import Pool as ThreadPool
 import time
-
-from functools import partial
 import subprocess
 import shlex
 import hashlib
 import re
 import urllib
-
+from functools import partial
 import threading
 from threading import Thread
+from multiprocessing import Pool, Manager
+from multiprocessing.dummy import Pool as ThreadPool
+from socket import error as SocketError
 
-import json
 import boto3
 import botocore
-
 from urllib.parse import urlparse
-
-from cdislogging import get_logger
 from indexclient.client import IndexClient
+from cdislogging import get_logger
 
 from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
 from scripts import utils
@@ -31,6 +27,7 @@ from scripts.indexd_utils import update_url
 
 global logger
 
+OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 RETRIES_NUM = 5
 
 # list of buckets that have both -2-open and -2-controlled postfix
@@ -130,9 +127,16 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            logger.error(
-                "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
-            )
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 403:
+                logger.error(
+                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+                )
+                raise
+            else:
+                logger.error(
+                    "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
+                )
         mutexLock.acquire()
         objects.update(result)
         mutexLock.release()
@@ -319,15 +323,16 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         None
     """
     fi = jobinfo.fi
-    session = boto3.session.Session()
-    s3 = session.resource("s3")
 
     try:
         target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
     except UserError as e:
         logger.warning(e)
         return
-
+    
+    profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
+    session = boto3.session.Session(profile_name=profile_name)
+    s3 = session.resource("s3")
     pFile = None
     try:
         if not bucket_exists(s3, target_bucket):
@@ -347,6 +352,8 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 target_bucket,
                 object_key,
             )
+            if profile_name:
+                cmd = f"{cmd} --profile {profile_name}"
             if not jobinfo.global_config.get("quiet", False):
                 logger.info(cmd)
             if not quick_test:
@@ -428,6 +435,8 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --request-payer requester'.format(
                     jobinfo.bucket, source_key, target_bucket, object_key
                 )
+                if profile_name:
+                    cmd = f"{cmd} --profile {profile_name}"
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(cmd)
                 if not quick_test:
