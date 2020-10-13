@@ -63,7 +63,7 @@ def run(global_config):
     logger.info("scan all copied objects")
     
     s3.download_file(global_config.get("log_bucket"), 'indexd_records.json', './indexd_records.json')
-    s3.download_file(global_config.get("log_bucket"), 'aws_copied_objects', './aws_copied_objects.json')
+    s3.download_file(global_config.get("log_bucket"), 'aws_copied_objects.json', './aws_copied_objects.json')
     s3.download_file(global_config.get("log_bucket"), 'gs_copied_objects', './gs_copied_objects.json')
 
     with open("aws_copied_objects.json", "r") as fread:
