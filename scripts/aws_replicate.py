@@ -341,7 +341,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
-            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}"'.format(
+            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
                 get_reversed_acl_bucket_name(target_bucket),
                 object_key,
                 target_bucket,
@@ -425,7 +425,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
             else:
                 logger.info("start aws copying {}".format(object_key))
-                cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --request-payer requester'.format(
+                cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control --request-payer requester'.format(
                     jobinfo.bucket, source_key, target_bucket, object_key
                 )
                 if not jobinfo.global_config.get("quiet", False):
