@@ -63,7 +63,7 @@ def run(global_config):
     
     if not _pass_preliminary_check(manifest_files):
         raise UserError(
-            f"One of {manifest_files} does not exist"
+            "The input does not pass the preliminary check"
         )
 
     logger.info("scan all copied objects")
