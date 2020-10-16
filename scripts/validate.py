@@ -62,52 +62,36 @@ def run(global_config):
         )
     logger.info("scan all copied objects")
 
-   
-    aws_copied_objects = json.load(fread)
-    
-    s3.download_file(global_config.get("log_bucket"), 'indexd_records.json', './indexd_records.json')
-    s3.download_file(global_config.get("log_bucket"), 'aws_copied_objects', './aws_copied_objects.json')
-    s3.download_file(global_config.get("log_bucket"), 'gs_copied_objects', './gs_copied_objects.json')
+    indexd_records = utils.get_indexd_records()
+    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
-     with open("aws_copied_objects.json", "r") as fread:
-        aws_copied_objects = json.load(fread)
+    if global_config.get("save_copied_objects"):
+        with open("./indexd_records.json", "w") as outfile:
+            json.dump(indexd_records, outfile)
+        with open("./aws_copied_objects.json", "w") as outfile:
+            json.dump(aws_copied_objects, outfile)
+        with open("./gs_copied_objects.json", "w") as outfile:
+            json.dump(gs_copied_objects, outfile)
 
-    with open("./indexd_records.json", "r") as fread:
-        indexd_records = json.load(fread)
-    
-    with open("/Users/giangbui/Projects/TESTS/gs_copied_objects.json") as fread:
-        gs_copied_objects = json.load(fread)
-
-    # indexd_records = utils.get_indexd_records()
-    # aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-    # gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
-
-    # if global_config.get("save_copied_objects"):
-    #     with open("./indexd_records.json", "w") as outfile:
-    #         json.dump(indexd_records, outfile)
-    #     with open("./aws_copied_objects.json", "w") as outfile:
-    #         json.dump(aws_copied_objects, outfile)
-    #     with open("./gs_copied_objects.json", "w") as outfile:
-    #         json.dump(gs_copied_objects, outfile)
-
-    #     try:
-    #         s3.upload_file(
-    #             "indexd_records.json",
-    #             global_config.get("log_bucket"),
-    #             "indexd_records.json",
-    #         )
-    #         s3.upload_file(
-    #             "aws_copied_objects.json",
-    #             global_config.get("log_bucket"),
-    #             "aws_copied_objects.json",
-    #         )
-    #         s3.upload_file(
-    #             "gs_copied_objects.json",
-    #             global_config.get("log_bucket"),
-    #             "gs_copied_objects.json",
-    #         )
-    #     except Exception as e:
-    #         logger.error(e)
+        try:
+            s3.upload_file(
+                "indexd_records.json",
+                global_config.get("log_bucket"),
+                "indexd_records.json",
+            )
+            s3.upload_file(
+                "aws_copied_objects.json",
+                global_config.get("log_bucket"),
+                "aws_copied_objects.json",
+            )
+            s3.upload_file(
+                "gs_copied_objects.json",
+                global_config.get("log_bucket"),
+                "gs_copied_objects.json",
+            )
+        except Exception as e:
+            logger.error(e)
 
     pass_validation = True
     for idx, manifest_file in enumerate(manifest_files):
@@ -137,7 +121,7 @@ def run(global_config):
                 fail_list.append(fi)
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
-                fi["aws_url"] = "s3://" + object_path.replace("gdc-cgci-blgsp-phs000235-controlled", "gdc-cgci-phs000235-2-controlled")
+                fi["aws_url"] = "s3://" + object_path
                 if fi["aws_url"] not in fi["indexd_url"]:
                     total_aws_index_failures += 1
                     fail_list.append(fi)
