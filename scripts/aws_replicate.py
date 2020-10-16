@@ -130,9 +130,18 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            logger.error(
-                "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
-            )
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 403:
+                logger.error(
+                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+                )
+                raise
+            else:
+                logger.error(
+                    "Can not list objects of the bucket {}. Detail {}".format(bucket_name, e)
+                )
+
+
         mutexLock.acquire()
         objects.update(result)
         mutexLock.release()
