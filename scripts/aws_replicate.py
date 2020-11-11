@@ -31,7 +31,7 @@ from scripts.indexd_utils import update_url
 
 global logger
 
-RETRIES_NUM = 5
+RETRIES_NUM = 6
 
 # list of buckets that have both -2-open and -2-controlled postfix
 postfix_2_exception = [
@@ -138,9 +138,10 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                 raise
             else:
                 logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(bucket_name, e)
+                    "Can not list objects of the bucket {}. Detail {}".format(
+                        bucket_name, e
+                    )
                 )
-
 
         mutexLock.acquire()
         objects.update(result)
