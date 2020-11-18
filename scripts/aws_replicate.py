@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, DATA_ENDPT
 from scripts import utils
 from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
@@ -395,7 +395,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi, target_bucket, jobinfo.global_config, DATA_ENDPT
                         )
                         update_url(fi, jobinfo.indexclient)
                     except Exception as e:
@@ -424,7 +424,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi, target_bucket, jobinfo.global_config, DATA_ENDPT
                         )
                     except Exception as e:
                         # catch generic exception to prevent the code from terminating
