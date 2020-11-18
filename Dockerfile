@@ -1,4 +1,4 @@
-FROM python:3.7-slim-buster
+FROM quay.io/cdis/python:3.7-slim-buster
 
 RUN apt update && apt install -y git jq curl bash snapd groff python3-pip zip
 
@@ -15,7 +15,7 @@ RUN mkdir -p /usr/local/gcloud \
   && /usr/local/gcloud/google-cloud-sdk/install.sh
 ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
 
- 
+
 COPY . /dcf-dataservice
 WORKDIR /dcf-dataservice
 
