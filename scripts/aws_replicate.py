@@ -623,9 +623,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     thead_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    data_endpoint = DATA_ENDPT or "https://api.gdc.cancer.gov/data/{}".format(
-        fi.get("id")
-    )
+    data_endpoint = DATA_ENDPT + fi.get(
+        "id", ""
+    ) or "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
 
     sig = hashlib.md5()
     # prepare to compute local etag
