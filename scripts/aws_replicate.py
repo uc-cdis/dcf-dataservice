@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, DATA_ENDPT
 from scripts import utils
 from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
@@ -138,9 +138,10 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                 raise
             else:
                 logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(bucket_name, e)
+                    "Can not list objects of the bucket {}. Detail {}".format(
+                        bucket_name, e
+                    )
                 )
-
 
         mutexLock.acquire()
         objects.update(result)
@@ -482,7 +483,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     )
 
 
-def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
+def stream_object_from_gdc_api(fi, target_bucket, global_config):
     """
     Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from
     gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
@@ -495,7 +496,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 "multi_part_upload_threads": 10,
                 "data_chunk_size": 1024*1024*5
             }
-        endpoint(str): gdcapi
 
     Returns:
         None
@@ -623,7 +623,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     thead_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    data_endpoint = endpoint or "https://api.gdc.cancer.gov/data/{}".format(
+    data_endpoint = DATA_ENDPT or "https://api.gdc.cancer.gov/data/{}".format(
         fi.get("id")
     )
 
