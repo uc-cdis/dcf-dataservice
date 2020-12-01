@@ -387,3 +387,25 @@ def get_indexd_records():
         results[doc.did] = doc.urls
 
     return results
+
+
+def flip_bucket_accounts(aws_bucket_name):
+    """
+    flip bucket name from prod account to open account
+
+    ex:
+        aws_bucket_name: bucket-open
+        return: bucket-2-open
+
+        aws_bucket_name: bucket1-2-controlled
+        return: bucket1-controlled
+    """
+
+    if "-2-controlled" in aws_bucket_name:
+        return aws_bucket_name[:-12] + "controlled"
+    elif "-2-open" in aws_bucket_name:
+        return aws_bucket_name[:-6] + "open"
+    elif "-controlled" in aws_bucket_name:
+        return aws_bucket_name[:-10] + "2-controlled"
+    elif "-open" in aws_bucket_name:
+        return aws_bucket_name[:-4] + "2-open"

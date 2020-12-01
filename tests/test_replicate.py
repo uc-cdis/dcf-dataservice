@@ -623,3 +623,10 @@ def test_get_aws_bucket_name():
         )
         == "gdc-cmi-mbc-phs001709-controlled"
     )
+
+
+def test_flip_bucket_accounts():
+    assert utils.flip_bucket_accounts("bucket1-controlled") == "bucket1-2-controlled"
+    assert utils.flip_bucket_accounts("bucket2-open") == "bucket2-2-open"
+    assert utils.flip_bucket_accounts("bucket3-2-controlled") == "bucket3-controlled"
+    assert utils.flip_bucket_accounts("bucket4-2-open") == "bucket4-open"
