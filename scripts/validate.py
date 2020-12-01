@@ -122,16 +122,31 @@ def run(global_config):
             # validate aws
             aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
-            if object_path not in aws_copied_objects and fi["size"] != 0:
+            object_path_2 = "{}/{}/{}".format(
+                utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"]
+            )
+            # if path not in both open and prod account then its a fail
+            if (
+                object_path not in aws_copied_objects
+                or object_path_2 not in aws_copied_objects
+            ) and fi["size"] != 0:
                 total_aws_copy_failures += 1
                 fail_list.append(fi)
                 logger.error("{} is not copied yet to aws buckets".format(object_path))
             elif fi["size"] != 0:
-                fi["aws_url"] = "s3://" + object_path
-                if fi["aws_url"] not in fi["indexd_url"]:
+                aws_url_fail = 0
+                for path in [object_path, object_path_2]:
+                    fi["aws_url"] = "s3://" + path
+                    if fi["aws_url"] not in fi["indexd_url"]:
+                        aws_url_fail += 1
+                if aws_url_fail == 2:
                     total_aws_index_failures += 1
                     fail_list.append(fi)
-                    logger.error("indexd does not have aws url of {}".format(fi["id"]))
+                    logger.error(
+                        "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                            fi["id"], fi["aws_url"], fi["indexd_url"]
+                        )
+                    )
 
             # validate google
             gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
@@ -154,7 +169,11 @@ def run(global_config):
                 if fi["gs_url"] not in fi["indexd_url"]:
                     total_gs_index_failures += 1
                     fail_list.append(fi)
-                    logger.error("indexd does not have gs url of {}".format(fi["id"]))
+                    logger.error(
+                        "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
+                            fi["id"], fi["gs_url"], fi["indexd_urls"]
+                        )
+                    )
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
