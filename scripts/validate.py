@@ -1,6 +1,8 @@
 import json
 import boto3
+import botocore
 from cdislogging import get_logger
+from urlparse import urlparse
 
 from indexclient.client import IndexClient
 
@@ -60,6 +62,10 @@ def run(global_config):
         raise UserError(
             "number of output manifests and number of manifest_files are not the same"
         )
+
+    if not _pass_preliminary_check(manifest_files):
+        raise UserError("The input does not pass the preliminary check")
+
     logger.info("scan all copied objects")
 
     indexd_records = utils.get_indexd_records()
@@ -273,3 +279,33 @@ def run(global_config):
             logger.error(e)
 
     return pass_validation
+
+
+def _pass_preliminary_check(manifest_files):
+    """
+    Check if manifests are in the manifest bucket
+
+    'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
+    """
+
+    session = boto3.session.Session()
+    s3 = session.resource("s3")
+
+    for url in manifest_files:
+        try:
+            parsed = urlparse(url)
+            bucket_name = parsed.netloc
+            key = parsed.path.strip("/")
+            s3.meta.client.head_object(Bucket=bucket_name, Key=key)
+        except botocore.exceptions.ClientError as e:
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 404:
+                return False
+            else:
+                logger.error(
+                    "Something wrong with checking object {} in bucket {}. Detail {}".format(
+                        key, bucket_name, e
+                    )
+                )
+                raise
+    return True

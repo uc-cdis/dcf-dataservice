@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN
+from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, DATA_ENDPT
 from scripts import utils
 from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
@@ -130,9 +130,19 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            logger.error(
-                "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
-            )
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 403:
+                logger.error(
+                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+                )
+                raise
+            else:
+                logger.error(
+                    "Can not list objects of the bucket {}. Detail {}".format(
+                        bucket_name, e
+                    )
+                )
+
         mutexLock.acquire()
         objects.update(result)
         mutexLock.release()
@@ -341,7 +351,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
-            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}"'.format(
+            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
                 get_reversed_acl_bucket_name(target_bucket),
                 object_key,
                 target_bucket,
@@ -425,7 +435,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
             else:
                 logger.info("start aws copying {}".format(object_key))
-                cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --request-payer requester'.format(
+                cmd = 'aws s3 cp "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control --request-payer requester'.format(
                     jobinfo.bucket, source_key, target_bucket, object_key
                 )
                 if not jobinfo.global_config.get("quiet", False):
@@ -473,7 +483,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     )
 
 
-def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
+def stream_object_from_gdc_api(fi, target_bucket, global_config):
     """
     Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from
     gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
@@ -486,7 +496,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
                 "multi_part_upload_threads": 10,
                 "data_chunk_size": 1024*1024*5
             }
-        endpoint(str): gdcapi
 
     Returns:
         None
@@ -614,8 +623,10 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
     thead_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-    data_endpoint = endpoint or "https://api.gdc.cancer.gov/data/{}".format(
-        fi.get("id")
+    data_endpoint = (
+        DATA_ENDPT + fi.get("id", "")
+        if DATA_ENDPT
+        else "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
     )
 
     sig = hashlib.md5()
