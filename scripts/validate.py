@@ -128,7 +128,7 @@ def run(global_config):
             # if path not in both open and prod account then its a fail
             if (
                 object_path not in aws_copied_objects
-                or object_path_2 not in aws_copied_objects
+                and object_path_2 not in aws_copied_objects
             ) and fi["size"] != 0:
                 total_aws_copy_failures += 1
                 fail_list.append(fi)
