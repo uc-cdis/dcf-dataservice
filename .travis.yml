@@ -11,6 +11,7 @@ sudo: false
 cache: pip
 
 before_install:
+  # pip 20.3 gets stuck in an endless dependency resolution loop
   - pip install --upgrade 'pip<20.3'
 
 install:
