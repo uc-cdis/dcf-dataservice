@@ -79,7 +79,7 @@ def run(argv=None):
         default="./scripts/test_data.txt",
         help="Input file to process.",
     )
- 
+
     parser.add_argument(
         "--output",
         dest="output",

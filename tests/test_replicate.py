@@ -35,7 +35,10 @@ PROJECT_ACL = {
         "aws_bucket_prefix": "target",
         "gs_bucket_prefix": "gdc-target-phs000218",
     },
-    "CCLE-MNPO": {"aws_bucket_prefix": "gdc-ccle", "gs_bucket_prefix": "gdc-ccle",},
+    "CCLE-MNPO": {
+        "aws_bucket_prefix": "gdc-ccle",
+        "gs_bucket_prefix": "gdc-ccle",
+    },
     "BEATAML1.0-COHORT": {
         "aws_bucket_prefix": "gdc-beataml1-cohort-phs001657",
         "gs_bucket_prefix": "gdc-beataml1-cohort-phs001657",
@@ -613,13 +616,15 @@ def test_get_aws_bucket_name():
     )
     assert (
         utils.get_aws_bucket_name(
-            {"project_id": "CMI", "id": "1", "acl": "['open']"}, PROJECT_ACL,
+            {"project_id": "CMI", "id": "1", "acl": "['open']"},
+            PROJECT_ACL,
         )
         == "gdc-cmi-mbc-phs001709-open"
     )
     assert (
         utils.get_aws_bucket_name(
-            {"project_id": "CMI", "id": "1", "acl": "['phs001657']"}, PROJECT_ACL,
+            {"project_id": "CMI", "id": "1", "acl": "['phs001657']"},
+            PROJECT_ACL,
         )
         == "gdc-cmi-mbc-phs001709-controlled"
     )
