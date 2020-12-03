@@ -1,4 +1,4 @@
-dist: trusty
+dist: xenial
 
 group: deprecated-2017Q2
 
@@ -10,9 +10,13 @@ sudo: false
 
 cache: pip
 
+before_install:
+  # pip 20.3 gets stuck in an endless dependency resolution loop
+  - pip install --upgrade 'pip<20.3'
+
 install:
   - pip install -r requirements.txt
   - pip install -r dev-requirements.txt
-# command to run tests
+
 script:
-- py.test -vv tests/test_replicate.py
+- py.test -vv -s tests

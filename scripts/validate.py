@@ -2,7 +2,7 @@ import json
 import boto3
 import botocore
 from cdislogging import get_logger
-from urlparse import urlparse
+from urllib.parse import urlparse
 
 from indexclient.client import IndexClient
 

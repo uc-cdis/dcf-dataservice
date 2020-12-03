@@ -43,7 +43,7 @@ class Worker(Thread):
             func, args, kargs = self.tasks.get()
             try:
                 func(*args, **kargs)
-            except Exception, e:
+            except Exception as e:
                 logger.warning(e)
             finally:
                 self.tasks.task_done()
