@@ -13,3 +13,4 @@ setuptools==40.3.0
 # made available on pypi)
 -e git+https://git@github.com/uc-cdis/indexclient.git@1.6.0#egg=indexclient
 -e git+https://git@github.com/uc-cdis/cdiserrors.git@0.1.0#egg=cdiserrors
+httplib2>=0.19.0 # not directly required, pinned by Snyk to avoid a vulnerability
