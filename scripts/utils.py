@@ -6,6 +6,7 @@ from google.cloud import storage
 import threading
 from threading import Thread
 from urllib.parse import urlparse
+import subprocess
 
 from scripts.errors import UserError
 from indexclient.client import IndexClient
@@ -117,8 +118,6 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     pass to get_fileinfo_list_from_manifest to get
     list of file info dictionary (size, md5, etc.)
     """
-    import subprocess
-
     cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
     subprocess.Popen(cmd, shell=True).wait()
 
@@ -206,7 +205,8 @@ def prepare_txt_manifest_google_dataflow(
     Since Apache Beam does not support csv format, convert the csv to txt file
     """
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
-    indexd_records = get_indexd_records()
+    # indexd_records = get_indexd_records()
+    indexd_records = []
     if copied_objects:
         filtered_copying_files = []
         for fi in copying_files:
@@ -229,7 +229,8 @@ def prepare_txt_manifest_google_dataflow(
             if (
                 "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
                 not in copied_objects
-            ) or object_path not in indexd_records.get(fi.get("id"), []):
+            ):
+                # or object_path not in indexd_records.get(fi.get("id"), []):
                 filtered_copying_files.append(fi)
         copying_files = filtered_copying_files
 
