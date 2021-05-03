@@ -41,7 +41,11 @@ postfix_2_exception = [
     "gdc-beataml1-cohort-phs001657",
 ]
 # list of buckets that have -open and -controlled postfix
-postfix_1_exception = ["gdc-cmi-mbc-phs001709", "gdc-cmi-asc-phs001931"]
+postfix_1_exception = [
+    "gdc-cmi-mbc-phs001709",
+    "gdc-cmi-asc-phs001931",
+    "gdc-cmi-mpc-phs001939",
+]
 
 
 class ProcessingFile(object):
