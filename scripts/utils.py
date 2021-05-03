@@ -78,6 +78,13 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
             else "gdc-cmi-asc-phs001931-controlled"
         )
 
+    if "gdc-cmi-mpc-phs001939" in project_info["aws_bucket_prefix"]:
+        return (
+            "gdc-cmi-mpc-phs001939-open"
+            if fi.get("acl") in {"[u'open']", "['open']"}
+            else "gdc-cmi-mpc-phs001939-controlled"
+        )
+
     return project_info["aws_bucket_prefix"] + (
         "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
