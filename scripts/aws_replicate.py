@@ -163,17 +163,18 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("gdc-target-phs000218-2-open")
             target_bucket_names.add("target-controlled")
             continue
+
+        # REMINDER: if changing things here, change in get_reversed_acl_bucket_name fnc and scripts/utils:get_aws_bucket_name as well.
         for label in ["2-open", "controlled"]:
-            # TODO: Add a list of buckets that have both -2-open and -2-controlled buckets so that we dont have to keep hard coding this.
-            # REMINDER: if changing things here, change in get_reverse_acl and scripts.utils.get_aws_bucket_name as well.
-            if (
-                bucket_info["aws_bucket_prefix"] in postfix_2_exception
-            ) and label == "controlled":
-                label = "2-controlled"
             if (
                 bucket_info["aws_bucket_prefix"] in postfix_1_exception
             ) and label == "2-open":
                 label = "open"
+            if (
+                bucket_info["aws_bucket_prefix"] in postfix_2_exception
+            ) and label == "controlled":
+                label = "2-controlled"
+
             target_bucket_names.add(bucket_info["aws_bucket_prefix"] + "-" + label)
 
     for target_bucket_name in target_bucket_names:
@@ -799,6 +800,7 @@ def get_reversed_acl_bucket_name(target_bucket):
     if (
         "gdc-cmi-mbc-phs001709" in target_bucket
         or "gdc-cmi-asc-phs001931" in target_bucket
+        or "gdc-cmi-mpc-phs001939" in target_bucket
     ):
         if "controlled" in target_bucket:
             return target_bucket[:-10] + "open"
