@@ -41,7 +41,7 @@ gcs_object_size	gcs_object_time_stamp	md5sum	acl	gcs_object_url	gdc_uuid
 ```
 
 ### Copy Manifests
-- Download released manifest files from box https://uchicago.app.box.com/folder/9184104361?s=8l1tagrjbb183qxys0o6rji3rlskzu85 (Downloading and saving the files under named folder DCF makes copying files to DCF prod vm easier)
+- Download released manifest files from box (Downloading and saving the files under named folder `DCF` makes copying files to DCF prod vm easier)
 
 - Remove/replace old folder (if present) from DCF prod vm
 `rm -r DCF`
@@ -158,7 +158,7 @@ Upload redaction manifest to s3 and run job
 `gen3 runjob remove-objects-from-clouds-job DRY_RUN True RELEASE DR<release number> MANIFEST_S3 s3://data-refresh-manifest/<obsolete manifest file name> LOG_BUCKET data-refresh-output IGNORED_FILE_S3 s3://data-refresh-manifest/ignored_files_manifest.csv`
 
 ### If pass
-Replace True with False in previous cmd
+Nothing needs to be redacted
 
 ## Validation
 `gen3 runjob replicate-validation RELEASE DR<release number> IGNORED_FILE gs://replication-input/ignored_files_manifest.csv MANIFEST_FILES 's3://data-refresh-manifest/<active file>,s3://data-refresh-manifest/<legacy file>' OUT_FILES '<active file>,GDC_full_sync_legacy_manifest_20210423_post_DR29_DCF.tsv' LOG_BUCKET 'data-refresh-output'`
