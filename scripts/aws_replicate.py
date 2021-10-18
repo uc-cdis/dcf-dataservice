@@ -45,6 +45,8 @@ postfix_1_exception = [
     "gdc-cmi-mbc-phs001709",
     "gdc-cmi-asc-phs001931",
     "gdc-cmi-mpc-phs001939",
+    "gdc-rebc-thyr-phs001134",
+    "gdc-trio-cru-phs001163",
 ]
 
 

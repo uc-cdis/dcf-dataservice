@@ -1,37 +1,15 @@
 # dcf-dataservice
  Jobs to replicate data from GDC data center to AWS and Google buckets. The jobs need to be run inside a kubernetes cluster.
 
- GDC has two different data sources: Data center and AWS backup bucket which are synchronized continuously with each other. Every one or two months, GDC releases new/updated/deleted data in manifest files which serve as input of the dcf-dataservice to replicate the data from GDC data sources to DCF AWS buckets and DCF GOOGLE buckets respectively.
+ GDC has two different data sources: Data center and AWS backup bucket which are synchronized continuously with each other. Every one or two months, GDC releases new/updated/deleted (active/legacy/obsolete) data in manifest files which serve as input of the dcf-dataservice to replicate the data from GDC data sources to DCF AWS buckets and DCF GOOGLE buckets respectively.
 
-## GDC AWS bucket to DCF AWS buckets
- Simply use AWS API to sync in-AWS buckets. To boost up the performance, we deploy multiple-thread aws s3 cli.
+## Replication Job in AWS and GCP
+- Use AWS API to sync in-AWS buckets. To boost the performance, we deploy multiple-thread aws s3 cli.
 
-## GDC data center to DCF GOOGLE buckets
- Deploy a google data flow job that copies data from GDC to GCP buckets. The `copy` transform of the data-flow pipeline streams objects from GDC data center to GOOGLE buckets.
+- Deploy a google data flow job that copies data from GDC to GCP buckets. The `copy` transform of the data-flow pipeline streams objects from GDC data center to GOOGLE buckets.
 
-## How to run
-Create a directory in `$vpc_name/apis_configs` and name it as `dcf_dataservice` and follow the below steps to setup to run as k8 jobs
-
-### AWS sync
-- Put the `creds.json`, `aws_creds_secret` into the `dcf_dataservice` folder. While `aws_creds_secret` contains AWS key `creds.json` contains GDCAPI token and indexd account.
-
-`aws_creds_secret`
-```
-aws_access_key_id=xxxxxxxxxx
-aws_secret_access_key=xxxxxxxx
-```
-`creds.json`
-```
-{
-"GDC_TOKEN": "TOKEN",
-"INDEXD": {
-    "host": "https://nci-crdc.datacommons.io/index/index",
-    "version": "v0",
-    "auth": {"username": "gdcapi", "password": "xxxxx"}
-}
-}
-```
-- Also put the `GDC_project_map.json` into `dcf_dataservice` folder. This file provides a mapping between a project and an aws and google bucket prefix. It contains two fields `aws_bucket_prefix` and `google_bucket_prefix` to help determining which bucket an object need to be copied to. Please note that there are some buckets already created before we have the bucket name convention so this file is edited to support the old name buckets accordingly.
+## Adding new Projects (Buckets)
+- Also, put the `GDC_project_map.json` into `dcf_dataservice` folder. This file provides a mapping between a project and an aws and google bucket prefix. It contains two fields `aws_bucket_prefix` and `google_bucket_prefix` to help determining which bucket an object need to be copied to. Please note that there are some buckets already created before we have the bucket name convention so this file is edited to support the old name buckets accordingly.
 ```
 {
     "TARGET": {
@@ -45,43 +23,10 @@ aws_secret_access_key=xxxxxxxx
         "gs_bucket_prefix": "gdc-varepop-apollo-phs001374"},
 }
 ```
-- Upload the `manifest` to S3 bucket `s3://INPUT_BUCKET/input/`.
-- Run `jobs/kube-script-setup.sh`.
-An example command to run the aws sync job with 100 threads and each thread handles 50 files.
-```
-gen3 runjob jobs/aws-bucket-replicate-job.yaml GDC_BUCKET_NAME gdcbackup MANIFEST_S3 s3://tests/manifest THREAD_NUM 100 LOG_BUCKET log_bucket CHUNK_SIZE 50
-```
 
-### GOOGLE sync
-- Put the `gcloud-creds-secret` and `dcf_dataservice_settings` into the `dcf_dataservice` folder. 
-`dcf_dataservice_settings`
-```
-GDC_TOKEN = "TOKEN"
-INDEXD = {
-    "host": "https://nci-crdc.datacommons.io/index/index",
-    "version": "v0",
-    "auth": {"username": "gdcapi", "password": "xxxxx"}
-}
-```
-- Also put the `GDC_project_map.csv` into `dcf_dataservice` folder.
-- Upload the `manifest` to a GS bucket `gs://INPUT_BUCKET/input/`. User also need to have `LOG_BUCKET` to store the log and the output. Please see the yaml job file for more detail.
-- Put the file `ignored_files_manifest.csv` provided by the sponsor to `gs://INPUT_BUCKET/5aa/`. This file provides a list of structured or un-flatten objects already existed in DCF. ISB does not want DCF to flatten them since they are in use for their existed projects. The dcf refresh service need to ignore them during the replication process.
-- Run `jobs/kube-script-setup.sh`.
-
-An example command to run the google sync job.
-```
-gen3 runjob dcf-dataservice/jobs/google-bucket-replicate-job.yaml PROJECT cdis-test MAX_WORKERS 100 MANIFEST_FILE gs://INPUT_BUCKET/input/manifest IGNORED_FILE gs://INPUT_BUCKET/5aa/ignored_files_manifest.csv LOG_BUCKET log_bucket
-```
-
-### Redaction
-- Put a redaction manifest to a S3 and run the following command
-```
-gen3 runjob jobs/remove-objects-from-clouds-job.yaml MANIFEST_S3 s3://bucket/manifest_redact LOG_BUCKET s3://log_bucket
-```
-
-### Manifest formats
-
-Both the `sync manifest` and `redaction manifest` have the same format as described below.
+## Manifest Files
+### Manifest Formats
+Both the `sync manifest` and `redaction manifest` have the same format as described below:
 ```
 id	file_name	md5	size	state	project_id	baseid	version	release	acl	type	deletereason	url
 ada53c3d-16ff-4e2a-8646-7cf78baf7aff	ada53c3d-16ff-4e2a-8646-7cf78baf7aff.vcf.gz	ff53a02d67fd28fcf5b8cd609cf51b06	137476	released	TCGA-LGG	6230cd6d-8610-4db4-94f4-2f87592c949b	1	12.0	[u'phs000xxx']	active		s3://xxxx/ada53c3d-16ff-4e2a-8646-7cf78baf7aff
@@ -95,6 +40,128 @@ gcs_object_size	gcs_object_time_stamp	md5sum	acl	gcs_object_url	gdc_uuid
 19490957	2016-03-28T21:51:54Z	bd7b6da28d89c922ea26d145aef5387e	phs000xxx	gs://5aaxxxxxxxx/tcga/PAAD/DNA/AMPLICON/BI/ILLUMINA/C1748.TCGA-LB-A9Q5-01A-11D-A397-08.1.bam	e5c9f17d-8f66-4089-ac70-2a5cde55450f
 ```
 
+### Copy Manifests
+- Download released manifest files from box (Downloading and saving the files under named folder `DCF` makes copying files to DCF prod vm easier)
+
+- Remove/replace old folder (if present) from DCF prod vm
+`rm -r DCF`
+
+- Copy manifest folder from local to DCF prod
+`scp -r <local folder path (from) i.e. Downloads/DCF> <hostname>:<vm folder path (to) i.e. /home/dcfprod>`
+
+- Copy manifest files from DCF folder to cloud buckets
+(From /home/dcfprod/DCF directory)
+**AWS bucket (data-refresh-manifest)**
+`aws s3 cp --profile data_refresh ./<file> s3://data-refresh-manifest/<file>/`
+**Google bucket (name of bucket)**
+`<command goes here>`
+Will also need to have `LOG_BUCKET` to store the log and the output. Please see the yaml job file for more detail.
+- *Put the file `ignored_files_manifest.csv` provided by the sponsor under `gs://replication-input/<file>`. This file provides a list of structured or un-flattened objects already existing in DCF. ISB does not want DCF to flatten them since they are in use for existing projects but the DCF refresh service needs to ignore them during the replication process.*
+
+- Run `jobs/kube-script-setup.sh`.
+
+## Manage Tokens
+Cloud tokens generally only need to be setup once, the NIH token expires (~30 days) so will most likely need to be replaced with every run
+
+### Cloud Tokens
+- Create a directory under `$vpc_name/apis_configs` and name it `dcf_dataservice`
+
+#### Under the `dcf_dataservice` file
+- Create file named `creds.json`, this file contains GDCAPI token and indexd account
+```
+{
+"GDC_TOKEN": "TOKEN",
+"INDEXD": {
+    "host": "https://nci-crdc.datacommons.io/index/index",
+    "version": "v0",
+    "auth": {"username": "gdcapi", "password": "xxxxx"}
+}
+}
+```
+- Create `dcf_dataservice_settings` file containing GDCAPI token, indexd account, and project bucket prefixes
+```
+GDC_TOKEN = xxxxxxxx
+
+INDEXD = {
+  "host": "https://nci-crdc.datacommons.io/index/index",
+  "version": "v0",
+  "auth": {
+    "username": "gdcapi",
+    "password": xxxxxxxx
+  }
+}
+
+DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
+
+PROJECT_ACL = {
+    "TEST-PROJECT": {
+        "aws_bucket_prefix": "gdc-test-project-phs00xxxx",
+        "gs_bucket_prefix": "gdc-test-project-phs00xxxx"
+    },
+    ...
+}
+
+IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
+```
+
+*For AWS*
+- Create `aws_creds_secret` file containing AWS key
+```
+aws_access_key_id=xxxxxxxxxx
+aws_secret_access_key=xxxxxxxx
+```
+
+*For GCP*
+- Create `gcloud-creds-secret` file containing GCP key
+```
+{
+  "type": "service_account",
+  "project_id": "dcf-prod",
+  "private_key_id": xxxxxxxx,
+  "private_key": xxxxxxxx,
+  "client_email": "data-replication-dcf-prod@dcf-prod.iam.gserviceaccount.com",
+  "client_id": xxxxxxxx,
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": xxxxxxxx,
+  "client_x509_cert_url": xxxxxxxx
+}
+```
+
+### NIH Token
+- Download token
+Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
+*From root directory*
+- Replace token in config files
+`cd dcfprod/apis_configs/dcf_dataservice`
+`vim dcf_dataservice_settings`
+`vim creds.json`
+
+- Run job to set secrets for cloud and NIH tokens
+`bash ./dcf-dataservice/jobs/kube-setup-scripts.sh`
+
+## Run Replication Job
+### Dry Run
+*AWS*
+`gen3 runjob aws-bucket-replicate-job RELEASE DR<release number> QUICK_TEST True GDC_BUCKET_NAME gdcbackup MANIFEST_S3 s3://data-refresh-manifest/<active manifest file name> THREAD_NUM 20 LOG_BUCKET data-refresh-output CHUNK_SIZE 1`
+
+*GCP*
+`gen3 runjob google-bucket-replicate-job PROJECT dcf-prod MAX_WORKERS 80 RELEASE DR<release number>  MANIFEST_FILE gs://replication-input/<active manifest file name> IGNORED_FILE gs://replication-input/ignored_files_manifest.csv LOG_BUCKET datarefresh-log`
+
+### If pass
+Replace True with False in previous cmd
+
+## Redaction
+Upload redaction manifest to s3 and run job
+
+### Dry Run
+`gen3 runjob remove-objects-from-clouds-job DRY_RUN True RELEASE DR<release number> MANIFEST_S3 s3://data-refresh-manifest/<obsolete manifest file name> LOG_BUCKET data-refresh-output IGNORED_FILE_S3 s3://data-refresh-manifest/ignored_files_manifest.csv`
+
+### If pass
+Nothing needs to be redacted
+
+## Validation
+`gen3 runjob replicate-validation RELEASE DR<release number> IGNORED_FILE gs://replication-input/ignored_files_manifest.csv MANIFEST_FILES 's3://data-refresh-manifest/<active file>,s3://data-refresh-manifest/<legacy file>' OUT_FILES '<active file>,GDC_full_sync_legacy_manifest_20210423_post_DR29_DCF.tsv' LOG_BUCKET 'data-refresh-output'`
 
 ## Configuration
 ### AWS bucket replication
