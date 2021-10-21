@@ -26,3 +26,20 @@ except Exception as e:
 IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
 
 DATA_ENDPT = "https://api.gdc.cancer.gov/data/"
+
+# By default the postfix for open buckets are -2 and no numerical postfix for controlled
+# list of buckets that have -open and -controlled postfix
+POSTFIX_1_EXCEPTION = [
+    "gdc-cmi-mbc-phs001709",
+    "gdc-cmi-asc-phs001931",
+    "gdc-cmi-mpc-phs001939",
+    "gdc-rebc-thyr-phs001134",
+    "gdc-trio-cru-phs001163",
+]
+# list of buckets that have both -2-open and -2-controlled postfix
+POSTFIX_2_EXCEPTION = [
+    "gdc-cgci-phs000235",
+    "tcga",
+    "gdc-organoid-pancreatic-phs001611",
+    "gdc-beataml1-cohort-phs001657",
+]

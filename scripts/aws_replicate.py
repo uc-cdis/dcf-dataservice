@@ -23,7 +23,14 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, DATA_ENDPT
+from scripts.settings import (
+    PROJECT_ACL,
+    INDEXD,
+    GDC_TOKEN,
+    DATA_ENDPT,
+    POSTFIX_1_EXCEPTION,
+    POSTFIX_2_EXCEPTION,
+)
 from scripts import utils
 from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
@@ -32,22 +39,6 @@ from scripts.indexd_utils import update_url
 global logger
 
 RETRIES_NUM = 5
-
-# list of buckets that have both -2-open and -2-controlled postfix
-postfix_2_exception = [
-    "gdc-cgci-phs000235",
-    "tcga",
-    "gdc-organoid-pancreatic-phs001611",
-    "gdc-beataml1-cohort-phs001657",
-]
-# list of buckets that have -open and -controlled postfix
-postfix_1_exception = [
-    "gdc-cmi-mbc-phs001709",
-    "gdc-cmi-asc-phs001931",
-    "gdc-cmi-mpc-phs001939",
-    "gdc-rebc-thyr-phs001134",
-    "gdc-trio-cru-phs001163",
-]
 
 
 class ProcessingFile(object):
@@ -169,11 +160,11 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         # REMINDER: if changing things here, change in get_reversed_acl_bucket_name fnc and scripts/utils:get_aws_bucket_name as well.
         for label in ["2-open", "controlled"]:
             if (
-                bucket_info["aws_bucket_prefix"] in postfix_1_exception
+                bucket_info["aws_bucket_prefix"] in POSTFIX_1_EXCEPTION
             ) and label == "2-open":
                 label = "open"
             if (
-                bucket_info["aws_bucket_prefix"] in postfix_2_exception
+                bucket_info["aws_bucket_prefix"] in POSTFIX_2_EXCEPTION
             ) and label == "controlled":
                 label = "2-controlled"
 
@@ -781,38 +772,24 @@ def get_reversed_acl_bucket_name(target_bucket):
         else:
             return target_bucket[:-10] + "open"
 
-    if "gdc-cgci-phs000235" in target_bucket:
-        if "open" in target_bucket:
-            return "gdc-cgci-phs000235-2-controlled"
+    if "controlled" in target_bucket:
+        if "-2-controlled" in target_bucket:
+            target_bucket = target_bucket.replace("-2-controlled", "")
         else:
-            return "gdc-cgci-phs000235-2-open"
-
-    if "gdc-beataml1-cohort-phs001657" in target_bucket:
-        if "open" in target_bucket:
-            return "gdc-beataml1-cohort-phs001657-2-controlled"
+            target_bucket = target_bucket.replace("-controlled", "")
+        if target_bucket in POSTFIX_1_EXCEPTION:
+            return target_bucket + "-open"
         else:
-            return "gdc-beataml1-cohort-phs001657-2-open"
-
-    if "gdc-organoid-pancreatic-phs001611" in target_bucket:
-        if "open" in target_bucket:
-            return "gdc-organoid-pancreatic-phs001611-2-controlled"
+            return target_bucket + "-2-open"
+    elif "open" in target_bucket:
+        if "-2-open" in target_bucket:
+            target_bucket = target_bucket.replace("-2-open", "")
         else:
-            return "gdc-organoid-pancreatic-phs001611-2-open"
-
-    if (
-        "gdc-cmi-mbc-phs001709" in target_bucket
-        or "gdc-cmi-asc-phs001931" in target_bucket
-        or "gdc-cmi-mpc-phs001939" in target_bucket
-    ):
-        if "controlled" in target_bucket:
-            return target_bucket[:-10] + "open"
-        if "open" in target_bucket:
-            return target_bucket[:-4] + "controlled"
-
-    if "open" in target_bucket:
-        return target_bucket[:-6] + "controlled"
-
-    return target_bucket[:-10] + "2-open"
+            target_bucket = target_bucket.replace("-open", "")
+        if target_bucket in POSTFIX_2_EXCEPTION:
+            return target_bucket + "-2-controlled"
+        else:
+            return target_bucket + "-controlled"
 
 
 def is_changed_acl_object(fi, copied_objects, target_bucket):
