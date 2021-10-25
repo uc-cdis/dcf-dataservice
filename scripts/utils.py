@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from scripts.errors import UserError
 from indexclient.client import IndexClient
-from scripts.settings import INDEXD
+from scripts.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
@@ -22,13 +22,6 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
             )
         )
 
-    # bad hard code to support ccle buckets
-    # if "ccle" in project_info["aws_bucket_prefix"]:
-    #     return (
-    #         "ccle-open-access"
-    #         if fi.get("acl") in {"[u'open']", "['open']"}
-    #         else "gdc-ccle-controlled"
-    #     )
     if "target" in project_info["aws_bucket_prefix"]:
         return (
             "gdc-target-phs000218-2-open"
@@ -43,48 +36,23 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
             else "tcga-2-controlled"
         )
 
-    if "gdc-cgci-phs000235" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-cgci-phs000235-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-cgci-phs000235-2-controlled"
+    # POSTFIX_1_EXCEPTION
+    if project_info["aws_bucket_prefix"] in POSTFIX_1_EXCEPTION:
+        return project_info["aws_bucket_prefix"] + (
+            "-open"
+            if fi.get("acl") in {"[u'open']", "['open']", "*"}
+            else "-controlled"
         )
 
-    if "gdc-beataml1-cohort-phs001657" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-beataml1-cohort-phs001657-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-beataml1-cohort-phs001657-2-controlled"
+    # POSTFIX_2_EXCEPTION
+    if project_info["aws_bucket_prefix"] in POSTFIX_2_EXCEPTION:
+        return project_info["aws_bucket_prefix"] + (
+            "-2-open"
+            if fi.get("acl") in {"[u'open']", "['open']", "*"}
+            else "-2-controlled"
         )
 
-    if "gdc-organoid-pancreatic-phs001611" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-organoid-pancreatic-phs001611-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-organoid-pancreatic-phs001611-2-controlled"
-        )
-
-    if "gdc-cmi-mbc-phs001709" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-cmi-mbc-phs001709-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-cmi-mbc-phs001709-controlled"
-        )
-
-    if "gdc-cmi-asc-phs001931" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-cmi-asc-phs001931-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-cmi-asc-phs001931-controlled"
-        )
-
-    if "gdc-cmi-mpc-phs001939" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-cmi-mpc-phs001939-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "gdc-cmi-mpc-phs001939-controlled"
-        )
-
+    # Default
     return project_info["aws_bucket_prefix"] + (
         "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
     )
