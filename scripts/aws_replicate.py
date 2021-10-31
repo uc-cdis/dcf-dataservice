@@ -526,7 +526,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
-                req = urllib.request(
+                req = urllib.request.Request(
                     data_endpoint,
                     headers={
                         "X-Auth-Token": GDC_TOKEN,
@@ -536,7 +536,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     },
                 )
 
-                chunk = urllib.urlopen(req).read()
+                chunk = urllib.request.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
 
