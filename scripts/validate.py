@@ -27,7 +27,7 @@ def run(global_config):
         {
             'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
             'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
-            'force_create_manifest': 'True' 'False'
+            'FORCE_CREATE_MANIFEST': 'True' 'False'
         }
 
     Returns:
@@ -55,7 +55,7 @@ def run(global_config):
     logger.info(
         "If validation job is run with FORCE_CREATE_MANIFEST True: errors from missing objects are to be expected due to redaction of records in the data release following the current run"
     )
-    force_create_manifest = global_config.get("force_create_manifest")
+    FORCE_CREATE_MANIFEST = global_config.get("FORCE_CREATE_MANIFEST")
 
     logger.info("List of the manifests")
     logger.info(global_config.get("manifest_files"))
@@ -69,7 +69,7 @@ def run(global_config):
             "number of output manifests and number of manifest_files are not the same"
         )
 
-    if not _pass_preliminary_check(force_create_manifest, manifest_files):
+    if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
         raise UserError("The input does not pass the preliminary check")
 
     logger.info("scan all copied objects")
@@ -229,7 +229,7 @@ def run(global_config):
             == 0
         )
 
-        if _pass or force_create_manifest:
+        if _pass or FORCE_CREATE_MANIFEST:
             HEADERS = [
                 "id",
                 "file_name",
@@ -287,11 +287,11 @@ def run(global_config):
     return pass_validation
 
 
-def _pass_preliminary_check(force_create_manifest, manifest_files):
+def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
     """
     Check if manifests are in the manifest bucket
 
-    'force_create_manifest': True, False command arg parameter
+    'FORCE_CREATE_MANIFEST': True, False command arg parameter
     'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
     """
 
@@ -306,7 +306,7 @@ def _pass_preliminary_check(force_create_manifest, manifest_files):
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
-            if error_code == 404 and force_create_manifest:
+            if error_code == 404 and FORCE_CREATE_MANIFEST:
                 logger.error(
                     "Missing object {} in bucket {}. Detail {}".format(
                         key, bucket_name, e
