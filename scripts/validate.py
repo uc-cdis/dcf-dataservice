@@ -52,10 +52,11 @@ def run(global_config):
             "Expecting non-empty IGNORED_FILES. Please check if ignored_files_manifest.csv is configured correctly!!!"
         )
 
-    logger.info(
-        "If validation job is run with FORCE_CREATE_MANIFEST True: errors from missing objects are to be expected due to redaction of records in the data release following the current run"
-    )
-    FORCE_CREATE_MANIFEST = global_config.get("FORCE_CREATE_MANIFEST")
+    FORCE_CREATE_MANIFEST = global_config.get("FORCE_CREATE_MANIFEST", False)
+    if FORCE_CREATE_MANIFEST:
+        logger.info(
+            "If validation job is run with FORCE_CREATE_MANIFEST True: errors from missing objects are to be expected due to redaction of records in the data release following the current run"
+        )
 
     logger.info("List of the manifests")
     logger.info(global_config.get("manifest_files"))
