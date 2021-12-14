@@ -230,7 +230,15 @@ def run(global_config):
             == 0
         )
 
+        out_filename = out_manifests[idx].strip()
+
         if _pass or FORCE_CREATE_MANIFEST:
+
+            if not _pass and FORCE_CREATE_MANIFEST:
+                logger.warning(
+                    "Validation failed but creating final manifest anyway..."
+                )
+
             HEADERS = [
                 "id",
                 "file_name",
@@ -256,6 +264,7 @@ def run(global_config):
             utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
         else:
             utils.write_csv("./tmp.csv", fail_list)
+            out_filename = "FAIL_" + out_filename
             logger.info(
                 "Can not generate the augmented manifest for {}. Please fix all the errors".format(
                     manifest_file
@@ -264,12 +273,6 @@ def run(global_config):
 
         if pass_validation:
             pass_validation = _pass
-
-        out_filename = (
-            out_manifests[idx].strip()
-            if _pass
-            else "FAIL_" + out_manifests[idx].strip()
-        )
 
         try:
             s3.upload_file("tmp.csv", global_config.get("log_bucket"), out_filename)
