@@ -159,6 +159,8 @@ def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=
         for fi in copying_files:
             target_bucket = get_aws_bucket_name(fi, project_acl)
             key = "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
+            # file does not exist or size is different
+            # should check hash
             if key not in copied_objects or copied_objects[key]["Size"] != fi["size"]:
                 filtered_copying_files.append(fi)
                 total_copying_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
@@ -180,33 +182,26 @@ def prepare_txt_manifest_google_dataflow(
     """
     Since Apache Beam does not support csv format, convert the csv to txt file
     """
+    # TODO: make sure manifest only contains new guids and updated guids
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
-    indexd_records = get_indexd_records()
-    if copied_objects:
-        filtered_copying_files = []
-        for fi in copying_files:
-            gs_bucket = get_google_bucket_name(fi, project_acl)
-            if fi["id"] in ignored_dict:
-                object_path = "gs://{}/{}".format(
-                    gs_bucket, get_structured_object_key(fi["id"], ignored_dict)
-                )
-            else:
-                fixed_filename = fi["file_name"].replace(" ", "_")
-                object_path = "gs://{}/{}/{}".format(
-                    gs_bucket, fi["id"], fixed_filename
-                )
+    updated_copying_files = []
+    for fi in copying_files:
+        gs_bucket = get_google_bucket_name(fi, project_acl)
+        if fi["id"] in ignored_dict:
+            object_path = "gs://{}/{}".format(
+                gs_bucket, get_structured_object_key(fi["id"], ignored_dict)
+            )
+        else:
+            fixed_filename = fi["file_name"].replace(" ", "_")
+            object_path = "gs://{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
 
-            if fi["id"] in ignored_dict and object_path in indexd_records.get(
-                fi.get("id"), []
-            ):
-                continue
-            target_bucket = get_google_bucket_name(fi, project_acl)
-            if (
-                "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
-                not in copied_objects
-            ) or object_path not in indexd_records.get(fi.get("id"), []):
-                filtered_copying_files.append(fi)
-        copying_files = filtered_copying_files
+        target_bucket = get_google_bucket_name(fi, project_acl)
+        if (
+            "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
+            not in copied_objects
+        ) or object_path not in indexd_records.get(fi.get("id"), []):
+            updated_copying_files.append(fi)
+    copying_files = updated_copying_files
 
     with open(local_manifest_txt_file, "w") as fw:
         fw.write("id\tfile_name\tsize\tmd5\tacl\tproject_id")
