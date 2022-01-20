@@ -104,6 +104,11 @@ def run(argv=None):
             return
 
     pipeline_options = PipelineOptions(pipeline_args)
+    print("############################")
+    print(pipeline_args)
+    print(pipeline_options)
+    print("############################")
+
     pipeline_options.view_as(SetupOptions).save_main_session = True
     p = beam.Pipeline(options=pipeline_options)
 
