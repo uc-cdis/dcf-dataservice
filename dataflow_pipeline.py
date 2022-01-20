@@ -106,7 +106,6 @@ def run(argv=None):
     pipeline_options = PipelineOptions(pipeline_args)
     print("############################")
     print(pipeline_args)
-    print(pipeline_options)
     print("############################")
 
     pipeline_options.view_as(SetupOptions).save_main_session = True
