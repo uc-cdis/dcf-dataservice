@@ -97,8 +97,6 @@ def run(argv=None):
     known_args, pipeline_args = parser.parse_known_args(argv)
 
     print("############################")
-    print(argv)
-    print("############################")
 
     global_config = {}
     if known_args.global_config:
