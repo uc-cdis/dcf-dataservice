@@ -107,6 +107,12 @@ def run(argv=None):
     pipeline_options.view_as(SetupOptions).save_main_session = True
     p = beam.Pipeline(options=pipeline_options)
 
+    print("######################")
+    print(argv)
+    print(pipeline_options)
+    print(pipeline_args)
+    print("######################")
+
     copied_objects = build_object_dataset_gs(PROJECT_ACL)
     input_path = prepare_txt_manifest_google_dataflow(
         known_args.input,
