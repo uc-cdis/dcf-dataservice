@@ -123,6 +123,15 @@ def run(argv=None):
         PipePrepare.ignored_dict,
     )
 
+    print("--------------------------")
+    print(known_args.input)
+    print(input_path)
+    print(copied_objects)
+    print(PROJECT_ACL)
+    print("--------------------------")
+    print(global_config)
+    print("--------------------------")
+
     # Read the text file[pattern] into a PCollection.
     lines = p | "read" >> ReadFromText(file_pattern=input_path, skip_header_lines=1)
     result = lines | "copy" >> beam.ParDo(FileCopyingDoFn(global_config))
