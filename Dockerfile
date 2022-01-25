@@ -1,4 +1,4 @@
-FROM quay.io/cdis/python:3.7.12-slim-buster
+FROM quay.io/cdis/python:3.7-slim-buster
 
 RUN apt update && apt install -y git jq curl bash snapd groff python3-pip zip
 
