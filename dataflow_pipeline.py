@@ -106,12 +106,6 @@ def run(argv=None):
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(SetupOptions).save_main_session = True
 
-    print("######################")
-    print(argv)
-    print(pipeline_options)
-    print(pipeline_args)
-    print("######################")
-
     p = beam.Pipeline(options=pipeline_options)
 
     copied_objects = build_object_dataset_gs(PROJECT_ACL)
@@ -122,15 +116,6 @@ def run(argv=None):
         PROJECT_ACL,
         PipePrepare.ignored_dict,
     )
-
-    print("--------------------------")
-    print(known_args.input)
-    print(input_path)
-    print(copied_objects)
-    print(PROJECT_ACL)
-    print("--------------------------")
-    print(global_config)
-    print("--------------------------")
 
     # Read the text file[pattern] into a PCollection.
     lines = p | "read" >> ReadFromText(file_pattern=input_path, skip_header_lines=1)
