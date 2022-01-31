@@ -182,7 +182,6 @@ def prepare_txt_manifest_google_dataflow(
     """
     Since Apache Beam does not support csv format, convert the csv to txt file
     """
-    # TODO: make sure manifest only contains new guids and updated guids
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
     updated_copying_files = []
     for fi in copying_files:

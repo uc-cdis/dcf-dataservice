@@ -14,8 +14,7 @@ from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
 
-# from cdislogging import get_logger
-import logging as logger
+from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 
@@ -24,15 +23,12 @@ from scripts.errors import APIError, UserError, StreamError
 from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA_ENDPT
 from scripts import indexd_utils
 
-logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
-
+logger = get_logger("GoogleReplication")
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
 NUM_STREAMING_TRIES = 5
-
-# logger = get_logger("GoogleReplication")
 
 
 class DataFlowLog(object):
@@ -323,8 +319,8 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
         indexclient(indexdclient): indexd client
     Returns:
         None
-
     """
+
     object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
     # check if 5aa object really exists
     if blob_exists(bucket_name, object_key):
