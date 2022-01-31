@@ -104,6 +104,7 @@ def run(argv=None):
 
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(SetupOptions).save_main_session = True
+
     p = beam.Pipeline(options=pipeline_options)
 
     copied_objects = build_object_dataset_gs(PROJECT_ACL)
