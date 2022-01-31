@@ -198,7 +198,7 @@ def prepare_txt_manifest_google_dataflow(
         if (
             "{}/{}/{}".format(target_bucket, fi["id"], fi["file_name"])
             not in copied_objects
-        ) or object_path not in indexd_records.get(fi.get("id"), []):
+        ):
             updated_copying_files.append(fi)
     copying_files = updated_copying_files
 
