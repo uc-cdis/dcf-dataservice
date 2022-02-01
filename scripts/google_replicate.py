@@ -14,7 +14,7 @@ from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
 
-from cdislogging import get_logger
+import logging as logger
 
 from indexclient.client import IndexClient
 
@@ -23,12 +23,14 @@ from scripts.errors import APIError, UserError, StreamError
 from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA_ENDPT
 from scripts import indexd_utils
 
-logger = get_logger("GoogleReplication")
+logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
 NUM_STREAMING_TRIES = 5
+
+# logger = get_logger("GoogleReplication")
 
 
 class DataFlowLog(object):

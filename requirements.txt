@@ -12,8 +12,8 @@ apache-beam[gcp]==2.16.0
 pyyaml==5.4
 pyarrow==0.15.1
 setuptools==41.4.0
-cdislogging ~=1.0.0
-cdiserrors <=2.0.0
+-e git+https://git@github.com/uc-cdis/cdislogging.git@0.0.2#egg=cdislogging
+-e git+https://git@github.com/uc-cdis/cdiserrors.git@0.1.0#egg=cdiserrors
 # For the Google script, indexclient source must also be available as a zip
 # file and fed to the script using option "--extra_package" (until package is
 # made available on pypi)
