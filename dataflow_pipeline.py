@@ -95,7 +95,6 @@ def run(argv=None):
         "--global_config", dest="global_config", help="global configuration"
     )
     known_args, pipeline_args = parser.parse_known_args(argv)
-
     global_config = {}
     if known_args.global_config:
         global_config = json.loads(known_args.global_config)

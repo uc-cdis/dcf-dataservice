@@ -14,7 +14,6 @@ from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
 
-# from cdislogging import get_logger
 import logging as logger
 
 from indexclient.client import IndexClient
@@ -25,7 +24,6 @@ from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA
 from scripts import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
-
 
 DEFAULT_CHUNK_SIZE_DOWNLOAD = 1024 * 1024 * 32
 DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
@@ -323,8 +321,8 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
         indexclient(indexdclient): indexd client
     Returns:
         None
-
     """
+
     object_key = utils.get_structured_object_key(fi["id"], ignored_dict)
     # check if 5aa object really exists
     if blob_exists(bucket_name, object_key):
