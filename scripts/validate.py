@@ -178,7 +178,7 @@ def run(global_config):
                     fail_list.append(fi)
                     logger.error(
                         "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
-                            fi["id"], fi["gs_url"], fi["indexd_urls"]
+                            fi["id"], fi["gs_url"], fi["indexd_url"]
                         )
                     )
 
