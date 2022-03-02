@@ -70,15 +70,30 @@ def run(global_config):
             "number of output manifests and number of manifest_files are not the same"
         )
 
-    if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
+    logger.info("Gather record ids from active manifest and scan all copied objects")
+    active_manifest_guids = _pass_preliminary_check(
+        FORCE_CREATE_MANIFEST, manifest_files
+    )
+    if not active_manifest_guids:
         raise UserError("The input does not pass the preliminary check")
 
-    logger.info("scan all copied objects")
+    chunks = [
+        active_manifest_guids[x : x + 4500]
+        for x in range(0, len(active_manifest_guids), 4500)
+    ]
 
-    indexd_records = utils.get_indexd_records()
+    # make call to utils with batches of ~4500 dids
+    indexd_records = {}
+    chunk_number = 0
+    chunk_total = len(chunks)
+    for chunk in chunks:
+        chunk_number += 1
+        logger.info(f"On chunk {chunk_number}/{chunk_total}")
+        indexd_records.update(utils.get_indexd_batch(chunk))
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
+    logger.info("Writing records and copied objects to file to be uploaded")
     if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
@@ -115,7 +130,15 @@ def run(global_config):
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         fail_list = []
+
+        logger.info("Beginning validation process")
+        file_number = 0
+        file_total = len(files)
         for fi in files:
+            file_number += 1
+            if file_number % 100 == 0:
+                logger.info(f"File {file_number}/{file_total}")
+
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
@@ -293,7 +316,7 @@ def run(global_config):
 
 def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
     """
-    Check if manifests are in the manifest bucket
+    Check if manifests are in the manifest bucket and returns active manifest guids
 
     'FORCE_CREATE_MANIFEST': True, False command arg parameter
     'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
@@ -301,6 +324,7 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
 
     session = boto3.session.Session()
     s3 = session.resource("s3")
+    active_guids = []
 
     for url in manifest_files:
         try:
@@ -308,6 +332,9 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
+            # DECIDE IF ON ACTIVE FILE< THEN GET DIDS FROM FILE AND APPEND TO LIST
+            if url:
+                print(url)
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
             if error_code == 404 and FORCE_CREATE_MANIFEST:
