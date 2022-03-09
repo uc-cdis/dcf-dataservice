@@ -325,6 +325,7 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
     session = boto3.session.Session()
     s3 = session.resource("s3")
     active_guids = []
+    print(manifest_files)
 
     for url in manifest_files:
         try:
