@@ -36,7 +36,7 @@ from scripts.utils import generate_chunk_data_list, prepare_data
 from scripts.errors import UserError, APIError
 from scripts.indexd_utils import update_url
 
-global logger
+logger = get_logger("AWSReplication", "./log.txt")
 
 RETRIES_NUM = 5
 
@@ -47,11 +47,6 @@ class ProcessingFile(object):
         self.size = size
         self.copy_method = copy_method
         self.original_storage = original_storage
-
-
-def resume_logger(filename=None):
-    global logger
-    logger = get_logger("AWSReplication", filename)
 
 
 def build_object_dataset_from_file(copied_objects_file, source_objects_file):
@@ -871,8 +866,6 @@ def run(
         )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
-
-    resume_logger("./log.txt")
 
     copied_objects, source_objects = {}, {}
 

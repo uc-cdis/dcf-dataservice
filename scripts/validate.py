@@ -14,11 +14,6 @@ from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 logger = get_logger("Validation", "./log.txt")
 
 
-def resume_logger(filename=None):
-    global logger
-    logger = get_logger("Validation", filename)
-
-
 def run(global_config):
     """
     Given manifests run validation process to check if all the objects exist and are indexed correctly
@@ -34,7 +29,6 @@ def run(global_config):
         bool
 
     """
-    resume_logger("./log.txt")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
