@@ -332,7 +332,8 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
-            # DECIDE IF ON ACTIVE FILE< THEN GET DIDS FROM FILE AND APPEND TO LIST
+            # DECIDE IF ON ACTIVE FILE, THEN GET DIDS FROM FILE AND APPEND TO LIST
+            print(url)
             if url:
                 print(url)
         except botocore.exceptions.ClientError as e:
