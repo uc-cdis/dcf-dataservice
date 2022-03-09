@@ -11,7 +11,7 @@ from scripts.errors import UserError
 from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
 from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
-global logger
+logger = get_logger("Validation", "./log.txt")
 
 
 def resume_logger(filename=None):
