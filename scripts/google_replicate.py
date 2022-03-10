@@ -30,8 +30,6 @@ DEFAULT_CHUNK_SIZE_UPLOAD = 1024 * 1024 * 256
 NUM_TRIES = 30
 NUM_STREAMING_TRIES = 5
 
-# logger = get_logger("GoogleReplication")
-
 
 class DataFlowLog(object):
     def __init__(self, copy_success=False, index_success=False, message=""):
