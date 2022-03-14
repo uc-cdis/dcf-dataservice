@@ -37,7 +37,6 @@ from scripts.errors import UserError, APIError
 from scripts.indexd_utils import update_url
 
 logger = get_logger("AWSReplication", "./log.txt")
-print("THIS IS THE FILE")
 print(logger)
 RETRIES_NUM = 5
 

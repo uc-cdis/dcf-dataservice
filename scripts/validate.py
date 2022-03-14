@@ -12,7 +12,6 @@ from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
 from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 logger = get_logger("Validation", "./log.txt")
-print(logger)
 
 
 def run(global_config):
