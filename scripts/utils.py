@@ -13,8 +13,6 @@ from scripts.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
-    print("POSTFIX_2_EXCEPTION=============================")
-    print(POSTFIX_2_EXCEPTION)
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:

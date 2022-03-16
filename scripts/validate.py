@@ -319,7 +319,6 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
     session = boto3.session.Session()
     s3 = session.resource("s3")
     active_guids = []
-    print(manifest_files)
 
     for url in manifest_files:
         try:
@@ -328,9 +327,10 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
             key = parsed.path.strip("/")
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
             # DECIDE IF ON ACTIVE FILE, THEN GET DIDS FROM FILE AND APPEND TO LIST
+            print("URL OF THE FILE --------")
             print(url)
-            if url:
-                print(url)
+            # if url:
+            #     print(url)
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
             if error_code == 404 and FORCE_CREATE_MANIFEST:
