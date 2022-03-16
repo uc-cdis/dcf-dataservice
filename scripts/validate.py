@@ -4,8 +4,6 @@ import botocore
 from cdislogging import get_logger
 from urllib.parse import urlparse
 
-from indexclient.client import IndexClient
-
 from scripts import utils
 from scripts.errors import UserError
 from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
@@ -52,56 +50,48 @@ def run(global_config):
             "If validation job is run with FORCE_CREATE_MANIFEST True: errors from missing objects are to be expected due to redaction of records in the data release following the current run"
         )
 
-    logger.info("List of the manifests")
-    logger.info(global_config.get("manifest_files"))
-    logger.info(global_config.get("out_manifests"))
-
     manifest_files = global_config.get("manifest_files", "").split(",")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
     if len(manifest_files) != len(out_manifests):
         raise UserError(
-            "number of output manifests and number of manifest_files are not the same"
+            f"number of output manifests {out_manifests} and number of manifest_files {manifest_files} are not the same"
         )
 
-    logger.info("Gather record ids from active manifest and scan all copied objects")
-    active_manifest_guids = _pass_preliminary_check(
-        FORCE_CREATE_MANIFEST, manifest_files
-    )
-    if not active_manifest_guids:
+    if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
         raise UserError("The input does not pass the preliminary check")
 
-    chunks = [
-        active_manifest_guids[x : x + 4500]
-        for x in range(0, len(active_manifest_guids), 4500)
-    ]
+    # chunks = [
+    #     manifest_guids[x : x + 4500]
+    #     for x in range(0, len(manifest_guids), 4500)
+    # ]
 
     # make call to utils with batches of ~4500 dids
-    indexd_records = {}
-    chunk_number = 0
-    chunk_total = len(chunks)
-    for chunk in chunks:
-        chunk_number += 1
-        logger.info(f"On chunk {chunk_number}/{chunk_total}")
-        indexd_records.update(utils.get_indexd_batch(chunk))
+    # indexd_records = {}
+    # chunk_number = 0
+    # chunk_total = len(chunks)
+    # for chunk in chunks:
+    #     chunk_number += 1
+    #     logger.info(f"On chunk {chunk_number}/{chunk_total}")
+    #     indexd_records.update(utils.get_indexd_batch(chunk))
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
     logger.info("Writing records and copied objects to file to be uploaded")
     if global_config.get("save_copied_objects"):
-        with open("./indexd_records.json", "w") as outfile:
-            json.dump(indexd_records, outfile)
+        # with open("./indexd_records.json", "w") as outfile:
+        #     json.dump(indexd_records, outfile)
         with open("./aws_copied_objects.json", "w") as outfile:
             json.dump(aws_copied_objects, outfile)
         with open("./gs_copied_objects.json", "w") as outfile:
             json.dump(gs_copied_objects, outfile)
 
         try:
-            s3.upload_file(
-                "indexd_records.json",
-                global_config.get("log_bucket"),
-                "indexd_records.json",
-            )
+            # s3.upload_file(
+            #     "indexd_records.json",
+            #     global_config.get("log_bucket"),
+            #     "indexd_records.json",
+            # )
             s3.upload_file(
                 "aws_copied_objects.json",
                 global_config.get("log_bucket"),
@@ -136,7 +126,8 @@ def run(global_config):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
-            fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
+            fi["indexd_url"] = utils.get_indexd_batch(fi.get("id"))
+            # fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
             if not fi["indexd_url"]:
                 total_aws_index_failures += 1
                 total_gs_index_failures += 1
@@ -318,7 +309,6 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
 
     session = boto3.session.Session()
     s3 = session.resource("s3")
-    active_guids = []
 
     for url in manifest_files:
         try:
@@ -326,11 +316,7 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
-            # DECIDE IF ON ACTIVE FILE, THEN GET DIDS FROM FILE AND APPEND TO LIST
-            print("URL OF THE FILE --------")
-            print(url)
-            # if url:
-            #     print(url)
+
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
             if error_code == 404 and FORCE_CREATE_MANIFEST:

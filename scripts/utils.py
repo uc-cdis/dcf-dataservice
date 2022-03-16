@@ -356,6 +356,21 @@ def get_indexd_batch(guids):
     return results
 
 
+def get_indexd_record(guid):
+    """
+    Get indexd records by batch
+    """
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+    resp = indexd_client.get(guid)
+    result = resp.get("urls", [])
+
+    return result
+
+
 def get_indexd_records():
     """
     Get all indexd records
