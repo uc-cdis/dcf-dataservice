@@ -63,8 +63,6 @@ if __name__ == "__main__":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
         source_bucket = args.bucket if job_name == "copying" else None
         quick_test = True if args.quick_test == "True" else False
-        print("IM RIGHT HERE!!!!!")
-        print("IM RIGHT HERE!!!!!")
         aws_replicate.run(
             args.release,
             int(args.thread_num),
