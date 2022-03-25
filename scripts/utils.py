@@ -366,7 +366,10 @@ def get_indexd_record(guid):
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
     resp = indexd_client.get(guid)
-    result = resp.get("urls", [])
+    try:
+        result = resp.get("urls", [])
+    except:
+        result = []
 
     return result
 
