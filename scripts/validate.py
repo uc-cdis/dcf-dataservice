@@ -61,37 +61,17 @@ def run(global_config):
     if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
         raise UserError("The input does not pass the preliminary check")
 
-    # chunks = [
-    #     manifest_guids[x : x + 4500]
-    #     for x in range(0, len(manifest_guids), 4500)
-    # ]
-
-    # make call to utils with batches of ~4500 dids
-    # indexd_records = {}
-    # chunk_number = 0
-    # chunk_total = len(chunks)
-    # for chunk in chunks:
-    #     chunk_number += 1
-    #     logger.info(f"On chunk {chunk_number}/{chunk_total}")
-    #     indexd_records.update(utils.get_indexd_batch(chunk))
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
     logger.info("Writing records and copied objects to file to be uploaded")
     if global_config.get("save_copied_objects"):
-        # with open("./indexd_records.json", "w") as outfile:
-        #     json.dump(indexd_records, outfile)
         with open("./aws_copied_objects.json", "w") as outfile:
             json.dump(aws_copied_objects, outfile)
         with open("./gs_copied_objects.json", "w") as outfile:
             json.dump(gs_copied_objects, outfile)
 
         try:
-            # s3.upload_file(
-            #     "indexd_records.json",
-            #     global_config.get("log_bucket"),
-            #     "indexd_records.json",
-            # )
             s3.upload_file(
                 "aws_copied_objects.json",
                 global_config.get("log_bucket"),
@@ -126,9 +106,9 @@ def run(global_config):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
-            fi["indexd_url"] = utils.get_indexd_batch(fi.get("id"))
+            print(utils.get_indexd_record(fi.get("id")))
+            fi["indexd_url"] = utils.get_indexd_record(fi.get("id"))
 
-            # fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
             if not fi["indexd_url"]:
                 total_aws_index_failures += 1
                 total_gs_index_failures += 1
