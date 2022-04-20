@@ -282,7 +282,7 @@ def run(global_config):
 
 def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
     """
-    Check if manifests are in the manifest bucket and returns active manifest guids
+    Check if manifests are in the manifest bucket
 
     'FORCE_CREATE_MANIFEST': True, False command arg parameter
     'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
