@@ -53,6 +53,9 @@ def run(global_config):
     manifest_files = global_config.get("manifest_files", "").split(",")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
+    logger.info("List of the manifests")
+    logger.info(global_config.get("manifest_files"))
+
     if len(manifest_files) != len(out_manifests):
         raise UserError(
             f"number of output manifests {out_manifests} and number of manifest_files {manifest_files} are not the same"
@@ -106,7 +109,6 @@ def run(global_config):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
-            print(utils.get_indexd_record(fi.get("id")))
             fi["indexd_url"] = utils.get_indexd_record(fi.get("id"))
 
             if not fi["indexd_url"]:

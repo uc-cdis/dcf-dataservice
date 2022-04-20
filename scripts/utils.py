@@ -338,24 +338,6 @@ def write_csv(filename, files, sorted_attr=None, fieldnames=None):
             writer.writerow(f)
 
 
-def get_indexd_batch(guids):
-    """
-    Get indexd records by batch
-    """
-    results = {}
-    indexd_client = IndexClient(
-        INDEXD["host"],
-        INDEXD["version"],
-        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-    )
-    resp = indexd_client.bulk_request(guids)
-
-    for doc in resp:
-        results[doc.did] = doc.urls
-
-    return results
-
-
 def get_indexd_record(guid):
     """
     Get indexd records by batch
