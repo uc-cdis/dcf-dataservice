@@ -359,10 +359,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 logger.info(cmd)
             if not quick_test:
                 subprocess.Popen(shlex.split(cmd)).wait()
-                try:
-                    update_url(fi, jobinfo.indexclient)
-                except APIError as e:
-                    logger.warning(e)
+                # try:
+                # update_url(fi, jobinfo.indexclient)
+                # except APIError as e:
+                # logger.warning(e)
             else:
                 pFile = ProcessingFile(fi["id"], fi["size"], "AWS", None)
 
@@ -395,7 +395,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                         stream_object_from_gdc_api(
                             fi, target_bucket, jobinfo.global_config
                         )
-                        update_url(fi, jobinfo.indexclient)
+                        # update_url(fi, jobinfo.indexclient)
                     except Exception as e:
                         logger.warning(e)
                 else:
@@ -448,11 +448,11 @@ def exec_aws_copy(lock, quick_test, jobinfo):
             logger.info(
                 "object {} is already copied to {}".format(object_key, target_bucket)
             )
-        if not quick_test:
-            try:
-                update_url(fi, jobinfo.indexclient)
-            except APIError as e:
-                logger.warning(e)
+        # if not quick_test:
+        #     try:
+        #         update_url(fi, jobinfo.indexclient)
+        #     except APIError as e:
+        #         logger.warning(e)
     except Exception as e:
         logger.error("Something wrong with {}. Detail {}".format(fi["id"], e))
 
