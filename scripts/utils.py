@@ -288,6 +288,7 @@ def build_object_dataset_gs(PROJECT_ACL):
             result[bucket_name + "/" + blob.name] = {
                 "bucket": bucket_name,
                 "Size": blob.size,
+                "md5_hash": blob.md5_hash,
             }
 
         mutexLock.acquire()
