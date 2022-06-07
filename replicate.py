@@ -45,6 +45,7 @@ def parse_arguments():
     aws_indexing_cmd.add_argument("--global_config", required=True)
     aws_indexing_cmd.add_argument("--manifest_file", required=True)
     aws_indexing_cmd.add_argument("--thread_num", required=True)
+    aws_indexing_cmd.add_argument("--quick_test", required=True)
 
     redact_cmd = subparsers.add_parser("redact")
     redact_cmd.add_argument("--dry_run", required=False)
