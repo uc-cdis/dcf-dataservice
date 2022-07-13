@@ -1,11 +1,10 @@
 FROM quay.io/cdis/python:3.7-slim-buster
 
-RUN apt update && apt install -y git jq curl bash snapd groff python3-pip zip
+RUN apt-get update && apt-get install -y git jq curl bash snapd groff python3-pip zip
 
-RUN curl -O https://bootstrap.pypa.io/get-pip.py
+# RUN curl -O https://bootstrap.pypa.io/get-pip.py
 
-RUN python3 get-pip.py 'pip<20.3'
-
+RUN pip install --upgrade pip
 RUN pip3 install awscli
 
 # Installing gcloud package (includes gsutil)
