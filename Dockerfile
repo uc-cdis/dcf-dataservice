@@ -2,8 +2,6 @@ FROM quay.io/cdis/python:3.7-slim-buster
 
 RUN apt-get update && apt-get install -y git jq curl bash snapd groff python3-pip zip
 
-# RUN curl -O https://bootstrap.pypa.io/get-pip.py
-
 RUN pip install --upgrade pip
 RUN pip3 install awscli
 
