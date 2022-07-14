@@ -4,7 +4,7 @@ boto3>=1.9.111<2.0.0
 retry<=0.9.2
 google-auth==2.*
 google-cloud==0.34.0
-google-cloud-core==2.*
+google-cloud-core==2.3.*
 google-resumable-media==2.3.2
 google-cloud-storage==2.*
 httplib2==0.20.*
