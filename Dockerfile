@@ -13,11 +13,10 @@ RUN mkdir -p /usr/local/gcloud \
 ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
 
 
-# COPY . /dcf-dataservice
-COPY . .
+COPY . /dcf-dataservice
 WORKDIR /dcf-dataservice
 
-RUN  pip3 install -r requirements.txt
+RUN  pip3 install -r dcf-dataservice/requirements.txt
 # RUN PYTHONPATH=/usr/bin/python pip install -r requirements.txt
 
 CMD /bin/bash
