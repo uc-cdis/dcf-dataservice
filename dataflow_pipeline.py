@@ -102,7 +102,8 @@ def run(argv=None):
             print("Either log bucket or release params is missing")
             return
 
-    pipeline_options = PipelineOptions(pipeline_args)
+    pipeline_options = PipelineOptions(pipeline_args, region="us-central1")
+
     pipeline_options.view_as(SetupOptions).save_main_session = True
 
     p = beam.Pipeline(options=pipeline_options)
