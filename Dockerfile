@@ -3,7 +3,7 @@ FROM quay.io/cdis/python:3.7-slim-buster
 RUN apt-get update && apt-get install -y git jq curl bash snapd groff python3-pip zip
 
 RUN pip install --upgrade pip
-RUN pip3 install awscli
+RUN pip install awscli
 
 # Installing gcloud package (includes gsutil)
 RUN curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tmp/google-cloud-sdk.tar.gz
@@ -16,7 +16,6 @@ ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
 COPY . /dcf-dataservice
 WORKDIR /dcf-dataservice
 
-RUN  pip3 install -r dcf-dataservice/requirements.txt
-# RUN PYTHONPATH=/usr/bin/python pip install -r requirements.txt
+RUN pip install -r dcf-dataservice/requirements.txt
 
 CMD /bin/bash
