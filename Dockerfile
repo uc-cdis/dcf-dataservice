@@ -16,6 +16,6 @@ ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
 COPY . /dcf-dataservice
 WORKDIR /dcf-dataservice
 
-RUN pip install -r dcf-dataservice/requirements.txt
+RUN pip install -r requirements.txt
 
 CMD /bin/bash
