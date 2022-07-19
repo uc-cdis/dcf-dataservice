@@ -7,17 +7,17 @@ import setuptools
 # More details here: https://cloud.google.com/dataflow/docs/concepts/sdk-worker-dependencies#python-3.7.12
 REQUIRED_PACKAGES = [
     "python_dateutil==2.8.0",
-    "requests==2.22.0",
+    "requests==2.27.1",
     "boto3>=1.9.111<2.0.0",
     "retry<=0.9.2",
-    "google-auth==1.6.3",
+    "google-auth>=1.24.0",
     "google-cloud==0.34.0",
-    "google-resumable-media==0.4.1",
-    "google-cloud-storage==1.6.0",
-    "httplib2==0.12.0",
-    "pyparsing==2.4.2",
-    "apache-beam[gcp]==2.16.0",
-    "urllib3==1.25.6",
+    "google-resumable-media==2.3.2",
+    "google-cloud-storage==2.*",
+    "httplib2==0.20.*",
+    "pyparsing>=2.4.2",
+    "apache-beam[gcp]==2.*",
+    "urllib3==1.26.5",
     "setuptools==41.4.0",
 ]
 
