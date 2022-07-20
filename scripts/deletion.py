@@ -2,7 +2,8 @@ from os.path import join, basename
 import time
 
 import json
-import backoff
+
+# import backoff
 import boto3
 import botocore
 from google.cloud import storage
@@ -234,9 +235,9 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     return deletion_log
 
 
-@backoff.on_exception(
-    wait_gen=backoff.expo, exception=Exception, **DEFAULT_BACKOFF_SETTINGS
-)
+# @backoff.on_exception(
+#     wait_gen=backoff.expo, exception=Exception, **DEFAULT_BACKOFF_SETTINGS
+# )
 def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     """
     remove object from gs
