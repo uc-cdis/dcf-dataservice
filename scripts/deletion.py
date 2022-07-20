@@ -3,14 +3,12 @@ import time
 
 import json
 
-# import backoff
 import boto3
 import botocore
 from google.cloud import storage
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
-from gen3.utils import DEFAULT_BACKOFF_SETTINGS
 
 from scripts.aws_replicate import object_exists
 from scripts.settings import INDEXD, PROJECT_ACL
