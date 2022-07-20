@@ -2,12 +2,14 @@ from os.path import join, basename
 import time
 
 import json
+import backoff
 import boto3
 import botocore
 from google.cloud import storage
 
 from cdislogging import get_logger
 from indexclient.client import IndexClient
+from gen3.utils import DEFAULT_BACKOFF_SETTINGS
 
 from scripts.aws_replicate import object_exists
 from scripts.settings import INDEXD, PROJECT_ACL
@@ -232,6 +234,9 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     return deletion_log
 
 
+@backoff.on_exception(
+    wait_gen=backoff.expo, exception=Exception, **DEFAULT_BACKOFF_SETTINGS
+)
 def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     """
     remove object from gs
