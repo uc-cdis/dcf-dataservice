@@ -16,3 +16,4 @@ setuptools==41.4.0
 cdislogging==1.1.1
 cdiserrors==1.0.0
 indexclient==2.1.0
+backoff>=2.1.2
