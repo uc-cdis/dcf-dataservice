@@ -86,6 +86,8 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
 
+    logger.info("DRY RUN: {}".format(dry_run))
+
     if manifest.startswith("s3://"):
         file_infos = get_fileinfo_list_from_s3_manifest(manifest)
     else:
