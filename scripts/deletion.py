@@ -214,6 +214,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
                 deletion_log.deleted = True
                 remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
                 deletion_log.indexdUpdated = True
+                logger.info("Deleted {} from AWS".format(f.get("id")))
             except Exception as e:
                 deletion_log.message = str(e)
                 logger.warning(
@@ -255,6 +256,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
         blob = bucket.blob(key)
         blob.delete()
         deletion_log.deleted = True
+        logger.info("Deleted {} from GS".format(f["id"]))
     except Exception as e:
         logger.warning("Can not delete {} from GS. Detail {}".format(f["id"], e))
         deletion_log.message = str(e)
