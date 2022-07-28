@@ -386,8 +386,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
             if not source_key:
                 logger.info(
-                    "object with id {} does not exist in source bucket {}. Stream from gdcapi".format(
-                        fi["id"], jobinfo.bucket
+                    "Object exists: {}. \nObject with id {} does not exist in source bucket {}. Stream from gdcapi".format(
+                        object_exists(s3, jobinfo.bucket, fi["id"]),
+                        fi["id"],
+                        jobinfo.bucket,
                     )
                 )
                 if not quick_test:
