@@ -370,9 +370,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         elif "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
             source_key = object_key
             object_key_object_exists = object_exists(s3, jobinfo.bucket, source_key)
-            logger.info(
-                f"Object exists: {object_key_object_exists}, using object_key {object_key}"
-            )
             if not object_key_object_exists:
                 try:
                     source_key = re.search(
@@ -383,18 +380,12 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                     url_key_object_exists = object_exists(
                         s3, jobinfo.bucket, source_key
                     )
-                    logger.info(
-                        f"Object exists: {url_key_object_exists}, using url_key {source_key}"
-                    )
                     if not url_key_object_exists:
                         source_key = None
                 except (AttributeError, TypeError):
                     source_key = None
 
                 id_key_object_exists = object_exists(s3, jobinfo.bucket, fi["id"])
-                logger.info(
-                    f"Object exists: {id_key_object_exists}, using url_key {fi['id']}"
-                )
                 if source_key is None and id_key_object_exists:
                     source_key = fi["id"]
 

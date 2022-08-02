@@ -2,12 +2,12 @@ from os.path import join, basename
 import time
 
 import json
-
 import boto3
 import botocore
+from retry import retry
 from google.cloud import storage
-
 from cdislogging import get_logger
+
 from indexclient.client import IndexClient
 
 from scripts.aws_replicate import object_exists
@@ -24,7 +24,7 @@ from scripts.indexd_utils import (
     remove_url_from_indexd_record,
     delete_record_from_indexd,
 )
-from scripts.errors import UserError
+from scripts.errors import UserError, APIError
 from scripts.settings import IGNORED_FILES
 
 logger = get_logger("DCFRedacts")
@@ -181,6 +181,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
                 logger.info(log["url"])
 
 
+@retry(APIError, tries=10, delay=2)
 def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     """
     remove object from s3
@@ -233,9 +234,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     return deletion_log
 
 
-# @backoff.on_exception(
-#     wait_gen=backoff.expo, exception=Exception, **DEFAULT_BACKOFF_SETTINGS
-# )
+@retry(APIError, tries=10, delay=2)
 def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     """
     remove object from gs
