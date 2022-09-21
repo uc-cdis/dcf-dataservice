@@ -6,11 +6,13 @@ INDEXD = {
     "auth": {"username": "test", "password": "test"},
 }
 
+SLACK_URL = ""
 GDC_TOKEN = ""
 try:
     with open("/secrets/dcf_dataservice_credentials.json", "r") as f:
         data = json.loads(f.read())
         INDEXD = data.get("INDEXD", {})
+        SLACK_URL = data.get("SLACK_URL", "")
         GDC_TOKEN = data.get("GDC_TOKEN", "")
 except Exception as e:
     print("Can not read dcf_dataservice_credentials.json file. Detail {}".format(e))
