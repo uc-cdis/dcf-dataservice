@@ -1,10 +1,12 @@
 import timeit
 import argparse
 import json
+import requests
 
 import scripts.aws_replicate as aws_replicate
 import scripts.google_replicate as google_replicate
 import scripts.validate as validate
+from scripts.settings import SLACK_URL
 from scripts.deletion import delete_objects_from_cloud_resources
 
 
@@ -57,8 +59,13 @@ def parse_arguments():
 
 if __name__ == "__main__":
     start = timeit.default_timer()
-
     args = parse_arguments()
+
+    try:
+        req = requests.post(SLACK_URL, json={"text": f"Starting {args.action}"})
+    except requests.exceptions.RequestException as e:
+        raise SystemExit(e)
+
     if args.action == "aws_replicate" or args.action == "indexing":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
         source_bucket = args.bucket if job_name == "copying" else None
@@ -93,3 +100,8 @@ if __name__ == "__main__":
 
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))
+
+    try:
+        req = requests.post(SLACK_URL, json={"text": f"Completed {args.action}"})
+    except requests.exceptions.RequestException as e:
+        raise SystemExit(e)
