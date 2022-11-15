@@ -158,6 +158,7 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             continue
 
         # REMINDER: if changing things here, change in get_reversed_acl_bucket_name fnc and scripts/utils:get_aws_bucket_name as well.
+        # Change way this is hardcoded
         for label in ["2-open", "controlled"]:
             if (
                 bucket_info["aws_bucket_prefix"] in POSTFIX_1_EXCEPTION
