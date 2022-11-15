@@ -9,6 +9,10 @@ import scripts.validate as validate
 from scripts.settings import SLACK_URL
 from scripts.deletion import delete_objects_from_cloud_resources
 
+from cdislogging import get_logger
+
+logger = get_logger("DCFReplicate")
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -64,7 +68,7 @@ if __name__ == "__main__":
     try:
         req = requests.post(SLACK_URL, json={"text": f"Starting {args.action}"})
     except requests.exceptions.RequestException as e:
-        raise SystemExit(e)
+        logger.error("The slack hook has an encountered an error: Detail {}".format(e))
 
     if args.action == "aws_replicate" or args.action == "indexing":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
@@ -104,4 +108,4 @@ if __name__ == "__main__":
     try:
         req = requests.post(SLACK_URL, json={"text": f"Completed {args.action}"})
     except requests.exceptions.RequestException as e:
-        raise SystemExit(e)
+        logger.error("The slack hook has an encountered an error: Detail {}".format(e))
