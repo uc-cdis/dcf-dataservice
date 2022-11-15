@@ -66,8 +66,10 @@ if __name__ == "__main__":
     webhook = WebhookClient(SLACK_URL)
 
     try:
-        response = webhook.send(text=f"Starting {args.action}")
-    except Exception as e:
+        slack_call = webhook.send(text=f"Starting {args.action}")
+        assert slack_call.status_code == 200
+        assert slack_call.body == "ok"
+    except AssertionError as e:
         logger.error("The slack hook has an encountered an error: Detail {}".format(e))
 
     if args.action == "aws_replicate" or args.action == "indexing":
@@ -106,6 +108,8 @@ if __name__ == "__main__":
     print("Total time: {} seconds".format(end - start))
 
     try:
-        response = webhook.send(text=f"Completed {args.action}")
-    except Exception as e:
+        slack_call = webhook.send(text=f"Completed {args.action}")
+        assert slack_call.status_code == 200
+        assert slack_call.body == "ok"
+    except AssertionError as e:
         logger.error("The slack hook has an encountered an error: Detail {}".format(e))
