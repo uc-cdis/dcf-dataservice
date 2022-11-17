@@ -72,6 +72,64 @@ def get_google_bucket_name(fi, PROJECT_ACL):
     )
 
 
+def flip_bucket_accounts(aws_bucket_name):
+    """
+    flip bucket name from prod account to open account
+
+    ex:
+        aws_bucket_name: bucket-open
+        return: bucket-2-open
+
+        aws_bucket_name: bucket1-2-controlled
+        return: bucket1-controlled
+    """
+
+    if "-2-controlled" in aws_bucket_name:
+        return aws_bucket_name[:-12] + "controlled"
+    elif "-controlled" in aws_bucket_name:
+        return aws_bucket_name[:-10] + "2-controlled"
+    elif "-2-open" in aws_bucket_name:
+        return aws_bucket_name[:-6] + "open"
+    elif "-open" in aws_bucket_name:
+        return aws_bucket_name[:-4] + "2-open"
+
+
+def get_aws_reversed_acl_bucket_name(target_bucket):
+    """
+    Get reversed acl bucket name
+    """
+    if "target" in target_bucket:
+        if "open" in target_bucket:
+            return "target-controlled"
+        else:
+            return "gdc-target-phs000218-2-open"
+
+    if "tcga" in target_bucket:
+        if "open" in target_bucket:
+            return target_bucket[:-4] + "controlled"
+        else:
+            return target_bucket[:-10] + "open"
+
+    if "controlled" in target_bucket:
+        if "-2-controlled" in target_bucket:
+            target_bucket = target_bucket.replace("-2-controlled", "")
+        else:
+            target_bucket = target_bucket.replace("-controlled", "")
+        if target_bucket in POSTFIX_1_EXCEPTION:
+            return target_bucket + "-open"
+        else:
+            return target_bucket + "-2-open"
+    elif "open" in target_bucket:
+        if "-2-open" in target_bucket:
+            target_bucket = target_bucket.replace("-2-open", "")
+        else:
+            target_bucket = target_bucket.replace("-open", "")
+        if target_bucket in POSTFIX_2_EXCEPTION:
+            return target_bucket + "-2-controlled"
+        else:
+            return target_bucket + "-controlled"
+
+
 def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     """
     Get the manifest from s3
@@ -356,25 +414,3 @@ def get_indexd_records():
         results[doc.did] = doc.urls
 
     return results
-
-
-def flip_bucket_accounts(aws_bucket_name):
-    """
-    flip bucket name from prod account to open account
-
-    ex:
-        aws_bucket_name: bucket-open
-        return: bucket-2-open
-
-        aws_bucket_name: bucket1-2-controlled
-        return: bucket1-controlled
-    """
-
-    if "-2-controlled" in aws_bucket_name:
-        return aws_bucket_name[:-12] + "controlled"
-    elif "-2-open" in aws_bucket_name:
-        return aws_bucket_name[:-6] + "open"
-    elif "-controlled" in aws_bucket_name:
-        return aws_bucket_name[:-10] + "2-controlled"
-    elif "-open" in aws_bucket_name:
-        return aws_bucket_name[:-4] + "2-open"
