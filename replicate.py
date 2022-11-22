@@ -1,13 +1,16 @@
 import timeit
 import argparse
 import json
-import requests
 
 import scripts.aws_replicate as aws_replicate
 import scripts.google_replicate as google_replicate
 import scripts.validate as validate
 from scripts.settings import SLACK_URL
 from scripts.deletion import delete_objects_from_cloud_resources
+from slack_sdk.webhook import WebhookClient
+from cdislogging import get_logger
+
+logger = get_logger("DCFReplicate")
 
 
 def parse_arguments():
@@ -60,11 +63,13 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
     args = parse_arguments()
+    webhook = WebhookClient(SLACK_URL)
 
     try:
-        req = requests.post(SLACK_URL, json={"text": f"Starting {args.action}"})
-    except requests.exceptions.RequestException as e:
-        raise SystemExit(e)
+        slack_call = webhook.send(text=f"Starting {args.action}")
+        assert slack_call.status_code == 200
+    except AssertionError as e:
+        logger.error("The slack hook has encountered an error: Detail {}".format(e))
 
     if args.action == "aws_replicate" or args.action == "indexing":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
@@ -102,6 +107,7 @@ if __name__ == "__main__":
     print("Total time: {} seconds".format(end - start))
 
     try:
-        req = requests.post(SLACK_URL, json={"text": f"Completed {args.action}"})
-    except requests.exceptions.RequestException as e:
-        raise SystemExit(e)
+        slack_call = webhook.send(text=f"Completed {args.action}")
+        assert slack_call.status_code == 200
+    except AssertionError as e:
+        logger.error("The slack hook has encountered an error: Detail {}".format(e))
