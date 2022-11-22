@@ -115,13 +115,12 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             )
             aws_target_bucket = None
 
+        # only the _remove_object_from_s3 function has a dry run option that will not delete object when in the func
+        if aws_target_bucket:
+            aws_deletion_logs.append(
+                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
+            )
         if not dry_run:
-            if aws_target_bucket:
-                aws_deletion_logs.append(
-                    _remove_object_from_s3(
-                        s3, indexclient, fi, aws_target_bucket, dry_run
-                    )
-                )
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
             except UserError as e:
