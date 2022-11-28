@@ -475,75 +475,61 @@ def test_update_url_with_new_url2(reset_records):
     ]
 
 
-def test_get_reversed_acl_bucket_name():
+def test_get_aws_reversed_acl_bucket_name():
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
-            "gdc-target-phs000218-2-open"
-        )
+        utils.get_aws_reversed_acl_bucket_name("gdc-target-phs000218-2-open")
         == "target-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("target-controlled")
+        utils.get_aws_reversed_acl_bucket_name("target-controlled")
         == "gdc-target-phs000218-2-open"
     )
+    assert utils.get_aws_reversed_acl_bucket_name("tcga-2-open") == "tcga-2-controlled"
+    assert utils.get_aws_reversed_acl_bucket_name("tcga-2-controlled") == "tcga-2-open"
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-2-open")
-        == "tcga-2-controlled"
-    )
-    assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("tcga-2-controlled")
-        == "tcga-2-open"
-    )
-    assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-controlled")
+        utils.get_aws_reversed_acl_bucket_name("gdc-ccle-controlled")
         == "gdc-ccle-2-open"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-ccle-2-open")
+        utils.get_aws_reversed_acl_bucket_name("gdc-ccle-2-open")
         == "gdc-ccle-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-cgci-phs000235-2-open")
+        utils.get_aws_reversed_acl_bucket_name("gdc-cgci-phs000235-2-open")
         == "gdc-cgci-phs000235-2-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
-            "gdc-cgci-phs000235-2-controlled"
-        )
+        utils.get_aws_reversed_acl_bucket_name("gdc-cgci-phs000235-2-controlled")
         == "gdc-cgci-phs000235-2-open"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
+        utils.get_aws_reversed_acl_bucket_name(
             "gdc-beataml1-cohort-phs001657-2-controlled"
         )
         == "gdc-beataml1-cohort-phs001657-2-open"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
-            "gdc-beataml1-cohort-phs001657-2-open"
-        )
+        utils.get_aws_reversed_acl_bucket_name("gdc-beataml1-cohort-phs001657-2-open")
         == "gdc-beataml1-cohort-phs001657-2-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
+        utils.get_aws_reversed_acl_bucket_name(
             "gdc-organoid-pancreatic-phs001611-2-controlled"
         )
         == "gdc-organoid-pancreatic-phs001611-2-open"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
+        utils.get_aws_reversed_acl_bucket_name(
             "gdc-organoid-pancreatic-phs001611-2-open"
         )
         == "gdc-organoid-pancreatic-phs001611-2-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name("gdc-cmi-mbc-phs001709-open")
+        utils.get_aws_reversed_acl_bucket_name("gdc-cmi-mbc-phs001709-open")
         == "gdc-cmi-mbc-phs001709-controlled"
     )
     assert (
-        scripts.aws_replicate.get_reversed_acl_bucket_name(
-            "gdc-cmi-mbc-phs001709-controlled"
-        )
+        utils.get_aws_reversed_acl_bucket_name("gdc-cmi-mbc-phs001709-controlled")
         == "gdc-cmi-mbc-phs001709-open"
     )
 

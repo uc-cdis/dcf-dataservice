@@ -157,7 +157,8 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
             target_bucket_names.add("target-controlled")
             continue
 
-        # REMINDER: if changing things here, change in get_reversed_acl_bucket_name fnc and scripts/utils:get_aws_bucket_name as well.
+        # REMINDER: if changing things here, change in get_aws_reversed_acl_bucket_name fnc and scripts/utils:get_aws_bucket_name as well.
+        # Change way this is hardcoded
         for label in ["2-open", "controlled"]:
             if (
                 bucket_info["aws_bucket_prefix"] in POSTFIX_1_EXCEPTION
@@ -350,7 +351,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Move object to the right bucket")
             cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
-                get_reversed_acl_bucket_name(target_bucket),
+                utils.get_aws_reversed_acl_bucket_name(target_bucket),
                 object_key,
                 target_bucket,
                 object_key,
@@ -762,49 +763,15 @@ def validate_uploaded_data(
     return True
 
 
-def get_reversed_acl_bucket_name(target_bucket):
-    """
-    Get reversed acl bucket name
-    """
-    if "target" in target_bucket:
-        if "open" in target_bucket:
-            return "target-controlled"
-        else:
-            return "gdc-target-phs000218-2-open"
-
-    if "tcga" in target_bucket:
-        if "open" in target_bucket:
-            return target_bucket[:-4] + "controlled"
-        else:
-            return target_bucket[:-10] + "open"
-
-    if "controlled" in target_bucket:
-        if "-2-controlled" in target_bucket:
-            target_bucket = target_bucket.replace("-2-controlled", "")
-        else:
-            target_bucket = target_bucket.replace("-controlled", "")
-        if target_bucket in POSTFIX_1_EXCEPTION:
-            return target_bucket + "-open"
-        else:
-            return target_bucket + "-2-open"
-    elif "open" in target_bucket:
-        if "-2-open" in target_bucket:
-            target_bucket = target_bucket.replace("-2-open", "")
-        else:
-            target_bucket = target_bucket.replace("-open", "")
-        if target_bucket in POSTFIX_2_EXCEPTION:
-            return target_bucket + "-2-controlled"
-        else:
-            return target_bucket + "-controlled"
-
-
 def is_changed_acl_object(fi, copied_objects, target_bucket):
     """
     check if the object has acl changed or not
     """
 
     object_path = "{}/{}/{}".format(
-        get_reversed_acl_bucket_name(target_bucket), fi.get("id"), fi.get("file_name")
+        utils.get_aws_reversed_acl_bucket_name(target_bucket),
+        fi.get("id"),
+        fi.get("file_name"),
     )
     if object_path in copied_objects:
         return True
