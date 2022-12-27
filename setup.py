@@ -18,7 +18,7 @@ REQUIRED_PACKAGES = [
     "pyparsing>=2.4.2",
     "apache-beam[gcp]==2.*",
     "urllib3==1.26.5",
-    "setuptools==41.4.0",
+    "setuptools==65.5.1",
 ]
 
 PACKAGE_NAME = "scripts"
