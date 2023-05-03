@@ -529,3 +529,4 @@ class JobInfo(object):
             INDEXD["version"],
             (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
         )
+        print("Start")
