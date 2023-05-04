@@ -262,17 +262,20 @@ def prepare_txt_manifest_google_dataflow(
 
     with open(local_manifest_txt_file, "w") as fw:
         fw.write("id\tfile_name\tsize\tmd5\tacl\tproject_id")
-        for fi in copying_files:
-            fw.write(
-                "\n{}\t{}\t{}\t{}\t{}\t{}".format(
-                    fi["id"],
-                    fi["file_name"].replace(" ", "_"),
-                    fi["size"],
-                    fi["md5"],
-                    fi["acl"].replace(" ", ""),
-                    fi["project_id"],
+        try:
+            for fi in copying_files:
+                fw.write(
+                    "\n{}\t{}\t{}\t{}\t{}\t{}".format(
+                        fi["id"],
+                        fi["file_name"].replace(" ", "_"),
+                        fi["size"],
+                        fi["md5"],
+                        fi["acl"].replace(" ", ""),
+                        fi["project_id"],
+                    )
                 )
-            )
+        except Exception as e:
+            print(e, fi)
 
     import subprocess
 
