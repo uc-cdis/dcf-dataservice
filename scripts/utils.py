@@ -16,8 +16,6 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
-        print(fi)
-        print(PROJECT_ACL)
         raise UserError(
             "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
                 fi.get("project_id"), PROJECT_ACL.keys()
@@ -168,9 +166,6 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem
     with open(manifest_file, "rt") as csvfile:
         csvReader = csv.DictReader(csvfile, delimiter=dem)
         for row in csvReader:
-            if row["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc":
-                print("HEEERRREEEEEEEEEEEE")
-                print(row)
             row["size"] = int(row["size"])
             files.append(row)
 

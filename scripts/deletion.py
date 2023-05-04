@@ -106,7 +106,6 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         num = num + 1
         logger.info("Start to process file {}".format(num))
         try:
-            print(PROJECT_ACL)
             aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
         except UserError as e:
             aws_deletion_logs.append(
