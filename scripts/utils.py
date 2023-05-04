@@ -166,6 +166,9 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem
     with open(manifest_file, "rt") as csvfile:
         csvReader = csv.DictReader(csvfile, delimiter=dem)
         for row in csvReader:
+            if row["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc":
+                print("get_fileinfo_list_from_csv_manifest")
+                print(row)
             row["size"] = int(row["size"])
             files.append(row)
 
@@ -243,6 +246,10 @@ def prepare_txt_manifest_google_dataflow(
     copying_files = get_fileinfo_list_from_gs_manifest(gs_manifest_file)
     updated_copying_files = []
     for fi in copying_files:
+        if fi["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc":
+            print("prepare_txt_manifest_google_dataflow")
+            print(fi)
+
         gs_bucket = get_google_bucket_name(fi, project_acl)
         if fi["id"] in ignored_dict:
             object_path = "gs://{}/{}".format(
