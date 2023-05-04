@@ -16,6 +16,8 @@ def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
     except KeyError:
+        print(fi)
+        print(PROJECT_ACL)
         raise UserError(
             "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
                 fi.get("project_id"), PROJECT_ACL.keys()
