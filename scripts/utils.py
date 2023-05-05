@@ -167,7 +167,10 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem
     with open(manifest_file, "rt") as csvfile:
         csvReader = csv.DictReader(csvfile, delimiter=dem)
         for row in csvReader:
-            if row["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc":
+            if (
+                row["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc"
+                or row["id"] == "bba5223e-8d99-4923-9c55-216789c17c96"
+            ):
                 print("get_fileinfo_list_from_csv_manifest")
                 print(copy.deepcopy(row))
             row["size"] = int(row["size"])
