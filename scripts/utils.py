@@ -1,4 +1,3 @@
-import copy
 import os
 import boto3
 import csv
@@ -153,7 +152,8 @@ def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
     """
     import subprocess
 
-    cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
+    cmd = f"gsutil "
+    cmd = f"gsutil cp {url_manifest} ./tmp.tsv"
     subprocess.Popen(cmd, shell=True).wait()
 
     return get_fileinfo_list_from_csv_manifest("./tmp.tsv", start, end)
@@ -167,12 +167,9 @@ def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem
     with open(manifest_file, "rt") as csvfile:
         csvReader = csv.DictReader(csvfile, delimiter=dem)
         for row in csvReader:
-            if (
-                row["id"] == "798e4669-4ca3-4af1-b713-be2b1f30e4dc"
-                or row["id"] == "bba5223e-8d99-4923-9c55-216789c17c96"
-            ):
+            if row["acl"] == None:
                 print("get_fileinfo_list_from_csv_manifest")
-                print(copy.deepcopy(row))
+                print(row)
             row["size"] = int(row["size"])
             files.append(row)
 
