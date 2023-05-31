@@ -1,4 +1,6 @@
 import json
+import math
+
 import boto3
 import botocore
 from cdislogging import get_logger
@@ -17,6 +19,15 @@ global logger
 def resume_logger(filename=None):
     global logger
     logger = get_logger("Validation", filename)
+
+
+def log_file_progress(manifest_idx, current_file, total_files):
+    progress = (current_file / total_files) * 100
+    progress = math.floor(progress / 10) * 10  # Round down to nearest 10
+    if progress % 10 == 0:
+        logger.info(
+            f"Manifest #: {manifest_idx} - Processing {current_file}/{total_files} files ({progress}% complete)"
+        )
 
 
 def run(global_config):
@@ -115,7 +126,7 @@ def run(global_config):
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         fail_list = []
-        for fi in files:
+        for i, fi in enumerate(files):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
@@ -181,6 +192,7 @@ def run(global_config):
                             fi["id"], fi["gs_url"], fi["indexd_url"]
                         )
                     )
+            log_file_progress(idx, i, len(files))
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
