@@ -7,7 +7,8 @@ import botocore
 from urllib.parse import urlparse
 
 from cdislogging import get_logger
-from scripts import file_utils
+
+# from scripts import file_utils
 
 from scripts import utils
 from scripts.errors import UserError
