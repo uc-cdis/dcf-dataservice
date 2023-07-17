@@ -1,10 +1,11 @@
 import json
 import boto3
 import botocore
-from cdislogging import get_logger
+
 from urllib.parse import urlparse
 
-from indexclient.client import IndexClient
+from cdislogging import get_logger
+from scripts import file_utils
 
 from scripts import utils
 from scripts.errors import UserError
@@ -127,6 +128,7 @@ def run(global_config):
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
             # validate aws
+            # TO NOTE: doing extra checks here because of logic of open prod accounts for buckets
             aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
             object_path_2 = "{}/{}/{}".format(
@@ -291,12 +293,14 @@ def run(global_config):
     return pass_validation
 
 
-def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
+def _pass_preliminary_check(manifest_files: str, FORCE_CREATE_MANIFEST=False):
     """
     Check if manifests are in the manifest bucket
-
-    'FORCE_CREATE_MANIFEST': True, False command arg parameter
-    'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
+    Args:
+        manifest_files(str):
+            Expression to match (for example: >5, ==3, ==this_guid)
+    Returns:
+        None
     """
 
     session = boto3.session.Session()
