@@ -324,6 +324,7 @@ def _pass_preliminary_check(manifest_files: str, FORCE_CREATE_MANIFEST=False):
             parsed = urlparse(url)
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
+            print(bucket_name)
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
