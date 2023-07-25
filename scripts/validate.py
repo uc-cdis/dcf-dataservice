@@ -83,7 +83,7 @@ def run(global_config):
             "number of output manifests and number of manifest_files are not the same"
         )
 
-    if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
+    if not _pass_preliminary_check(manifest_files, FORCE_CREATE_MANIFEST):
         raise UserError("The input does not pass the preliminary check")
 
     logger.info("scan all copied objects")
@@ -321,6 +321,7 @@ def _pass_preliminary_check(manifest_files: str, FORCE_CREATE_MANIFEST=False):
 
     for url in manifest_files:
         try:
+            logger.info(f"{manifest_files}, {url}")
             parsed = urlparse(url)
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
