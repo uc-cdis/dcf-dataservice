@@ -120,6 +120,45 @@ def file_to_list(file_name: str, has_headers=False):
     return records
 
 
+def file_to_listdict(file_name: str, has_headers=False):
+    """
+    Collect records from DSV file
+    Args:
+        file_name(str):
+            Filename or file path
+        has_headers(bool):
+            True when headers present
+    Returns:
+        List of lists (rows) from input file
+    """
+
+    logging.info(f"Collecting records from {file_name}...")
+
+    delimiter = _delimiter(file_name)
+    records = []
+
+    if has_headers:
+        if delimiter == "txt":
+            file = open(file_name, "r")
+            lines = file.readlines()
+
+            lines.pop(0)
+            for line in lines:
+                records.append(line)
+        else:
+            with open(file_name) as process_file:
+                file_reader = csv.reader(process_file, delimiter=delimiter)
+                headers = next(file_reader)
+                for row in file_reader:
+                    records.append(dict(zip(headers, row)))
+
+        return records
+    else:
+        raise Exception(
+            "Cannot create dict from file with no headers, headers must be present to assign values to keys"
+        )
+
+
 def move_columns(
     reordered_headers: list,
     file_name: str,

@@ -1,75 +1,6 @@
+import os
 import file_utils
 import cloud_utils
-
-
-def local_list(resource_path: str):
-    """
-    Return local folder list
-    resource_path: local path resource is located
-    """
-    return []
-
-
-def local_file(resource_path: str):
-    """
-    Return local file
-    resource_path: local path resource is located
-    """
-
-
-def _get_local(
-    location_type: str,
-    resource_path: str,
-):
-    """
-    Access resource of local path
-    location_type: local_folder, local_file
-    resource_path: local path resource is located
-    """
-    if location_type == "list":
-        return local_list(resource_path)
-    elif location_type == "object":
-        return local_file(resource_path)
-
-
-def get_resource_list(location_type: str, path: str, session):
-    """
-    Retrieve resources from location
-    location_type: cloud, local
-    path: path to resource
-    session: req for cloud access
-    """
-    location_type = location_type.lower()
-    if location_type == "cloud":
-        return _get_cloud("list", path, session)
-    elif location_type == "local":
-        return _get_local("list", path)
-    else:
-        raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
-        )
-
-
-def get_resource_object(location_type: str, path: str, output_path: str, session):
-    """
-    Retrieve resources from location
-    location_type: cloud, local
-    path: path to resource
-    output_path: path to output resource to
-    session: req for cloud access
-    """
-    location_type = location_type.lower()
-    if location_type == "cloud":
-        path = _get_cloud("object", path, session, output_path)
-    elif location_type == "local":
-        path = _get_local("object", path)
-    else:
-        raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
-        )
-
-    #  TODO: make sure proper error handling in file_utils
-    return file_utils.file_to_list(path)
 
 
 def _get_cloud(location_type: str, cloud_path: str, session, output_path: str):
@@ -103,5 +34,112 @@ def _get_cloud(location_type: str, cloud_path: str, session, output_path: str):
         )
 
 
-def move_resource(k):
-    """"""
+def get_resource_list(location_type: str, path: str, session):
+    """
+    Retrieve resources from location
+    location_type: cloud, local
+    path: path to resource
+    session: req for cloud access
+    """
+    location_type = location_type.lower()
+    if location_type == "cloud":
+        return _get_cloud("list", path, session)
+    elif location_type == "local":
+        if os.path.isdir(path):
+            return os.listdir(path)
+        else:
+            raise ValueError(
+                f"Path {path} is not a directory, cannot list objects inside directory"
+            )
+    else:
+        raise ValueError(
+            f"Location, {location_type}, is not supported, only cloud and local accepted."
+        )
+
+
+def get_resource_object(location_type: str, path: str, output_path: str, session):
+    """
+    Retrieve resources from location
+    location_type: cloud, local
+    path: path to resource
+    output_path: path to output resource to
+    session: req for cloud access
+    """
+    location_type = location_type.lower()
+    if location_type == "cloud":
+        object_path = _get_cloud("object", path, session, output_path)
+    elif location_type == "local":
+        object_path = path
+    else:
+        raise ValueError(
+            f"Location, {location_type}, is not supported, only cloud and local accepted."
+        )
+
+    #  TODO: make sure proper error handling in file_utils
+    return file_utils.file_to_listdict(object_path)
+
+
+def move_resource(location_type: str, src_path: str, dest_path: str, session):
+    """
+    Retrieve resources from location
+    location_type: cloud, local
+    path: path to resource
+    output_path: path to output resource to
+    session: req for cloud access
+    """
+    location_type = location_type.lower()
+    if location_type == "cloud":
+        cloud_utils.move_object_cloud(src_path, dest_path, session)
+
+    elif location_type == "local":
+        # move resource
+        ""
+    else:
+        raise ValueError(
+            f"Location, {location_type}, is not supported, only cloud and local accepted."
+        )
+
+
+def remove_resources(location_type: str, path: str, session):
+    """
+    Retrieve resources from location
+    location_type: cloud, local
+    path: path to resource
+    session: req for cloud access
+    """
+    location_type = location_type.lower()
+    if location_type == "cloud":
+        cloud_utils.remove_object_cloud(path, session)
+    elif location_type == "local":
+        # remove local
+        ""
+    else:
+        raise ValueError(
+            f"Location, {location_type}, is not supported, only cloud and local accepted."
+        )
+
+
+def proposed_urls(manifest_content: list):
+    """
+    Collect urls from manifest and return nested dict of urls
+    manifest_content: list of dictionaries
+    """
+    urls = {}
+    for record in manifest_content:
+        urls[record["id"]] = {}
+        for url in record["indexd_url"]:
+            if "gs://" in url:
+                src = "gs"
+            elif "s3://" in url:
+                src = "s3"
+            elif "http" in url:
+                src = "indexd"
+            urls[record["id"]][src] = url
+
+    return urls
+
+
+def check_subset_in_list(subset_list, main_list):
+    """
+    Returns two lists, items found and not found in list
+    """

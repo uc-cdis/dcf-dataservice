@@ -6,8 +6,8 @@ from cdislogging import get_logger
 
 import file_utils
 import cloud_utils
-import dcf_utils
 import general_utils
+import dcf_utils
 
 
 global logger
@@ -22,10 +22,10 @@ SLACK_URL = None
 try:
     with open("/dataservice_settings.json", "r") as f:
         data = json.loads(f.read())
-        S3_AUTH_SETTINGS = data.get("S3_AUTH_SETTINGS", {})
-        GS_AUTH_SETTINGS = data.get("GS_AUTH_SETTINGS", {})
-        MANIFESTS_SETTINGS = data.get("MANIFESTS_SETTINGS", {})
-        LOGS_SETTINGS = data.get("LOGS_SETTINGS", {})
+        S3_AUTH_SETTINGS = data.get("S3_AUTH", {})
+        GS_AUTH_SETTINGS = data.get("GS_AUTH", {})
+        MANIFESTS_SETTINGS = data.get("MANIFESTS", {})
+        LOGS_SETTINGS = data.get("LOGS", {})
         SLACK_URL = data.get("SLACK_URL", None)
 except Exception as e:
     raise (f"Problem reading dataservice_settings.json file.\n{e}")
@@ -153,22 +153,21 @@ def proposed_manifest(waiting_location: dict):
                         "indexd_url",
                     ]
                 ]
-                headers = content.pop(0)
                 for manifest_record in content:
                     dict_manifest_record = {
-                        "id": manifest_record[0],
-                        "file_name": manifest_record[1],
-                        "md5": manifest_record[2],
-                        "size": manifest_record[3],
-                        "state": manifest_record[4],
-                        "project_id": manifest_record[5],
-                        "baseid": manifest_record[6],
-                        "version": manifest_record[7],
-                        "release": manifest_record[8],
-                        "acl": manifest_record[9],
-                        "type": manifest_record[10],
-                        "deletereason": manifest_record[11],
-                        "url": manifest_record[12],
+                        "id": manifest_record.get("id", None),
+                        "file_name": manifest_record.get("file_name", None),
+                        "md5": manifest_record.get("md5", None),
+                        "size": manifest_record.get("size", None),
+                        "state": manifest_record.get("state", None),
+                        "project_id": manifest_record.get("project_id", None),
+                        "baseid": manifest_record.get("baseid", None),
+                        "version": manifest_record.get("version", None),
+                        "release": manifest_record.get("release", None),
+                        "acl": manifest_record.get("acl", None),
+                        "type": manifest_record.get("type", None),
+                        "deletereason": manifest_record.get("deletereason", None),
+                        "url": manifest_record.get("url", None),
                     }
 
                     records.append(create_output_record(dict_manifest_record))
@@ -240,81 +239,119 @@ def check_objects_cloud(
     manifest_list_len = len(manifest_list)
     manifest_list_pos = 0
 
-    done_list = general_utils.get_resource_list(
-        validated_location_type, validated_location_path, validated_session
-    )
-
     failed_manifests = 0
 
+    cloud_session = {
+        "gs": cloud_utils.start_session("gs", AUTH_SETTINGS["gs"]),
+        "s3": cloud_utils.start_session("s3", AUTH_SETTINGS["s3"]),
+    }
+
     for manifest in manifest_list:
-        if manifest not in done_list:
-            try:
-                manifest_list_pos += 1
-                logger.info(
-                    f"Validating cloud for manifest {manifest_list_pos}/{manifest_list_len}"
+        try:
+            manifest_list_pos += 1
+            logger.info(
+                f"Validating cloud for manifest {manifest_list_pos}/{manifest_list_len}"
+            )
+
+            waiting_file_path = f"{waiting_location_path}/{manifest}"
+            if waiting_location_type == "cloud":
+                file_name = cloud_utils.parse_cloud_path(waiting_file_path).get(
+                    "file_name"
                 )
+            else:
+                file_name = manifest
 
-                if waiting_location_type == "cloud":
-                    file_name = cloud_utils.parse_cloud_path(
-                        f"{waiting_location_path}/{manifest}"
-                    ).get("file_name")
-                else:
-                    file_name = manifest
+            output_path = f"{cwd}/{file_name}"
+            content = general_utils.get_resource_object(
+                waiting_location_type,
+                waiting_file_path,
+                output_path,
+                waiting_session,
+            )
 
-                output_path = f"{cwd}/{file_name}"
-                content = general_utils.get_resource_object(
-                    waiting_location_type,
-                    f"{waiting_location_path}/{manifest}",
-                    output_path,
-                    waiting_session,
+            proposed_urls = general_utils.proposed_urls(content)
+            proposed_list = list(proposed_urls.values())
+
+            proposed_bucket_list = []
+            for url_dict in proposed_list:
+                gs_bucket = cloud_utils.parse_cloud_path(url_dict["gs"]).get("bucket")
+                s3_bucket = cloud_utils.parse_cloud_path(url_dict["s3"]).get("bucket")
+                proposed_bucket_list.append(gs_bucket)
+                proposed_bucket_list.append(s3_bucket)
+
+            unique_buckets = set(proposed_bucket_list)
+            bucket_list = list(unique_buckets)
+
+            bucket_urls = _list_bucket_urls(bucket_list, cloud_session)
+
+            validated_subset, failed_subset = general_utils.check_subset_in_list(
+                proposed_bucket_list, bucket_urls
+            )
+
+            validated_records = ""
+            failed_records = ""
+
+            if validated_location_type == "cloud":
+                validated_file_path = (
+                    f"{cwd}/{file_name[:-4]}_validated{file_name[-4:]}"
                 )
-                proposed_urls = _list_proposed_urls(content)
-                bucket_urls = _list_bucket_urls(content)
-                validated_records, failed_records = _check_urls_in_list(
-                    proposed_urls, bucket_urls
+                file_utils.write(validated_records, validated_file_path)
+                cloud_utils.upload_cloud(
+                    validated_location_path, validated_file_path, validated_session
                 )
-
-                if validated_location_type == "cloud":
-                    validated_file_path = (
-                        f"{cwd}/{file_name[:-4]}_validated{file_name[-4:]}"
-                    )
-                    file_utils.write(validated_records, validated_file_path)
-                    cloud_utils.upload_cloud(
-                        validated_location_path, validated_file_path, validated_session
-                    )
-                else:
-                    validated_file_path = f"{validated_location_path}/{file_name[:-4]}_validated{file_name[-4:]}"
-                    file_utils.write(validated_records, validated_file_path)
-
-                if failed_location_type == "cloud":
-                    failed_file_path = f"{cwd}/{file_name[:-4]}_failed{file_name[-4:]}"
-                    file_utils.write(failed_records, failed_file_path)
-                    cloud_utils.upload_cloud(
-                        failed_location_path, failed_file_path, failed_session
-                    )
-                else:
-                    failed_file_path = f"{failed_location_path}/{file_name[:-4]}_failed{file_name[-4:]}"
-                    file_utils.write(failed_records, failed_file_path)
-
-            except Exception as e:
-                failed_manifests += 1
-                logger.error(
-                    f"Manifest, {file_name}, failed during the validation of objects in clouds\n{e}"
+                general_utils.remove_resources(
+                    "cloud", waiting_file_path, waiting_session
                 )
+            else:
+                validated_file_path = f"{validated_location_path}/{file_name[:-4]}_validated{file_name[-4:]}"
+                file_utils.write(validated_records, validated_file_path)
+                general_utils.remove_resources("local", waiting_file_path)
+
+            if failed_location_type == "cloud":
+                failed_file_path = f"{cwd}/{file_name[:-4]}_failed{file_name[-4:]}"
+                file_utils.write(failed_records, failed_file_path)
+                cloud_utils.upload_cloud(
+                    failed_location_path, failed_file_path, failed_session
+                )
+                general_utils.remove_resources(
+                    "cloud", waiting_file_path, waiting_session
+                )
+            else:
+                failed_file_path = (
+                    f"{failed_location_path}/{file_name[:-4]}_failed{file_name[-4:]}"
+                )
+                file_utils.write(failed_records, failed_file_path)
+                general_utils.remove_resources("local", waiting_file_path)
+
+        except Exception as e:
+            failed_manifests += 1
+            logger.error(
+                f"Manifest, {file_name}, failed during the validation of objects in clouds\n{e}"
+            )
 
     return failed_manifests
 
 
-def _list_proposed_urls():
-    "separate aws gs"
-
-
-def _list_bucket_urls():
-    ""
-
-
-def _check_urls_in_list():
-    ""
+def _list_bucket_urls(bucket_list: list, cloud_session):
+    """
+    Returns list of urls in bucket
+    """
+    bucket_urls = []
+    for bucket in bucket_list:
+        if "gs" in bucket:
+            bucket_contents = general_utils.get_resource_list(
+                "cloud", bucket, cloud_session["gs"]
+            )
+        elif "s3" in bucket:
+            bucket_contents = general_utils.get_resource_list(
+                "cloud", bucket, cloud_session["s3"]
+            )
+        else:
+            raise ValueError(
+                f"{bucket} does not reside in supported cloud environment or path is not properly formatted"
+            )
+        bucket_urls += bucket_contents
+    return bucket_urls
 
 
 # Check objects in IndexD
@@ -371,81 +408,88 @@ def check_objects_indexd(
     manifest_list_len = len(manifest_list)
     manifest_list_pos = 0
 
-    done_list = general_utils.get_resource_list(
-        validated_location_type, validated_location_path, validated_session
-    )
-
     failed_manifests = 0
 
+    cloud_session = {
+        "gs": cloud_utils.start_session("gs", AUTH_SETTINGS["gs"]),
+        "s3": cloud_utils.start_session("s3", AUTH_SETTINGS["s3"]),
+    }
+
     for manifest in manifest_list:
-        if manifest not in done_list:
-            try:
-                manifest_list_pos += 1
-                logger.info(
-                    f"Validating cloud for manifest {manifest_list_pos}/{manifest_list_len}"
+        try:
+            manifest_list_pos += 1
+            logger.info(
+                f"Validating IndexD for manifest {manifest_list_pos}/{manifest_list_len}"
+            )
+
+            waiting_file_path = f"{waiting_location_path}/{manifest}"
+            if waiting_location_type == "cloud":
+                file_name = cloud_utils.parse_cloud_path(waiting_file_path).get(
+                    "file_name"
                 )
+            else:
+                file_name = manifest
 
-                if waiting_location_type == "cloud":
-                    file_name = cloud_utils.parse_cloud_path(
-                        f"{waiting_location_path}/{manifest}"
-                    ).get("file_name")
-                else:
-                    file_name = manifest
+            output_path = f"{cwd}/{file_name}"
+            content = general_utils.get_resource_object(
+                waiting_location_type,
+                waiting_file_path,
+                output_path,
+                waiting_session,
+            )
 
-                output_path = f"{cwd}/{file_name}"
-                content = general_utils.get_resource_object(
-                    waiting_location_type,
-                    f"{waiting_location_path}/{manifest}",
-                    output_path,
-                    waiting_session,
+            proposed_urls = general_utils.proposed_urls(content)
+            proposed_list = list(proposed_urls.values())
+
+            proposed_url_list = []
+            for url_dict in proposed_list:
+                for url in list(url_dict.values()):
+                    proposed_url_list.append(url)
+
+            indexd_records = _list_indexd_records(list(proposed_urls.keys()))
+
+            validated_subset, failed_subset = general_utils.check_subset_in_list(
+                proposed_url_list, indexd_records
+            )
+
+            validated_records = ""
+            failed_records = ""
+
+            if validated_location_type == "cloud":
+                validated_file_path = (
+                    f"{cwd}/{file_name[:-4]}_validated{file_name[-4:]}"
                 )
-                proposed_records = _list_proposed_records(content)
-                indexd_records = _list_indexd_records(content)
-                validated_records, failed_records = compare_records(
-                    proposed_records, indexd_records
+                file_utils.write(validated_records, validated_file_path)
+                cloud_utils.upload_cloud(
+                    validated_location_path, validated_file_path, validated_session
                 )
+            else:
+                validated_file_path = f"{validated_location_path}/{file_name[:-4]}_validated{file_name[-4:]}"
+                file_utils.write(validated_records, validated_file_path)
 
-                if validated_location_type == "cloud":
-                    validated_file_path = (
-                        f"{cwd}/{file_name[:-4]}_validated{file_name[-4:]}"
-                    )
-                    file_utils.write(validated_records, validated_file_path)
-                    cloud_utils.upload_cloud(
-                        validated_location_path, validated_file_path, validated_session
-                    )
-                else:
-                    validated_file_path = f"{validated_location_path}/{file_name[:-4]}_validated{file_name[-4:]}"
-                    file_utils.write(validated_records, validated_file_path)
-
-                if failed_location_type == "cloud":
-                    failed_file_path = f"{cwd}/{file_name[:-4]}_failed{file_name[-4:]}"
-                    file_utils.write(failed_records, failed_file_path)
-                    cloud_utils.upload_cloud(
-                        failed_location_path, failed_file_path, failed_session
-                    )
-                else:
-                    failed_file_path = f"{failed_location_path}/{file_name[:-4]}_failed{file_name[-4:]}"
-                    file_utils.write(failed_records, failed_file_path)
-
-            except Exception as e:
-                failed_manifests += 1
-                logger.error(
-                    f"Manifest, {file_name}, failed during the validation of records in IndexD\n{e}"
+            if failed_location_type == "cloud":
+                failed_file_path = f"{cwd}/{file_name[:-4]}_failed{file_name[-4:]}"
+                file_utils.write(failed_records, failed_file_path)
+                cloud_utils.upload_cloud(
+                    failed_location_path, failed_file_path, failed_session
                 )
+            else:
+                failed_file_path = (
+                    f"{failed_location_path}/{file_name[:-4]}_failed{file_name[-4:]}"
+                )
+                file_utils.write(failed_records, failed_file_path)
+
+        except Exception as e:
+            failed_manifests += 1
+            logger.error(
+                f"Manifest, {file_name}, failed during the validation of records in IndexD\n{e}"
+            )
 
     return failed_manifests
 
 
-def _list_proposed_records():
-    "separate aws gs"
-
-
 def _list_indexd_records():
-    ""
-
-
-def compare_records():
-    ""
+    """"""
 
 
 # Final Manifest
@@ -453,7 +497,7 @@ def compare_records():
 
 def create_final_manifest():
     """"""
-    final_manifest_created = True
+    final_manifest_created = False
 
     return final_manifest_created
 
@@ -475,6 +519,12 @@ def run(global_config):
 
     RELEASE = global_config.get("RELEASE", None)
     SKIP_TO = global_config.get("SKIP_TO", None)
+
+    log_settings = {
+        "location_type": LOGS_SETTINGS["location_type"],
+        "location": f"{LOGS_SETTINGS['location']}/{RELEASE}",
+    }
+
     logger.info(f"Starting validation process for release {RELEASE}...")
 
     proposed_settings = {
@@ -513,74 +563,72 @@ def run(global_config):
         "location": f"{MANIFESTS_SETTINGS['location']}/{RELEASE}/index_validated",
     }
 
-    if SKIP_TO is None:
-        logger.info(f"Starting step 1 of 4, Create Manifests to Validate Against")
-        proposed_failed = proposed_manifest(proposed_settings)
-        logger.info(f"Finished step 1 of 4, {proposed_failed} failed manifests")
+    try:
+        if SKIP_TO is None:
+            logger.info(f"Starting step 1 of 4, Create Manifests to Validate Against")
+            proposed_failed = proposed_manifest(proposed_settings)
+            logger.info(f"Finished step 1 of 4, {proposed_failed} failed manifests")
 
-        logger.info(f"Starting step 2 of 4, Check Objects in Clouds")
-        cloud_failed = check_objects_cloud(
-            cloud_check_waiting, cloud_check_validated, cloud_check_failed
-        )
-        logger.info(f"Finished step 2 of 4, {cloud_failed} failed manifests")
+            logger.info(f"Starting step 2 of 4, Check Objects in Clouds")
+            cloud_failed = check_objects_cloud(
+                cloud_check_waiting, cloud_check_validated, cloud_check_failed
+            )
+            logger.info(f"Finished step 2 of 4, {cloud_failed} failed manifests")
 
-        logger.info(f"Starting step 3 of 4, Check Records in IndexD")
-        indexd_failed = check_objects_indexd(
-            indexd_check_waiting, indexd_check_validated, indexd_check_failed
-        )
-        logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
+            logger.info(f"Starting step 3 of 4, Check Records in IndexD")
+            indexd_failed = check_objects_indexd(
+                indexd_check_waiting, indexd_check_validated, indexd_check_failed
+            )
+            logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
 
-        logger.info(f"Starting step 4 of 4, Create final Manifest")
-        final_manifest_failed = create_final_manifest(final_manifest_settings)
-        logger.info(
-            f"Finished step 4 of 4, final manifest created: {final_manifest_failed}"
-        )
+            logger.info(f"Starting step 4 of 4, Create final Manifest")
+            final_manifest_passed = create_final_manifest(final_manifest_settings)
+            logger.info(
+                f"Finished step 4 of 4, final manifest created: {final_manifest_passed}"
+            )
 
-    elif SKIP_TO.lower() == "cloud":
-        logger.info(f"Starting step 2 of 4, Check Objects in Clouds")
-        cloud_failed = check_objects_cloud(
-            cloud_check_waiting, cloud_check_validated, cloud_check_failed
-        )
-        logger.info(f"Finished step 2 of 4, {cloud_failed} failed manifests")
+        elif SKIP_TO.lower() == "cloud":
+            logger.info(f"Starting step 2 of 4, Check Objects in Clouds")
+            cloud_failed = check_objects_cloud(
+                cloud_check_waiting, cloud_check_validated, cloud_check_failed
+            )
+            logger.info(f"Finished step 2 of 4, {cloud_failed} failed manifests")
 
-        logger.info(f"Starting step 3 of 4, Check Records in IndexD")
-        indexd_failed = check_objects_indexd(
-            indexd_check_waiting, indexd_check_validated, indexd_check_failed
-        )
-        logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
+            logger.info(f"Starting step 3 of 4, Check Records in IndexD")
+            indexd_failed = check_objects_indexd(
+                indexd_check_waiting, indexd_check_validated, indexd_check_failed
+            )
+            logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
 
-        logger.info(f"Starting step 4 of 4, Create final Manifest")
-        final_manifest_failed = create_final_manifest(final_manifest_settings)
-        logger.info(
-            f"Finished step 4 of 4, final manifest created: {final_manifest_failed}"
-        )
+            logger.info(f"Starting step 4 of 4, Create final Manifest")
+            final_manifest_passed = create_final_manifest(final_manifest_settings)
+            logger.info(
+                f"Finished step 4 of 4, final manifest created: {final_manifest_passed}"
+            )
 
-    elif SKIP_TO.lower() == "indexd":
-        logger.info(f"Starting step 3 of 4, Check Records in IndexD")
-        indexd_failed = check_objects_indexd(
-            indexd_check_waiting, indexd_check_validated, indexd_check_failed
-        )
-        logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
+        elif SKIP_TO.lower() == "indexd":
+            logger.info(f"Starting step 3 of 4, Check Records in IndexD")
+            indexd_failed = check_objects_indexd(
+                indexd_check_waiting, indexd_check_validated, indexd_check_failed
+            )
+            logger.info(f"Finished step 3 of 4, {indexd_failed} failed manifests")
 
-        logger.info(f"Starting step 4 of 4, Create final Manifest")
-        final_manifest_failed = create_final_manifest(final_manifest_settings)
-        logger.info(
-            f"Finished step 4 of 4, final manifest created: {final_manifest_failed}"
-        )
+            logger.info(f"Starting step 4 of 4, Create final Manifest")
+            final_manifest_passed = create_final_manifest(final_manifest_settings)
+            logger.info(
+                f"Finished step 4 of 4, final manifest created: {final_manifest_passed}"
+            )
 
-    elif SKIP_TO.lower() == "final":
-        logger.info(f"Starting step 4 of 4, Create final Manifest")
-        final_manifest_failed = create_final_manifest(final_manifest_settings)
-        logger.info(
-            f"Finished step 4 of 4, final manifest created: {final_manifest_failed}"
-        )
-
-    log_settings = {
-        "location_type": LOGS_SETTINGS["location_type"],
-        "location": f"{LOGS_SETTINGS['location']}/{RELEASE}",
-    }
-    if log_settings["location_type"] == "cloud":
-        log_location = log_settings["location"]
-        log_cloud = cloud_utils.parse_cloud_path(f"{log_location}").get("cloud")
-        log_session = cloud_utils.start_session(log_cloud, AUTH_SETTINGS[log_cloud])
-        cloud_utils.upload_cloud(log_location, log_path, log_session)
+        elif SKIP_TO.lower() == "final":
+            logger.info(f"Starting step 4 of 4, Create final Manifest")
+            final_manifest_passed = create_final_manifest(final_manifest_settings)
+            logger.info(
+                f"Finished step 4 of 4, final manifest created: {final_manifest_passed}"
+            )
+    except Exception as e:
+        logger.error(f"The following error occurred during validation: {e}")
+        if log_settings["location_type"] == "cloud":
+            log_location = log_settings["location"]
+            log_cloud = cloud_utils.parse_cloud_path(f"{log_location}").get("cloud")
+            log_session = cloud_utils.start_session(log_cloud, AUTH_SETTINGS[log_cloud])
+            cloud_utils.upload_cloud(log_location, log_path, log_session)

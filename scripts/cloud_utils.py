@@ -25,15 +25,15 @@ def start_session(cloud: str, auth_settings: dict):
         auth_type = auth_settings.get("auth_type")
         if auth_type == "profile":
             profile = auth_settings.get("value")
-            s3_session = boto3.session.Session(profile_name=profile)
+            s3_session = boto3.session.Session(profile_name=profile).resource("s3")
         elif auth_type == "access_key":
             access_key_id = auth_settings.get("value").get("access_key_id")
             access_key = auth_settings.get("value").get("access_key")
             s3_session = boto3.session.Session(
                 aws_access_key_id=access_key_id, aws_secret_access_key=access_key
-            )
+            ).resource("s3")
         else:
-            s3_session = boto3.session.Session()
+            s3_session = boto3.session.Session().resource("s3")
 
         return s3_session
 
@@ -83,8 +83,7 @@ def bucket_exists(cloud: str, cloud_session, bucket_name: str):
     """
     if cloud == "s3":
         try:
-            resource = cloud_session.resource("s3")
-            resource.meta.client.head_bucket(Bucket=bucket_name)
+            cloud_session.meta.client.head_bucket(Bucket=bucket_name)
             return True
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
@@ -110,14 +109,12 @@ def aws_bucket_list(s3_session, cloud_path: str):
     """
     Return AWS bucket content list
     s3_session: session
-    cloud_path: s3://PROJECT_BUCKET/ID/FILE_NAME
+    cloud_path: s3://PROJECT_BUCKET/ID/path
     """
     try:
         bucket_name = parse_cloud_path(cloud_path).get("bucket")
         id = parse_cloud_path(cloud_path).get("id")
-
-        resource = s3_session.resource("s3")
-        bucket = resource.Bucket(bucket_name)
+        bucket = s3_session.Bucket(bucket_name)
 
         bucket_list = []
         if id is not None:
@@ -136,7 +133,7 @@ def gcp_bucket_list(gs_session, cloud_path: str):
     """
     Return GCP bucket content list
     gs_session: session
-    cloud_path: gs://PROJECT_BUCKET/ID/FILE_NAME
+    cloud_path: gs://PROJECT_BUCKET/ID/path
     """
     try:
         bucket_name = parse_cloud_path(cloud_path).get("bucket")
@@ -160,36 +157,38 @@ def aws_bucket_object(s3_session, resource_path: str, output_path: str):
     """
     Return downloaded AWS bucket object location
     s3_session: session
-    resource_path: s3://PROJECT_BUCKET/ID/FILE_NAME
+    resource_path: s3://PROJECT_BUCKET/path/path
     output_path: path to output resource to
     """
     bucket_name = parse_cloud_path(resource_path).get("bucket")
-    file_name = parse_cloud_path(resource_path).get("file_name")
-    key = f"{parse_cloud_path(resource_path).get('id')}/{file_name}"
+    key = f"{resource_path.split(f'{bucket_name}/')[1]}"
 
     try:
-        resource = s3_session.resource("s3")
-        resource.meta.client.download_file(bucket_name, key, output_path)
+        s3_session.meta.client.download_file(bucket_name, key, output_path)
+
         return output_path
     except Exception as e:
-        raise (f"Unable to return object {file_name} in s3 bucket {bucket_name}, {e}")
+        raise (f"Unable to return object at {key} in s3 bucket {bucket_name}, {e}")
 
 
 def gcp_bucket_object(gs_session, resource_path: str, output_path: str):
     """
     Return downloaded GCP bucket object location
     gs_session: session
-    resource_path: gs://PROJECT_BUCKET/ID/FILE_NAME
+    resource_path: gs://PROJECT_BUCKET/path/path
     output_path: path to output resource to
     """
+    bucket_name = parse_cloud_path(resource_path).get("bucket")
+    key = f"{resource_path.split(f'{bucket_name}/')[1]}"
+
     try:
-        bucket_name = parse_cloud_path(resource_path).get("bucket")
-        file_name = parse_cloud_path(resource_path).get("file_name")
-        key = f"{parse_cloud_path(resource_path).get('id')}/{file_name}"
+        bucket = gs_session.bucket(bucket_name)
+        blob = bucket.blob(key)
+        blob.download_to_filename(output_path)
 
         return output_path
     except Exception as e:
-        raise (f"Unable to return object {file_name} in g3 bucket {bucket_name}, {e}")
+        raise (f"Unable to return object at {key} in gs bucket {bucket_name}, {e}")
 
 
 def access_aws(s3_session, location_type: str, cloud_path: str, output_path: str):
@@ -197,7 +196,7 @@ def access_aws(s3_session, location_type: str, cloud_path: str, output_path: str
     Access AWS resources
     s3_session: session
     location_type: list, object
-    cloud_path: s3://PROJECT_BUCKET/ID/FILE_NAME
+    cloud_path: s3://PROJECT_BUCKET/ID/path
     output_path: only req for object, path to output resource to
     """
     if location_type == "list":
@@ -217,7 +216,7 @@ def access_gcp(gs_session, location_type: str, cloud_path: str, output_path: str
     Access GCP resources
     gs_session: session
     location_type: list, object
-    cloud_path: gs://PROJECT_BUCKET/ID/FILE_NAME
+    cloud_path: gs://PROJECT_BUCKET/ID/path
     output_path: only req for object, path to output resource to
     """
     if location_type == "list":
@@ -232,60 +231,37 @@ def access_gcp(gs_session, location_type: str, cloud_path: str, output_path: str
         )
 
 
-def upload_aws(s3_session, cloud_path: str, resource_path: str):
-    """
-    Upload AWS resources
-    s3_session: session
-    cloud_path: s3://PROJECT_BUCKET/ID/FILE_NAME
-    resource_path: local path resource is located
-    """
-    bucket = parse_cloud_path(cloud_path).get("bucket")
-    file_name = parse_cloud_path(cloud_path).get("file_name")
-    key = f"{parse_cloud_path(cloud_path).get('id')}/{file_name}"
-
-    try:
-        s3_session.meta.client.upload_file(
-            Filename=resource_path, Bucket=bucket, Key=key
-        )
-    except Exception as e:
-        raise (f"Failed to upload {file_name} to {bucket}: {e}")
-
-
-def upload_gcp(gs_session, cloud_path: str, resource_path: str):
-    """
-    Upload GCP resources
-    gs_session: session
-    cloud_path: gs://PROJECT_BUCKET/ID/FILE_NAME
-    resource_path: local path resource is located
-    """
-    bucket = parse_cloud_path(cloud_path).get("bucket")
-    file_name = parse_cloud_path(cloud_path).get("file_name")
-    key = f"{parse_cloud_path(cloud_path).get('id')}/{file_name}"
-
-    try:
-        bucket = gs_session.get_bucket(bucket)
-        blob = bucket.blob(key)
-        blob.upload_from_filename(resource_path)
-    except Exception as e:
-        raise (f"Failed to upload {file_name} to {bucket}: {e}")
-
-
 def upload_cloud(cloud_path: str, resource_path: str, session):
     """
     Upload to cloud resource
-    cloud_path: cloud://PROJECT_BUCKET/ID/FILE_NAME
+    cloud_path: cloud://PROJECT_BUCKET/path/path
     resource_path: local path resource is located
     session: cloud session
     """
     cloud_name = parse_cloud_path(cloud_path).get("cloud")
     bucket_name = parse_cloud_path(cloud_path).get("bucket")
+    key = f"{cloud_path.split(f'{bucket_name}/')[1]}"
 
     cloud = cloud_name.lower()
     if bucket_exists(cloud, session, bucket_name):
         if cloud == "s3":
-            return upload_aws(session, cloud_path, resource_path)
+            try:
+                session.meta.client.upload_file(
+                    Filename=resource_path, Bucket=bucket_name, Key=key
+                )
+
+                return cloud_path
+            except Exception as e:
+                raise (f"Failed to upload {key} to {bucket_name}: {e}")
         elif cloud == "gs":
-            return upload_gcp(session, cloud_path, resource_path)
+            try:
+                bucket = session.get_bucket(bucket_name)
+                blob = bucket.blob(key)
+                blob.upload_from_filename(resource_path)
+
+                return cloud_path
+            except Exception as e:
+                raise (f"Failed to upload {key} to {bucket_name}: {e}")
         else:
             raise ValueError(
                 f"Cloud, {cloud}, is not supported, only s3 and gs accepted."
@@ -296,5 +272,79 @@ def upload_cloud(cloud_path: str, resource_path: str, session):
         )
 
 
-def move_object_cloud():
-    """"""
+def move_object_cloud(source_path: str, destination_path: str, session):
+    """
+    Move resource from one bucket to another
+    source_path: cloud://PROJECT_BUCKET/path/path
+    destination_path: cloud://PROJECT_BUCKET_2/path/path
+    session: cloud session
+    """
+    source_cloud_name = parse_cloud_path(source_path).get("cloud")
+    dest_cloud_name = parse_cloud_path(destination_path).get("cloud")
+    source_bucket_name = parse_cloud_path(source_path).get("bucket")
+    dest_bucket_name = parse_cloud_path(destination_path).get("bucket")
+    source_key = f"{source_path.split(f'{source_bucket_name}/')[1]}"
+    dest_key = f"{destination_path.split(f'{dest_bucket_name}/')[1]}"
+
+    src_bucket_exists = bucket_exists(source_cloud_name, session, source_bucket_name)
+    dest_bucket_exists = bucket_exists(source_cloud_name, session, dest_bucket_name)
+    if source_cloud_name != dest_cloud_name:
+        raise Exception(
+            f"Moving objects from different clouds is not supported, object at {source_path} was not moved to {destination_path}"
+        )
+
+    if src_bucket_exists and dest_bucket_exists:
+        if source_cloud_name == "s3":
+            copy_source = {"Bucket": source_bucket_name, "Key": source_key}
+            session.meta.client.copy(copy_source, dest_bucket_name, dest_key)
+            session.meta.client.delete_object(Bucket=source_bucket_name, Key=source_key)
+
+            return destination_path
+        elif source_cloud_name == "gs":
+            source_bucket = session.bucket(source_bucket_name)
+            source_blob = source_bucket.blob(source_key)
+            destination_bucket = session.bucket(dest_bucket_name)
+
+            source_bucket.copy_blob(source_blob, destination_bucket, dest_key)
+            source_bucket.delete_blob(source_key)
+
+            return destination_path
+        else:
+            raise ValueError(
+                f"Cloud, {source_cloud_name}, is not supported, only s3 and gs accepted."
+            )
+    else:
+        raise Exception(
+            f"Bucket {source_bucket_name} found: {src_bucket_exists} or {dest_bucket_name} found: {dest_bucket_exists} does not exist in {source_cloud_name}, cannot move resource"
+        )
+
+
+def remove_object_cloud(path: str, session):
+    """
+    Remove resource from bucket
+    path: cloud://PROJECT_BUCKET/path/path
+    session: cloud session
+    """
+    cloud_name = parse_cloud_path(path).get("cloud")
+    bucket_name = parse_cloud_path(path).get("bucket")
+    key = f"{path.split(f'{bucket_name}/')[1]}"
+    # need to double check key
+
+    if bucket_exists(cloud_name, session, bucket_name):
+        if cloud_name == "s3":
+            session.meta.client.delete_object(Bucket=bucket_name, Key=key)
+
+            return True
+        elif cloud_name == "gs":
+            bucket = session.bucket(bucket_name)
+            bucket.delete_blob(key)
+
+            return True
+        else:
+            raise ValueError(
+                f"Cloud, {cloud_name}, is not supported, only s3 and gs accepted."
+            )
+    else:
+        raise Exception(
+            f"Bucket {bucket_name} does not exist in {cloud_name}, cannot remove resource"
+        )

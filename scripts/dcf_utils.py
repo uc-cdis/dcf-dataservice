@@ -1,5 +1,8 @@
 import json
 
+GDC_TOKEN = ""
+DATA_ENDPT = ""
+IGNORED_FILES = ""
 POSTFIX_1_EXCEPTION = []
 POSTFIX_2_EXCEPTION = []
 PROJECT_ACL = {}
@@ -7,6 +10,9 @@ PROJECT_ACL = {}
 try:
     with open("/dcf-dataservice/dcf_dataservice_settings.json", "r") as f:
         data = json.loads(f.read())
+        GDC_TOKEN = data.get("GDC_TOKEN", "")
+        DATA_ENDPT = data.get("DATA_ENDPT", "")
+        IGNORED_FILES = data.get("IGNORED_FILES", "")
         POSTFIX_1_EXCEPTION = data.get("POSTFIX_1_EXCEPTION", [])
         POSTFIX_2_EXCEPTION = data.get("POSTFIX_2_EXCEPTION", [])
         PROJECT_ACL = data.get("PROJECT_ACL", {})
