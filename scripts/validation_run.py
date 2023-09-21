@@ -1,9 +1,9 @@
 import json
 
-import validateII
-import general_utils
-import file_utils
-import cloud_utils
+from scripts import validateII
+from scripts import general_utils
+from scripts import file_utils
+from scripts import cloud_utils
 
 from cdislogging import get_logger
 
