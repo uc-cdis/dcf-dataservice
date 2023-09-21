@@ -1,15 +1,11 @@
+import os
 import boto3
 import botocore
 
 from cdislogging import get_logger
 from google.cloud import storage
 
-global logger
-
-
-def resume_logger(filename=None):
-    global logger
-    logger = get_logger("Cloud Utils", filename)
+logger = get_logger("CloudUtils")
 
 
 def start_session(cloud: str, auth_settings: dict):
@@ -105,171 +101,137 @@ def bucket_exists(cloud: str, cloud_session, bucket_name: str):
         raise Exception(f"{cloud} not supported, cannot check for bucket")
 
 
-def aws_bucket_list(s3_session, cloud_path: str):
-    """
-    Return AWS bucket content list
-    s3_session: session
-    cloud_path: s3://PROJECT_BUCKET/ID/path
-    """
-    try:
-        bucket_name = parse_cloud_path(cloud_path).get("bucket")
-        id = parse_cloud_path(cloud_path).get("id")
-        bucket = s3_session.Bucket(bucket_name)
-
-        bucket_list = []
-        if id is not None:
-            for bucket_object in bucket.objects.filter(Prefix=id):
-                bucket_list.append(bucket_object)
-        else:
-            for bucket_object in bucket.objects.all():
-                bucket_list.append(bucket_object)
-
-        return bucket_list
-    except Exception as e:
-        raise (f"Unable to return list of objects in s3 bucket {bucket_name}, {e}")
-
-
-def gcp_bucket_list(gs_session, cloud_path: str):
-    """
-    Return GCP bucket content list
-    gs_session: session
-    cloud_path: gs://PROJECT_BUCKET/ID/path
-    """
-    try:
-        bucket_name = parse_cloud_path(cloud_path).get("bucket")
-        id = parse_cloud_path(cloud_path).get("id")
-
-        if id is not None:
-            blobs = gs_session.list_blobs(bucket_name, prefix=id)
-        else:
-            blobs = gs_session.list_blobs(bucket_name)
-
-        bucket_list = []
-        for blob in blobs:
-            bucket_list.append(blob.name)
-
-        return bucket_list
-    except Exception as e:
-        raise (f"Unable to return list of objects in gs bucket {bucket_name}, {e}")
-
-
-def aws_bucket_object(s3_session, resource_path: str, output_path: str):
-    """
-    Return downloaded AWS bucket object location
-    s3_session: session
-    resource_path: s3://PROJECT_BUCKET/path/path
-    output_path: path to output resource to
-    """
-    bucket_name = parse_cloud_path(resource_path).get("bucket")
-    key = f"{resource_path.split(f'{bucket_name}/')[1]}"
-
-    try:
-        s3_session.meta.client.download_file(bucket_name, key, output_path)
-
-        return output_path
-    except Exception as e:
-        raise (f"Unable to return object at {key} in s3 bucket {bucket_name}, {e}")
-
-
-def gcp_bucket_object(gs_session, resource_path: str, output_path: str):
-    """
-    Return downloaded GCP bucket object location
-    gs_session: session
-    resource_path: gs://PROJECT_BUCKET/path/path
-    output_path: path to output resource to
-    """
-    bucket_name = parse_cloud_path(resource_path).get("bucket")
-    key = f"{resource_path.split(f'{bucket_name}/')[1]}"
-
-    try:
-        bucket = gs_session.bucket(bucket_name)
-        blob = bucket.blob(key)
-        blob.download_to_filename(output_path)
-
-        return output_path
-    except Exception as e:
-        raise (f"Unable to return object at {key} in gs bucket {bucket_name}, {e}")
-
-
-def access_aws(s3_session, location_type: str, cloud_path: str, output_path: str):
+def access_aws(s3_session, resource_type: str, cloud_path: str, output_path: str):
     """
     Access AWS resources
     s3_session: session
-    location_type: list, object
+    resource_type: list, object
     cloud_path: s3://PROJECT_BUCKET/ID/path
     output_path: only req for object, path to output resource to
     """
-    if location_type == "list":
-        return aws_bucket_list(s3_session, cloud_path)
-    elif location_type == "object":
-        return aws_bucket_object(s3_session, cloud_path, output_path)
+    bucket_name = parse_cloud_path(cloud_path).get("bucket")
+
+    if resource_type == "list":
+        try:
+            id = parse_cloud_path(cloud_path).get("id")
+            bucket = s3_session.Bucket(bucket_name)
+
+            bucket_list = []
+            if id:
+                for bucket_object in bucket.objects.filter(Prefix=id):
+                    bucket_list.append(bucket_object)
+            else:
+                for bucket_object in bucket.objects.all():
+                    bucket_list.append(bucket_object)
+
+            return bucket_list
+        except Exception as e:
+            raise (f"Unable to return list of objects in s3 bucket {bucket_name}, {e}")
+    elif resource_type == "object":
+        key = f"{cloud_path.split(f'{bucket_name}/')[1]}"
+
+        try:
+            s3_session.meta.client.download_file(bucket_name, key, output_path)
+        except Exception as e:
+            raise (f"Unable to return object at {key} in s3 bucket {bucket_name}, {e}")
     else:
         raise (
             ValueError(
-                f"Only list and object location type accepted, received {location_type}"
+                f"Only list and object resource type accepted, received {resource_type}"
             )
         )
 
 
-def access_gcp(gs_session, location_type: str, cloud_path: str, output_path: str):
+def access_gcp(gs_session, resource_type: str, cloud_path: str, output_path: str):
     """
     Access GCP resources
     gs_session: session
-    location_type: list, object
+    resource_type: list, object
     cloud_path: gs://PROJECT_BUCKET/ID/path
     output_path: only req for object, path to output resource to
     """
-    if location_type == "list":
-        return gcp_bucket_list(gs_session, cloud_path)
-    elif location_type == "object":
-        return gcp_bucket_object(gs_session, cloud_path, output_path)
+    bucket_name = parse_cloud_path(cloud_path).get("bucket")
+
+    if resource_type == "list":
+        try:
+            id = parse_cloud_path(cloud_path).get("id")
+
+            if id:
+                blobs = gs_session.list_blobs(bucket_name, prefix=id)
+            else:
+                blobs = gs_session.list_blobs(bucket_name)
+
+            bucket_list = []
+            for blob in blobs:
+                bucket_list.append(blob.name)
+
+            return bucket_list
+        except Exception as e:
+            raise (f"Unable to return list of objects in gs bucket {bucket_name}, {e}")
+    elif resource_type == "object":
+        key = f"{cloud_path.split(f'{bucket_name}/')[1]}"
+
+        try:
+            bucket = gs_session.bucket(bucket_name)
+            blob = bucket.blob(key)
+            blob.download_to_filename(output_path)
+
+        except Exception as e:
+            raise (f"Unable to return object at {key} in gs bucket {bucket_name}, {e}")
     else:
         raise (
             ValueError(
-                f"Only list and object location type accepted, received {location_type}"
+                f"Only list and object resource type accepted, received {resource_type}"
             )
         )
 
 
-def upload_cloud(cloud_path: str, resource_path: str, session):
+def upload_cloud(cloud_path: str, resource_path: str, session, delete=False):
     """
     Upload to cloud resource
     cloud_path: cloud://PROJECT_BUCKET/path/path
     resource_path: local path resource is located
     session: cloud session
+    delete: remove file from local dir after uploading
     """
     cloud_name = parse_cloud_path(cloud_path).get("cloud")
     bucket_name = parse_cloud_path(cloud_path).get("bucket")
     key = f"{cloud_path.split(f'{bucket_name}/')[1]}"
 
     cloud = cloud_name.lower()
-    if bucket_exists(cloud, session, bucket_name):
-        if cloud == "s3":
-            try:
-                session.meta.client.upload_file(
-                    Filename=resource_path, Bucket=bucket_name, Key=key
+    if os.path.isfile(resource_path):
+        if bucket_exists(cloud, session, bucket_name):
+            if cloud == "s3":
+                try:
+                    session.meta.client.upload_file(
+                        Filename=resource_path, Bucket=bucket_name, Key=key
+                    )
+                    return cloud_path
+
+                except Exception as e:
+                    raise (f"Failed to upload {key} to {bucket_name}: {e}")
+            elif cloud == "gs":
+                try:
+                    bucket = session.get_bucket(bucket_name)
+                    blob = bucket.blob(key)
+                    blob.upload_from_filename(resource_path)
+
+                    if delete:
+                        os.remove(resource_path)
+
+                    return cloud_path
+                except Exception as e:
+                    raise (f"Failed to upload {key} to {bucket_name}: {e}")
+            else:
+                raise ValueError(
+                    f"Cloud, {cloud}, is not supported, only s3 and gs accepted."
                 )
-
-                return cloud_path
-            except Exception as e:
-                raise (f"Failed to upload {key} to {bucket_name}: {e}")
-        elif cloud == "gs":
-            try:
-                bucket = session.get_bucket(bucket_name)
-                blob = bucket.blob(key)
-                blob.upload_from_filename(resource_path)
-
-                return cloud_path
-            except Exception as e:
-                raise (f"Failed to upload {key} to {bucket_name}: {e}")
         else:
-            raise ValueError(
-                f"Cloud, {cloud}, is not supported, only s3 and gs accepted."
+            raise Exception(
+                f"Bucket {bucket_name} does not exist in {cloud}, cannot upload resource to cloud"
             )
     else:
-        raise Exception(
-            f"Bucket {bucket_name} does not exist in {cloud}, cannot upload resource to cloud"
-        )
+        raise ValueError(f"{resource_path} is not a file, cannot continue upload")
 
 
 def move_object_cloud(source_path: str, destination_path: str, session):
@@ -328,7 +290,6 @@ def remove_object_cloud(path: str, session):
     cloud_name = parse_cloud_path(path).get("cloud")
     bucket_name = parse_cloud_path(path).get("bucket")
     key = f"{path.split(f'{bucket_name}/')[1]}"
-    # need to double check key
 
     if bucket_exists(cloud_name, session, bucket_name):
         if cloud_name == "s3":

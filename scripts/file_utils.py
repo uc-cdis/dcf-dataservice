@@ -1,4 +1,5 @@
 import os
+import ast
 import csv
 
 from typing import Union
@@ -7,7 +8,7 @@ from cdislogging import get_logger
 logging = get_logger("__name__")
 
 
-def _get_directory_file_paths(directory: str):
+def _get_directory_files(directory: str):
     """
     List all file paths in a directory.
     Args:
@@ -74,7 +75,7 @@ def get_headers(file_name: str):
 
     delimiter = _delimiter(file_name)
     headers = []
-    if delimiter == "txt":
+    if delimiter == ".":
         file = open(file_name, "r")
         lines = file.readlines()
         headers.append(lines[0])
@@ -86,14 +87,14 @@ def get_headers(file_name: str):
     return headers
 
 
-def file_to_list(file_name: str, has_headers=False):
+def file_to_list(file_name: str, skip_headers=False):
     """
     Collect records from DSV file
     Args:
         file_name(str):
             Filename or file path
-        has_headers(bool):
-            True when headers present
+        skip_headers(bool):
+            True skip, False include in final list
     Returns:
         List of lists (rows) from input file
     """
@@ -102,34 +103,38 @@ def file_to_list(file_name: str, has_headers=False):
 
     delimiter = _delimiter(file_name)
     records = []
-    if delimiter == "txt":
+    if delimiter == ".":
         file = open(file_name, "r")
         lines = file.readlines()
-        if has_headers:
+        if skip_headers:
             lines.pop(0)
         for line in lines:
             records.append(line)
     else:
         with open(file_name) as process_file:
             file_reader = csv.reader(process_file, delimiter=delimiter)
-            if has_headers:
+            if skip_headers:
                 next(file_reader)
             for row in file_reader:
-                records.append(row)
+                values = []
+                for column in row:
+                    if "[" in column:
+                        values.append(ast.literal_eval(column))
+                    else:
+                        values.append(column)
+                records.append(values)
 
     return records
 
 
-def file_to_listdict(file_name: str, has_headers=False):
+def file_to_listdict(file_name: str):
     """
     Collect records from DSV file
     Args:
         file_name(str):
             Filename or file path
-        has_headers(bool):
-            True when headers present
     Returns:
-        List of lists (rows) from input file
+        List of dictionaries from input file, with header:row pairs
     """
 
     logging.info(f"Collecting records from {file_name}...")
@@ -137,29 +142,28 @@ def file_to_listdict(file_name: str, has_headers=False):
     delimiter = _delimiter(file_name)
     records = []
 
-    if has_headers:
-        if delimiter == "txt":
-            file = open(file_name, "r")
-            lines = file.readlines()
+    if delimiter == "txt":
+        file = open(file_name, "r")
+        lines = file.readlines()
 
-            lines.pop(0)
-            for line in lines:
-                records.append(line)
-        else:
-            with open(file_name) as process_file:
-                file_reader = csv.reader(process_file, delimiter=delimiter)
-                headers = next(file_reader)
-                for row in file_reader:
-                    records.append(dict(zip(headers, row)))
-
-        return records
+        # TODO finish this section
     else:
-        raise Exception(
-            "Cannot create dict from file with no headers, headers must be present to assign values to keys"
-        )
+        with open(file_name) as process_file:
+            file_reader = csv.reader(process_file, delimiter=delimiter)
+            headers = next(file_reader)
+            for row in file_reader:
+                values = []
+                for column in row:
+                    if "[" in column:
+                        values.append(ast.literal_eval(column))
+                    else:
+                        values.append(column)
+                records.append(dict(zip(headers, values)))
+
+    return records
 
 
-def move_columns(
+def resort_list_columns(
     reordered_headers: list,
     file_name: str,
 ):
@@ -175,22 +179,23 @@ def move_columns(
     """
 
     original_headers = get_headers(file_name)
-    if reordered_headers != original_headers and sorted(reordered_headers) == sorted(
-        original_headers
-    ):
+    if sorted(reordered_headers) == sorted(original_headers):
         relational_indices = []
         for header in reordered_headers:
             relational_indices.append(original_headers.index(header))
 
-        original_file_list = file_to_list(file_name, True)
+        file_list = file_to_list(file_name, True)
         reordered_file_list = []
-        for row in original_file_list:
+        for row in file_list:
             reordered_row = []
             for column in relational_indices:
                 reordered_row.append(row[column])
             reordered_file_list.append(reordered_row)
 
-    elif reordered_headers != original_headers:
+        reordered_file_list.insert(0, reordered_headers)
+        return reordered_file_list
+
+    else:
         raise AssertionError("Columns do not have matching headers")
 
 
@@ -210,12 +215,15 @@ def write(records: list, output_file_name: str):
 
     delimiter = _delimiter(output_file_name)
     with open(output_file_name, "w") as output:
-        output_writer = csv.writer(output, delimiter=delimiter)
-        for record in records:
-            output_writer.writerow(record)
+        if delimiter == ".":
+            output.writelines(records)
+        else:
+            output_writer = csv.writer(output, delimiter=delimiter)
+            for record in records:
+                output_writer.writerow(record)
 
 
-def convert_type(file_name: str, new_type: str, has_headers=False):
+def convert_type(file_name: str, new_type: str, skip_headers=False):
     """
     Convert file to different extension type
     Args:
@@ -223,25 +231,22 @@ def convert_type(file_name: str, new_type: str, has_headers=False):
             Filename or file path
         new_type(str):
             Name of DSV type file is being converted to
-        has_headers(bool):
-            True when headers present
+        skip_headers(bool):
+            True skip, False include in final list
     Returns:
         None
     """
 
     logging.info(f"Converting {file_name} to {new_type}...")
 
-    records = file_to_list(file_name, has_headers)
-    if has_headers:
-        headers = get_headers(file_name)
-        records.insert(0, headers)
+    records = file_to_list(file_name, skip_headers)
     new_file_name = f"{file_name[:-3:]}{new_type.lower()}"
     write(records, new_file_name)
 
 
-def merge_files(files: Union[str, list], output_file_name: str, has_headers=False):
+def merge_files(files: Union[str, list], output_file_name=None, has_headers=False):
     """
-    Merge multiple files into one file, files must have same headers
+    Merge multiple files into one file, files must have same headers if present
     Args:
         files(str | list):
             List of filepaths, or string directory path
@@ -256,22 +261,34 @@ def merge_files(files: Union[str, list], output_file_name: str, has_headers=Fals
     logging.info(f"Merging files: {files}...")
 
     if type(files) is str:
-        files = _get_directory_file_paths(files)
+        files = _get_directory_files(files)
 
-    all_lists = []
-    for file in files:
-        all_lists.append(file_to_list(file, True))
-    all_records = [item for list_ in all_lists for item in list_]
-    if has_headers:
-        headers = get_headers(files[0])
-        all_records.insert(0, headers)
+    if len(files) > 1:
+        if has_headers:
+            headers = get_headers(files[0])
+            for pos in range(1, len(files)):
+                other_headers = get_headers(files[pos])
+                if headers != other_headers:
+                    raise Exception(
+                        "Headers and header position must match, cannot merge files"
+                    )
 
-    write(all_records, output_file_name)
+        all_lists = []
+        for file in files:
+            all_lists.append(file_to_list(file, has_headers))
+        all_records = [item for list_ in all_lists for item in list_]
+
+        if has_headers:
+            all_records.insert(0, headers)
+
+        if output_file_name is None:
+            output_file_name = "merged_files.tsv"
+        write(all_records, output_file_name)
+    else:
+        logging.info("Must be more than one file to merge, did nothing")
 
 
-def split_by_headers(
-    file_name: str,
-):
+def split_by_headers(file_name: str):
     """
     Split records by header and write into separate files
     Args:
@@ -282,7 +299,7 @@ def split_by_headers(
     """
     logging.info(f"Splitting {file_name}...")
 
-    records = file_to_list(file_name, has_headers=True)
+    records = file_to_list(file_name, True)
     headers = get_headers(file_name)
     all_chunks = []
     for i in range(len(headers)):
@@ -343,7 +360,9 @@ def chunk(
         write(all_chunks[i], output_file_name)
 
 
-def file_difference(file_one: str, file_two: str, has_headers=False, strict=False):
+def file_difference(
+    file_one: str, file_two: str, has_headers=False, strict=False, large_unique_key=None
+):
     """
     Take difference between two files, files must have matching column headers
     Args:
@@ -355,41 +374,75 @@ def file_difference(file_one: str, file_two: str, has_headers=False, strict=Fals
             True when headers present
         strict(bool):
             When true, will look for exact match; else, will match lower and uppercase strings and match array of different order
+        large_unique_key(str):
+            str represtation of unique id column for record, files must have headers
     Returns:
         List of lists, returns rows that contain at least one difference
     """
 
     logging.info(f"Taking differences between {file_one} & {file_two}...")
 
-    list_one = file_to_list(file_one, has_headers)
-
     if has_headers:
         file_one_headers = get_headers(file_one)
         file_two_headers = get_headers(file_two)
-        if file_one_headers != file_two_headers and sorted(file_one_headers) == sorted(
-            file_two_headers
-        ):
-            list_two = move_columns(file_one_headers, file_two)
-        elif file_one_headers != file_two_headers:
-            raise AssertionError("Columns do not have matching headers")
+
+        if file_one_headers == file_two_headers:
+            if not large_unique_key:
+                list_one = file_to_list(file_one, has_headers)
+                list_two = file_to_list(file_two, has_headers)
+            else:
+                list_one = file_to_listdict(file_one)
+                list_two = file_to_listdict(file_two)
+        elif sorted(file_one_headers) == sorted(file_two_headers):
+            if not large_unique_key:
+                list_one = file_to_list(file_one, has_headers)
+                list_two = resort_list_columns(file_one_headers, file_two).pop(0)
+            else:
+                list_one = file_to_listdict(file_one)
+                list_two = file_to_listdict(file_two)
         else:
-            list_two = file_to_list(file_two, has_headers)
-    else:
-        list_two = file_to_list(file_two, has_headers)
+            raise AssertionError("Columns do not have matching headers")
 
     if not strict:
         for row in list_one:
+            values = []
             for column in row:
-                column.lower()
-                str(sorted(eval(column)))
+                if isinstance(column, str):
+                    values.append(column.lower())
+                else:
+                    values.append(sorted(column))
         for row in list_two:
+            values = []
             for column in row:
-                column.lower()
-                str(sorted(eval(column)))
+                if isinstance(column, str):
+                    values.append(column.lower())
+                else:
+                    values.append(sorted(column))
 
-    return [row for row in list_one if row not in list_two] + [
-        row for row in list_two if row not in list_one
-    ]
+    if not large_unique_key:
+        return [row for row in list_one if row not in list_two] + [
+            row for row in list_two if row not in list_one
+        ]
+    else:
+        dict_one = {}
+        for record in list_one:
+            key = record[large_unique_key]
+            values = []
+            for val in record.values():
+                values.append(val)
+            dict_one[key] = values
+
+        dict_two = {}
+        for record in list_two:
+            key = record[large_unique_key]
+            values = []
+            for val in record.values():
+                values.append(val)
+            dict_two[key] = values
+
+        return [dict_one[key] for key in dict_one if key not in dict_two] + [
+            dict_two[key] for key in dict_two if key not in dict_one
+        ]
 
 
 def file_intersection(file_one: str, file_two: str, has_headers=False, strict=False):
@@ -415,26 +468,31 @@ def file_intersection(file_one: str, file_two: str, has_headers=False, strict=Fa
     if has_headers:
         file_one_headers = get_headers(file_one)
         file_two_headers = get_headers(file_two)
-        if file_one_headers != file_two_headers and sorted(file_one_headers) == sorted(
-            file_two_headers
-        ):
-            list_two = move_columns(file_one_headers, file_two)
-        elif file_one_headers != file_two_headers:
-            raise AssertionError("Columns do not have matching headers")
-        else:
+
+        if file_one_headers == file_two_headers:
+            list_one = file_to_list(file_one, has_headers)
             list_two = file_to_list(file_two, has_headers)
-    else:
-        list_two = file_to_list(file_two, has_headers)
+        elif sorted(file_one_headers) == sorted(file_two_headers):
+            list_one = file_to_list(file_one, has_headers)
+            list_two = resort_list_columns(file_one_headers, file_two).pop(0)
+        else:
+            raise AssertionError("Columns do not have matching headers")
 
     if not strict:
         for row in list_one:
+            values = []
             for column in row:
-                column.lower()
-                str(sorted(eval(column)))
+                if isinstance(column, str):
+                    values.append(column.lower())
+                else:
+                    values.append(sorted(column))
         for row in list_two:
+            values = []
             for column in row:
-                column.lower()
-                str(sorted(eval(column)))
+                if isinstance(column, str):
+                    values.append(column.lower())
+                else:
+                    values.append(sorted(column))
 
     return [row for row in list_one if row in list_two]
 

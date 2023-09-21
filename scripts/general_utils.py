@@ -1,14 +1,16 @@
 import os
+import shutil
+
 import file_utils
 import cloud_utils
 
 
-def _get_cloud(location_type: str, cloud_path: str, session, output_path: str):
+def _get_cloud(session, resource_type: str, cloud_path: str, output_path: str):
     """
     Access cloud resource
-    location_type: list, object
-    cloud_path: cloud://PROJECT_BUCKET/ID/FILE_NAME
     session: cloud session
+    resource_type: list, object
+    cloud_path: cloud://PROJECT_BUCKET/ID/FILE_NAME
     output_path: only req for object, path to output resource to
     """
     cloud_name = cloud_utils.parse_cloud_path(cloud_path).get("cloud")
@@ -18,19 +20,19 @@ def _get_cloud(location_type: str, cloud_path: str, session, output_path: str):
     if cloud_utils.bucket_exists(cloud, session, bucket_name):
         if cloud == "s3":
             return cloud_utils.access_aws(
-                session, location_type, cloud_path, output_path
+                session, resource_type, cloud_path, output_path
             )
         elif cloud == "gs":
             return cloud_utils.access_gcp(
-                session, location_type, cloud_path, output_path
+                session, resource_type, cloud_path, output_path
             )
         else:
             raise ValueError(
-                f"Cloud, {cloud}, is not supported, only s3 and gs accepted."
+                f"Cloud, {cloud}, is not supported, only s3 and gs accepted, cannot get {resource_type}."
             )
     else:
         raise Exception(
-            f"Bucket {bucket_name} does not exist in {cloud}, cannot get resource from cloud"
+            f"Bucket {bucket_name} does not exist in {cloud}, cannot get {resource_type}."
         )
 
 
@@ -43,17 +45,15 @@ def get_resource_list(location_type: str, path: str, session):
     """
     location_type = location_type.lower()
     if location_type == "cloud":
-        return _get_cloud("list", path, session)
+        return _get_cloud(session, "list", path)
     elif location_type == "local":
         if os.path.isdir(path):
             return os.listdir(path)
         else:
-            raise ValueError(
-                f"Path {path} is not a directory, cannot list objects inside directory"
-            )
+            raise ValueError(f"Path {path} is not a directory, cannot get list.")
     else:
         raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
+            f"{location_type} is not supported, only cloud and local accepted, cannot get list."
         )
 
 
@@ -65,18 +65,19 @@ def get_resource_object(location_type: str, path: str, output_path: str, session
     output_path: path to output resource to
     session: req for cloud access
     """
-    location_type = location_type.lower()
-    if location_type == "cloud":
-        object_path = _get_cloud("object", path, session, output_path)
-    elif location_type == "local":
-        object_path = path
-    else:
-        raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
-        )
+    try:
+        location_type = location_type.lower()
+        if location_type == "cloud":
+            _get_cloud(session, "object", path, output_path)
+        else:
+            if location_type != "local":
+                raise ValueError(
+                    f"{location_type} is not supported, only cloud and local accepted, cannot get object"
+                )
 
-    #  TODO: make sure proper error handling in file_utils
-    return file_utils.file_to_listdict(object_path)
+        return file_utils.file_to_listdict(output_path)
+    except Exception as e:
+        raise e
 
 
 def move_resource(location_type: str, src_path: str, dest_path: str, session):
@@ -92,15 +93,15 @@ def move_resource(location_type: str, src_path: str, dest_path: str, session):
         cloud_utils.move_object_cloud(src_path, dest_path, session)
 
     elif location_type == "local":
-        # move resource
-        ""
+        shutil.move(src_path, dest_path)
+
     else:
         raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
+            f"{location_type} is not supported, only cloud and local accepted, cannot move object."
         )
 
 
-def remove_resources(location_type: str, path: str, session):
+def remove_resource(location_type: str, path: str, session):
     """
     Retrieve resources from location
     location_type: cloud, local
@@ -111,22 +112,21 @@ def remove_resources(location_type: str, path: str, session):
     if location_type == "cloud":
         cloud_utils.remove_object_cloud(path, session)
     elif location_type == "local":
-        # remove local
-        ""
+        os.remove(path)
     else:
         raise ValueError(
-            f"Location, {location_type}, is not supported, only cloud and local accepted."
+            f"{location_type} is not supported, only cloud and local accepted, cannot remove object."
         )
 
 
-def proposed_urls(manifest_content: list):
+def record_to_url_dict(manifest_content: list):
     """
-    Collect urls from manifest and return nested dict of urls
+    Return nested dict, id:src:url
     manifest_content: list of dictionaries
     """
-    urls = {}
+    id_src_dict = {}
     for record in manifest_content:
-        urls[record["id"]] = {}
+        id_src_dict[record["id"]] = {}
         for url in record["indexd_url"]:
             if "gs://" in url:
                 src = "gs"
@@ -134,12 +134,29 @@ def proposed_urls(manifest_content: list):
                 src = "s3"
             elif "http" in url:
                 src = "indexd"
-            urls[record["id"]][src] = url
+            else:
+                src = "unsupported"
+            id_src_dict[record["id"]][src] = url
 
-    return urls
+    return id_src_dict
 
 
-def check_subset_in_list(subset_list, main_list):
+def check_subset_in_list(subset_list: list, main_list: list, check_reverse=False):
     """
     Returns two lists, items found and not found in list
     """
+    found = []
+    missing = []
+    extra = []
+    for item in subset_list:
+        if item in main_list:
+            found.append(item)
+        else:
+            missing.append(item)
+
+    if check_reverse:
+        for item in main_list:
+            if item not in subset_list:
+                extra.append(item)
+
+    return found, missing, extra
