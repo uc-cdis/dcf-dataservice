@@ -1,9 +1,9 @@
 import os
 
-import file_utils
-import cloud_utils
-import general_utils
-import dcf_utils
+from scripts import file_utils
+from scripts import cloud_utils
+from scripts import general_utils
+from scripts import dcf_utils
 
 from indexclient.client import IndexClient
 from cdislogging import get_logger
