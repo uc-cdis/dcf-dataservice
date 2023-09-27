@@ -339,7 +339,7 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     """
-    Copy file to google bucket. Implemented using google cloud resumale API
+    Copy file to google bucket. Implemented using google cloud resumable API
     Args:
         fi(dict): file information
         client(google client): google client
