@@ -7,91 +7,7 @@ import threading
 from threading import Thread
 from urllib.parse import urlparse
 
-from scripts.errors import UserError
 from indexclient.client import IndexClient
-from scripts.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
-
-
-def get_aws_bucket_name(fi, PROJECT_ACL):
-    try:
-        project_info = PROJECT_ACL[fi.get("project_id")]
-    except KeyError:
-        raise UserError(
-            "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
-                fi.get("project_id"), PROJECT_ACL.keys()
-            )
-        )
-
-    if "target" in project_info["aws_bucket_prefix"]:
-        return (
-            "gdc-target-phs000218-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "target-controlled"
-        )
-
-    if "tcga" in project_info["aws_bucket_prefix"]:
-        return (
-            "tcga-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']"}
-            else "tcga-2-controlled"
-        )
-
-    # POSTFIX_1_EXCEPTION
-    if project_info["aws_bucket_prefix"] in POSTFIX_1_EXCEPTION:
-        return project_info["aws_bucket_prefix"] + (
-            "-open"
-            if fi.get("acl") in {"[u'open']", "['open']", "*"}
-            else "-controlled"
-        )
-
-    # POSTFIX_2_EXCEPTION
-    if project_info["aws_bucket_prefix"] in POSTFIX_2_EXCEPTION:
-        return project_info["aws_bucket_prefix"] + (
-            "-2-open"
-            if fi.get("acl") in {"[u'open']", "['open']", "*"}
-            else "-2-controlled"
-        )
-
-    # Default
-    return project_info["aws_bucket_prefix"] + (
-        "-2-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
-    )
-
-
-def get_google_bucket_name(fi, PROJECT_ACL):
-    try:
-        project_info = PROJECT_ACL[fi.get("project_id")]
-    except KeyError:
-        raise UserError(
-            "PROJECT_ACL does not have {} key. All keys of PROJECT_ACL are {}".format(
-                fi.get("project_id"), PROJECT_ACL.keys()
-            )
-        )
-    return project_info["gs_bucket_prefix"] + (
-        "-open" if fi.get("acl") in {"[u'open']", "['open']", "*"} else "-controlled"
-    )
-
-
-def flip_bucket_accounts(aws_bucket_name):
-    """
-    flip bucket name from prod account to open account
-
-    ex:
-        aws_bucket_name: bucket-open
-        return: bucket-2-open
-
-        aws_bucket_name: bucket1-2-controlled
-        return: bucket1-controlled
-    """
-
-    if "-2-controlled" in aws_bucket_name:
-        return aws_bucket_name[:-12] + "controlled"
-    elif "-controlled" in aws_bucket_name:
-        return aws_bucket_name[:-10] + "2-controlled"
-    elif "-2-open" in aws_bucket_name:
-        return aws_bucket_name[:-6] + "open"
-    elif "-open" in aws_bucket_name:
-        return aws_bucket_name[:-4] + "2-open"
 
 
 def get_aws_reversed_acl_bucket_name(target_bucket):
@@ -130,79 +46,12 @@ def get_aws_reversed_acl_bucket_name(target_bucket):
             return target_bucket + "-controlled"
 
 
-def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
-    """
-    Get the manifest from s3
-    pass to get_fileinfo_list_from_manifest to get
-    list of file info dictionary (size, md5, etc.)
-    """
-
-    s3 = boto3.resource("s3")
-
-    out = urlparse(url_manifest)
-    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
-    return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
-
-
-def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):
-    """
-    Get the manifest from gs
-    pass to get_fileinfo_list_from_manifest to get
-    list of file info dictionary (size, md5, etc.)
-    """
-    import subprocess
-
-    cmd = "gsutil cp {} ./tmp.tsv".format(url_manifest)
-    subprocess.Popen(cmd, shell=True).wait()
-
-    return get_fileinfo_list_from_csv_manifest("./tmp.tsv", start, end)
-
-
-def get_fileinfo_list_from_csv_manifest(manifest_file, start=None, end=None, dem="\t"):
-    """
-    get file info from csv manifest
-    """
-    files = []
-    with open(manifest_file, "rt") as csvfile:
-        csvReader = csv.DictReader(csvfile, delimiter=dem)
-        for row in csvReader:
-            row["size"] = int(row["size"])
-            files.append(row)
-
-    start_idx = start if start else 0
-    end_idx = end if end else len(files)
-
-    return files[start_idx:end_idx]
-
-
-def generate_chunk_data_list(size, data_size):
-    L = []
-    idx = 0
-    while idx < size:
-        L.append((idx, min(idx + data_size - 1, size - 1)))
-        idx += data_size
-
-    return L
-
-
 def prepare_data(manifest_file, global_config, copied_objects=None, project_acl=None):
     """
     Read data file info from manifest and organize them into groups.
     Each group contains files which should be copied to the same bucket
     The groups will be push to the queue consumed by threads
     """
-    if manifest_file.startswith("s3://"):
-        copying_files = get_fileinfo_list_from_s3_manifest(
-            url_manifest=manifest_file,
-            start=global_config.get("start"),
-            end=global_config.get("end"),
-        )
-    else:
-        copying_files = get_fileinfo_list_from_csv_manifest(
-            manifest_file=manifest_file,
-            start=global_config.get("start"),
-            end=global_config.get("end"),
-        )
 
     if global_config.get("file_shuffle", False):
         random.shuffle(copying_files)
@@ -374,26 +223,6 @@ def build_object_dataset_gs(PROJECT_ACL):
         th.join()
 
     return copied_object
-
-
-def write_csv(filename, files, sorted_attr=None, fieldnames=None):
-    def on_key(element):
-        return element[sorted_attr]
-
-    if sorted_attr:
-        sorted_files = sorted(files, key=on_key)
-    else:
-        sorted_files = files
-
-    if not files:
-        return
-    fieldnames = fieldnames or files[0].keys()
-    with open(filename, mode="w") as outfile:
-        writer = csv.DictWriter(outfile, delimiter="\t", fieldnames=fieldnames)
-        writer.writeheader()
-
-        for f in sorted_files:
-            writer.writerow(f)
 
 
 def get_indexd_records():

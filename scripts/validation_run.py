@@ -1,9 +1,9 @@
 import json
 
 from scripts import validateII
-from scripts import general_utils
-from scripts import file_utils
-from scripts import cloud_utils
+from scripts import utilsII
+from scripts import utils_file
+from scripts import utils_cloud
 
 from cdislogging import get_logger
 
@@ -56,13 +56,13 @@ def run(global_config):
     log_path = f"./DR{RELEASE}_validation.txt"
     log_session = None
     if LOG_SETTINGS["location_type"] == "cloud":
-        log_cloud = cloud_utils.parse_cloud_path(f"{LOG_SETTINGS['location']}").get(
+        log_cloud = utils_cloud.parse_cloud_path(f"{LOG_SETTINGS['location']}").get(
             "cloud"
         )
-        log_session = cloud_utils.start_session(log_cloud, AUTH_SETTINGS[log_cloud])
+        log_session = utils_cloud.start_session(log_cloud, AUTH_SETTINGS[log_cloud])
 
     try:
-        general_utils.get_resource_object(
+        utilsII.get_resource_object(
             LOG_SETTINGS["location_type"],
             LOG_SETTINGS["location"],
             log_path,
@@ -72,7 +72,7 @@ def run(global_config):
         print(
             f"Could not find logs for validation under {LOG_SETTINGS['location']}, writing new file"
         )
-        file_utils.write([""], log_path)
+        utils_file.write([""], log_path)
 
     resume_logger(log_path)
     logger.info(f"Starting validation process for release {RELEASE}...")
@@ -224,10 +224,10 @@ def run(global_config):
     except Exception as e:
         logger.error(f"The following error occurred during validation: {e}")
         if LOG_SETTINGS["location_type"] == "cloud":
-            cloud_utils.upload_cloud(
+            utils_cloud.upload_cloud(
                 LOG_SETTINGS["location"], log_path, log_session, True
             )
         else:
-            general_utils.move_resource(
+            utilsII.move_resource(
                 "local", log_path, LOG_SETTINGS["location"], log_session
             )

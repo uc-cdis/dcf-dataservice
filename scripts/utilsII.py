@@ -1,8 +1,8 @@
 import os
 import shutil
 
-import file_utils
-import cloud_utils
+import utils_file
+import utils_cloud
 
 
 def _get_cloud(session, resource_type: str, cloud_path: str, output_path: str):

@@ -1,9 +1,9 @@
 import os
 
-from scripts import file_utils
-from scripts import cloud_utils
-from scripts import general_utils
-from scripts import dcf_utils
+from scripts import utils_file
+from scripts import utils_cloud
+from scripts import utilsII
+from scripts import utils_dcf
 
 from indexclient.client import IndexClient
 from cdislogging import get_logger
@@ -21,8 +21,8 @@ def proposed_manifest(
     """
 
     def _create_output_record(record_row: dict):
-        aws_bucket_name = dcf_utils.get_dcf_aws_bucket_name(record_row)
-        gcp_bucket_name = dcf_utils.get_dcf_google_bucket_name(record_row)
+        aws_bucket_name = utils_dcf.get_dcf_aws_bucket_name(record_row)
+        gcp_bucket_name = utils_dcf.get_dcf_google_bucket_name(record_row)
         object_key = "{}/{}".format(record_row.get("id"), record_row.get("file_name"))
         aws_url = "{}://{}/{}".format("s3", aws_bucket_name, object_key)
         gcp_url = "{}://{}/{}".format("gs", gcp_bucket_name, object_key)
@@ -80,23 +80,23 @@ def proposed_manifest(
 
     waiting_session = None
     if waiting_location_type == "cloud":
-        waiting_cloud = cloud_utils.parse_cloud_path(f"{waiting_location_path}").get(
+        waiting_cloud = utils_cloud.parse_cloud_path(f"{waiting_location_path}").get(
             "cloud"
         )
-        waiting_session = cloud_utils.start_session(
+        waiting_session = utils_cloud.start_session(
             waiting_cloud, AUTH_SETTINGS[waiting_cloud]
         )
 
     ready_session = None
     if ready_location_type == "cloud":
-        ready_cloud = cloud_utils.parse_cloud_path(f"{ready_location_path}").get(
+        ready_cloud = utils_cloud.parse_cloud_path(f"{ready_location_path}").get(
             "cloud"
         )
-        ready_session = cloud_utils.start_session(
+        ready_session = utils_cloud.start_session(
             ready_cloud, AUTH_SETTINGS[ready_cloud]
         )
 
-    manifest_list = general_utils.get_resource_list(
+    manifest_list = utilsII.get_resource_list(
         waiting_location_type, waiting_location_path, waiting_session
     )
 
@@ -113,7 +113,7 @@ def proposed_manifest(
             waiting_file_path = f"{waiting_location_path}/{manifest}"
             output_path = f"{cwd}/{manifest}"
 
-            content = general_utils.get_resource_object(
+            content = utilsII.get_resource_object(
                 waiting_location_type,
                 waiting_file_path,
                 output_path,
@@ -121,7 +121,7 @@ def proposed_manifest(
             )
 
             record_list = []
-            # headers = file_utils.get_headers(output_path)
+            # headers = utils_file.get_headers(output_path)
             headers = [
                 "id",
                 "file_name",
@@ -146,14 +146,14 @@ def proposed_manifest(
             record_list.insert(0, headers)
 
             resource_path = f"{cwd}/{manifest}_DCFCREATED{manifest_list_pos}.tsv"
-            file_utils.write(record_list, resource_path)
+            utils_file.write(record_list, resource_path)
             dest_path = f"{ready_location}/{manifest}_DCFCREATED{manifest_list_pos}.tsv"
             if ready_location_type == "cloud":
-                cloud_utils.upload_cloud(dest_path, resource_path, ready_session, True)
+                utils_cloud.upload_cloud(dest_path, resource_path, ready_session, True)
             else:
-                general_utils.move_resource("local", resource_path, dest_path)
+                utilsII.move_resource("local", resource_path, dest_path)
 
-            general_utils.remove_resource(
+            utilsII.remove_resource(
                 waiting_location_type, waiting_file_path, waiting_session
             )
         except Exception as e:
@@ -190,32 +190,32 @@ def check_objects_cloud(
 
     waiting_session = None
     if waiting_location_type == "cloud":
-        waiting_cloud = cloud_utils.parse_cloud_path(f"{waiting_location_path}").get(
+        waiting_cloud = utils_cloud.parse_cloud_path(f"{waiting_location_path}").get(
             "cloud"
         )
-        waiting_session = cloud_utils.start_session(
+        waiting_session = utils_cloud.start_session(
             waiting_cloud, AUTH_SETTINGS[waiting_cloud]
         )
 
     validated_session = None
     if validated_location_type == "cloud":
-        validated_cloud = cloud_utils.parse_cloud_path(
+        validated_cloud = utils_cloud.parse_cloud_path(
             f"{validated_location_path}"
         ).get("cloud")
-        validated_session = cloud_utils.start_session(
+        validated_session = utils_cloud.start_session(
             validated_cloud, AUTH_SETTINGS[validated_cloud]
         )
 
     failed_session = None
     if failed_location_type == "cloud":
-        failed_cloud = cloud_utils.parse_cloud_path(f"{failed_location_path}").get(
+        failed_cloud = utils_cloud.parse_cloud_path(f"{failed_location_path}").get(
             "cloud"
         )
-        failed_session = cloud_utils.start_session(
+        failed_session = utils_cloud.start_session(
             failed_cloud, AUTH_SETTINGS[failed_cloud]
         )
 
-    manifest_list = general_utils.get_resource_list(
+    manifest_list = utilsII.get_resource_list(
         waiting_location_type, waiting_location_path, waiting_session
     )
     manifest_list_len = len(manifest_list)
@@ -224,8 +224,8 @@ def check_objects_cloud(
     failed_manifests = 0
 
     cloud_sessions = {
-        "gs": cloud_utils.start_session("gs", AUTH_SETTINGS["gs"]),
-        "s3": cloud_utils.start_session("s3", AUTH_SETTINGS["s3"]),
+        "gs": utils_cloud.start_session("gs", AUTH_SETTINGS["gs"]),
+        "s3": utils_cloud.start_session("s3", AUTH_SETTINGS["s3"]),
     }
 
     for manifest in manifest_list:
@@ -238,19 +238,19 @@ def check_objects_cloud(
             waiting_file_path = f"{waiting_location_path}/{manifest}"
             output_path = f"{cwd}/{manifest}"
 
-            content = general_utils.get_resource_object(
+            content = utilsII.get_resource_object(
                 waiting_location_type,
                 waiting_file_path,
                 output_path,
                 waiting_session,
             )
 
-            proposed_urls = general_utils.record_to_url_dict(content)
+            proposed_urls = utilsII.record_to_url_dict(content)
             proposed_bucket_list = []
             proposed_url_list = []
             for src_dict in proposed_urls.values():
-                gs_bucket = cloud_utils.parse_cloud_path(src_dict["gs"]).get("bucket")
-                s3_bucket = cloud_utils.parse_cloud_path(src_dict["s3"]).get("bucket")
+                gs_bucket = utils_cloud.parse_cloud_path(src_dict["gs"]).get("bucket")
+                s3_bucket = utils_cloud.parse_cloud_path(src_dict["s3"]).get("bucket")
                 proposed_bucket_list.append(f"gs://{gs_bucket}")
                 proposed_bucket_list.append(f"s3://{s3_bucket}")
                 proposed_url_list.append(src_dict["s3"])
@@ -260,7 +260,7 @@ def check_objects_cloud(
             bucket_list = list(unique_buckets)
             bucket_urls = _list_bucket_urls(bucket_list, cloud_sessions)
 
-            validated_subset, failed_subset = general_utils.check_subset_in_list(
+            validated_subset, failed_subset = utilsII.check_subset_in_list(
                 proposed_url_list, bucket_urls
             )
 
@@ -284,21 +284,21 @@ def check_objects_cloud(
             validated_file_path = (
                 f"{cwd}/{manifest[:-4]}_cloud_validated{manifest[-4:]}"
             )
-            file_utils.write(validated_records, validated_file_path)
+            utils_file.write(validated_records, validated_file_path)
             dest_validated_file_path = f"{validated_location_path}/{manifest[:-4]}_cloud_validated{manifest[-4:]}"
             if validated_location_type == "cloud":
-                cloud_utils.upload_cloud(
+                utils_cloud.upload_cloud(
                     dest_validated_file_path,
                     validated_file_path,
                     validated_session,
                     True,
                 )
             else:
-                general_utils.move_resource(
+                utilsII.move_resource(
                     "local", validated_file_path, dest_validated_file_path
                 )
 
-            general_utils.remove_resource(
+            utilsII.remove_resource(
                 waiting_location_type, waiting_file_path, waiting_session
             )
 
@@ -307,22 +307,22 @@ def check_objects_cloud(
                     f"{cwd}/{manifest[:-4]}_cloud_failed_list{manifest[-4:]}"
                 )
                 failed_file_path = f"{cwd}/{manifest[:-4]}_cloud_failed{manifest[-4:]}"
-                file_utils.write(failed_subset, failed_list_path)
-                file_utils.write(failed_records, failed_file_path)
+                utils_file.write(failed_subset, failed_list_path)
+                utils_file.write(failed_records, failed_file_path)
                 dest_failed_list_path = f"{failed_location_path}/{manifest[:-4]}_cloud_failed_list{manifest[-4:]}"
                 dest_failed_file_path = f"{failed_location_path}/{manifest[:-4]}_cloud_failed{manifest[-4:]}"
                 if failed_location_type == "cloud":
-                    cloud_utils.upload_cloud(
+                    utils_cloud.upload_cloud(
                         dest_failed_list_path, failed_list_path, failed_session, True
                     )
-                    cloud_utils.upload_cloud(
+                    utils_cloud.upload_cloud(
                         dest_failed_file_path, failed_file_path, failed_session, True
                     )
                 else:
-                    general_utils.move_resource(
+                    utilsII.move_resource(
                         "local", failed_list_path, dest_failed_list_path
                     )
-                    general_utils.move_resource(
+                    utilsII.move_resource(
                         "local", failed_file_path, dest_failed_file_path
                     )
 
@@ -343,11 +343,11 @@ def _list_bucket_urls(bucket_list: list, cloud_session):
     for bucket in bucket_list:
         try:
             if "gs" in bucket:
-                bucket_contents = general_utils.get_resource_list(
+                bucket_contents = utilsII.get_resource_list(
                     "cloud", bucket, cloud_session["gs"]
                 )
             elif "s3" in bucket:
-                bucket_contents = general_utils.get_resource_list(
+                bucket_contents = utilsII.get_resource_list(
                     "cloud", bucket, cloud_session["s3"]
                 )
             else:
@@ -386,32 +386,32 @@ def check_objects_indexd(
 
     waiting_session = None
     if waiting_location_type == "cloud":
-        waiting_cloud = cloud_utils.parse_cloud_path(f"{waiting_location_path}").get(
+        waiting_cloud = utils_cloud.parse_cloud_path(f"{waiting_location_path}").get(
             "cloud"
         )
-        waiting_session = cloud_utils.start_session(
+        waiting_session = utils_cloud.start_session(
             waiting_cloud, AUTH_SETTINGS[waiting_cloud]
         )
 
     validated_session = None
     if validated_location_type == "cloud":
-        validated_cloud = cloud_utils.parse_cloud_path(
+        validated_cloud = utils_cloud.parse_cloud_path(
             f"{validated_location_path}"
         ).get("cloud")
-        validated_session = cloud_utils.start_session(
+        validated_session = utils_cloud.start_session(
             validated_cloud, AUTH_SETTINGS[validated_cloud]
         )
 
     failed_session = None
     if failed_location_type == "cloud":
-        failed_cloud = cloud_utils.parse_cloud_path(f"{failed_location_path}").get(
+        failed_cloud = utils_cloud.parse_cloud_path(f"{failed_location_path}").get(
             "cloud"
         )
-        failed_session = cloud_utils.start_session(
+        failed_session = utils_cloud.start_session(
             failed_cloud, AUTH_SETTINGS[failed_cloud]
         )
 
-    manifest_list = general_utils.get_resource_list(
+    manifest_list = utilsII.get_resource_list(
         waiting_location_type, waiting_location_path, waiting_session
     )
     manifest_list_len = len(manifest_list)
@@ -429,14 +429,14 @@ def check_objects_indexd(
             waiting_file_path = f"{waiting_location_path}/{manifest}"
             output_path = f"{cwd}/{manifest}"
 
-            content = general_utils.get_resource_object(
+            content = utilsII.get_resource_object(
                 waiting_location_type,
                 waiting_file_path,
                 output_path,
                 waiting_session,
             )
 
-            proposed_urls = general_utils.record_to_url_dict(content)
+            proposed_urls = utilsII.record_to_url_dict(content)
             proposed_url_list = []
             for src_dict in proposed_urls.values():
                 proposed_url_list = proposed_url_list + list(src_dict.values())
@@ -449,9 +449,7 @@ def check_objects_indexd(
                 validated_subset,
                 failed_subset,
                 extras,
-            ) = general_utils.check_subset_in_list(
-                proposed_url_list, indexd_records, True
-            )
+            ) = utilsII.check_subset_in_list(proposed_url_list, indexd_records, True)
 
             id_content = {}
             for record_dict in content:
@@ -473,21 +471,21 @@ def check_objects_indexd(
             validated_file_path = (
                 f"{cwd}/{manifest[:-4]}_index_validated{manifest[-4:]}"
             )
-            file_utils.write(validated_records, validated_file_path)
+            utils_file.write(validated_records, validated_file_path)
             dest_validated_file_path = f"{validated_location_path}/{manifest[:-4]}_index_validated{manifest[-4:]}"
             if validated_location_type == "cloud":
-                cloud_utils.upload_cloud(
+                utils_cloud.upload_cloud(
                     dest_validated_file_path,
                     validated_file_path,
                     validated_session,
                     True,
                 )
             else:
-                general_utils.move_resource(
+                utilsII.move_resource(
                     "local", validated_file_path, dest_validated_file_path
                 )
 
-            general_utils.remove_resource(
+            utilsII.remove_resource(
                 waiting_location_type, waiting_file_path, waiting_session
             )
 
@@ -496,23 +494,23 @@ def check_objects_indexd(
                     f"{cwd}/{manifest[:-4]}_index_failed_list{manifest[-4:]}"
                 )
                 failed_file_path = f"{cwd}/{manifest[:-4]}_index_failed{manifest[-4:]}"
-                file_utils.write(failed_subset, failed_list_path)
-                file_utils.write(failed_records, failed_file_path)
+                utils_file.write(failed_subset, failed_list_path)
+                utils_file.write(failed_records, failed_file_path)
                 dest_failed_list_path = f"{failed_location_path}/{manifest[:-4]}_index_failed_list{manifest[-4:]}"
                 dest_failed_file_path = f"{failed_location_path}/{manifest[:-4]}_index_failed{manifest[-4:]}"
                 if failed_location_type == "cloud":
-                    cloud_utils.upload_cloud(
+                    utils_cloud.upload_cloud(
                         dest_failed_list_path, failed_list_path, failed_session, True
                     )
-                    cloud_utils.upload_cloud(
+                    utils_cloud.upload_cloud(
                         dest_failed_file_path, failed_file_path, failed_session, True
                     )
                 else:
 
-                    general_utils.move_resource(
+                    utilsII.move_resource(
                         "local", failed_list_path, dest_failed_list_path
                     )
-                    general_utils.move_resource(
+                    utilsII.move_resource(
                         "local", failed_file_path, dest_failed_file_path
                     )
 
@@ -570,23 +568,23 @@ def create_final_manifest(
 
     waiting_session = None
     if waiting_location_type == "cloud":
-        waiting_cloud = cloud_utils.parse_cloud_path(f"{waiting_location_path}").get(
+        waiting_cloud = utils_cloud.parse_cloud_path(f"{waiting_location_path}").get(
             "cloud"
         )
-        waiting_session = cloud_utils.start_session(
+        waiting_session = utils_cloud.start_session(
             waiting_cloud, AUTH_SETTINGS[waiting_cloud]
         )
 
     destination_session = None
     if destination_location_type == "cloud":
-        destination_cloud = cloud_utils.parse_cloud_path(
+        destination_cloud = utils_cloud.parse_cloud_path(
             f"{destination_location_path}"
         ).get("cloud")
-        destination_session = cloud_utils.start_session(
+        destination_session = utils_cloud.start_session(
             destination_cloud, AUTH_SETTINGS[destination_cloud]
         )
 
-    manifest_list = general_utils.get_resource_list(
+    manifest_list = utilsII.get_resource_list(
         waiting_location_type, waiting_location_path, waiting_session
     )
     manifest_list_len = len(manifest_list)
@@ -602,7 +600,7 @@ def create_final_manifest(
         waiting_file_path = f"{waiting_location_path}/{manifest}"
         output_path = f"{cwd}/{manifest}"
 
-        content = general_utils.get_resource_object(
+        content = utilsII.get_resource_object(
             waiting_location_type,
             waiting_file_path,
             output_path,
@@ -616,12 +614,12 @@ def create_final_manifest(
         final.append(record)
 
     final_file_path = f"{cwd}/DCF_final.tsv"
-    file_utils.write(final, final_file_path)
+    utils_file.write(final, final_file_path)
     dest_path = f"{destination_location_path}/DCF_final.tsv"
     if destination_location_type == "cloud":
-        cloud_utils.upload_cloud(dest_path, final_file_path, destination_session, True)
+        utils_cloud.upload_cloud(dest_path, final_file_path, destination_session, True)
     else:
-        general_utils.move_resource("local", final_file_path, dest_path)
+        utilsII.move_resource("local", final_file_path, dest_path)
 
     return final_manifest_created
 

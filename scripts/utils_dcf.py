@@ -24,8 +24,7 @@ def get_dcf_aws_bucket_name(record_row: dict, reverse=False):
     """
     Return AWS bucket name
     record_row: manifest file row
-    PROJECT_ACL: from json under dir dcfprod/apis_configs/dcf-dataservice/GDC_project_map.json
-    and dcfprod/apis_configs/dcf-dataservice/dcf_dataservice_settings
+    PROJECT_ACL: JSON
     """
     try:
         project_info = PROJECT_ACL[record_row.get("project_id")]
