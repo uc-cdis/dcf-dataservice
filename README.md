@@ -200,3 +200,40 @@ The followings is an example of configuration for running google replication wit
 }
 
 ```
+
+## Validation II
+
+### Setup
+Download manifests from Box
+Upload active manifest to {location}/{release number}/GDC
+
+#### Run command
+`gen3 runjob replicate-validation RELEASE $RELEASE_NUMBER SKIP_TO $step`
+
+#### Run job for the first time:
+`gen3 runjob replicate-validation RELEASE 38`
+
+#### Start at cloud validation step:
+`gen3 runjob replicate-validation RELEASE 38 SKIP_TO cloud`
+
+#### Start at IndexD validation step:
+`gen3 runjob replicate-validation RELEASE 38 SKIP_TO indexd`
+
+#### Start at final manifest step:
+`gen3 runjob replicate-validation RELEASE 38 SKIP_TO final`
+
+### Proposed Manifests
+*Sort large active manifest by project and segment into 10 smaller manifests, while also processing to create proposed urls for copied files*
+If manifests are successfully processed, manifests are uploaded to {location}/{release number}/cloud_waiting and removed from {location}/{release number}/GDC
+
+### Check Objects Cloud
+*Check for presence of resources in buckets*
+If records from manifest are successfully validated, a new manifest of validated records is uploaded to {location}/{release number}/cloud_validated and removed from {location}/{release number}/cloud_waiting; and, a new manifest of failed records is uploaded to {location}/{release number}/cloud_failed. To rerun fixed files, manifest must be moved to {location}/{release number}/cloud_waiting.
+
+### Check Objects IndexD
+*Check resources are properly indexed in IndexD*
+If records from manifest are successfully validated, a new manifest of validated records is uploaded to {location}/{release number}/index_validated and removed from {location}/{release number}/cloud_validated; and, a new manifest of failed records is uploaded to {location}/{release number}/index_failed. To rerun fixed files, manifest must be moved to {location}/{release number}/cloud_validated.
+
+### Create Final Manifest
+*Merge validated manifests and output one manifest*
+If all records pass validation, i.e. there no manifests under {location}/{release number}/index_failed, manifests under {location}/{release number}/index_validated are merged into one final manifest under {location}/{release number}
