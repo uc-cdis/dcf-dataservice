@@ -1,10 +1,14 @@
 import json
+import math
+
 import boto3
 import botocore
-from cdislogging import get_logger
+
 from urllib.parse import urlparse
 
-from indexclient.client import IndexClient
+from cdislogging import get_logger
+
+# from scripts import file_utils
 
 from scripts import utils
 from scripts.errors import UserError
@@ -17,6 +21,15 @@ global logger
 def resume_logger(filename=None):
     global logger
     logger = get_logger("Validation", filename)
+
+
+def log_file_progress(manifest_idx, current_file, total_files):
+    progress = (current_file / total_files) * 100
+    progress = math.floor(progress / 10) * 10  # Round down to nearest 10
+    if progress % 10 == 0:
+        logger.info(
+            f"Manifest #: {manifest_idx} - Processing {current_file}/{total_files} files ({progress}% complete)"
+        )
 
 
 def run(global_config):
@@ -70,7 +83,7 @@ def run(global_config):
             "number of output manifests and number of manifest_files are not the same"
         )
 
-    if not _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
+    if not _pass_preliminary_check(manifest_files, FORCE_CREATE_MANIFEST):
         raise UserError("The input does not pass the preliminary check")
 
     logger.info("scan all copied objects")
@@ -115,7 +128,7 @@ def run(global_config):
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         fail_list = []
-        for fi in files:
+        for i, fi in enumerate(files):
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
@@ -127,6 +140,7 @@ def run(global_config):
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
             # validate aws
+            # TO NOTE: doing extra checks here because of logic of open prod accounts for buckets
             aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
             object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
             object_path_2 = "{}/{}/{}".format(
@@ -181,6 +195,7 @@ def run(global_config):
                             fi["id"], fi["gs_url"], fi["indexd_url"]
                         )
                     )
+            log_file_progress(idx, i, len(files))
 
         if total_gs_index_failures + total_gs_copy_failures == 0:
             logger.info(
@@ -291,12 +306,14 @@ def run(global_config):
     return pass_validation
 
 
-def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
+def _pass_preliminary_check(manifest_files: str, FORCE_CREATE_MANIFEST=False):
     """
     Check if manifests are in the manifest bucket
-
-    'FORCE_CREATE_MANIFEST': True, False command arg parameter
-    'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
+    Args:
+        manifest_files(str):
+            Expression to match (for example: >5, ==3, ==this_guid)
+    Returns:
+        None
     """
 
     session = boto3.session.Session()
@@ -304,9 +321,11 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
 
     for url in manifest_files:
         try:
+            logger.info(f"{manifest_files}, {url}")
             parsed = urlparse(url)
             bucket_name = parsed.netloc
             key = parsed.path.strip("/")
+            logger.info(f"Bucket name: {bucket_name}")
             s3.meta.client.head_object(Bucket=bucket_name, Key=key)
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
