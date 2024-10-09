@@ -7,9 +7,9 @@ import threading
 from threading import Thread
 from urllib.parse import urlparse
 
-from scripts.errors import UserError
+from dcfdataservice.errors import UserError
 from indexclient.client import IndexClient
-from scripts.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
+from dcfdataservice.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
 
 def get_aws_bucket_name(fi, PROJECT_ACL):

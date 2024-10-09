@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import (
+from dcfdataservice.settings import (
     PROJECT_ACL,
     INDEXD,
     GDC_TOKEN,
@@ -31,10 +31,10 @@ from scripts.settings import (
     POSTFIX_1_EXCEPTION,
     POSTFIX_2_EXCEPTION,
 )
-from scripts import utils
-from scripts.utils import generate_chunk_data_list, prepare_data
-from scripts.errors import UserError, APIError
-from scripts.indexd_utils import update_url
+from dcfdataservice import utils
+from dcfdataservice.utils import generate_chunk_data_list, prepare_data
+from dcfdataservice.errors import UserError, APIError
+from dcfdataservice.indexd_utils import update_url
 
 global logger
 
@@ -417,7 +417,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
                         "Streaming: {}. Size {} (MB). Class {}".format(

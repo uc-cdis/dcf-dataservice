@@ -2,11 +2,11 @@ import timeit
 import argparse
 import json
 
-import scripts.aws_replicate as aws_replicate
-import scripts.google_replicate as google_replicate
-import scripts.validate as validate
-from scripts.settings import SLACK_URL
-from scripts.deletion import delete_objects_from_cloud_resources
+import dcfdataservice.aws_replicate as aws_replicate
+import dcfdataservice.google_replicate as google_replicate
+import dcfdataservice.validate as validate
+from dcfdataservice.settings import SLACK_URL
+from dcfdataservice.deletion import delete_objects_from_cloud_resources
 from slack_sdk.webhook import WebhookClient
 from cdislogging import get_logger
 

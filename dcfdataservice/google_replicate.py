@@ -9,7 +9,7 @@ import subprocess
 
 from google.cloud import storage
 from google.cloud.storage import Blob
-from scripts.google_resumable_upload import GCSObjectStreamUpload
+from dcfdataservice.google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
@@ -18,10 +18,16 @@ import logging as logger
 
 from indexclient.client import IndexClient
 
-from scripts import utils
-from scripts.errors import APIError, UserError, StreamError
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA_ENDPT
-from scripts import indexd_utils
+from dcfdataservice import utils
+from dcfdataservice.errors import APIError, UserError, StreamError
+from dcfdataservice.settings import (
+    PROJECT_ACL,
+    INDEXD,
+    GDC_TOKEN,
+    IGNORED_FILES,
+    DATA_ENDPT,
+)
+from dcfdataservice import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
@@ -339,7 +345,7 @@ def _update_indexd_for_5aa_object(fi, bucket_name, ignored_dict, indexclient):
 
 def resumable_streaming_copy(fi, client, bucket_name, blob_name, global_config):
     """
-    Copy file to google bucket. Implemented using google cloud resumable API
+    Copy file to google bucket. Implemented using google cloud resumale API
     Args:
         fi(dict): file information
         client(google client): google client
