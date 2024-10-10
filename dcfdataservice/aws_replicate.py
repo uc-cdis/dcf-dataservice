@@ -822,6 +822,7 @@ def run(
     """
     start processes and log after they finish
     """
+    resume_logger("./log.txt")
     logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
@@ -843,8 +844,6 @@ def run(
         )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
-
-    resume_logger("./log.txt")
 
     copied_objects, source_objects = {}, {}
 
