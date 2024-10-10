@@ -10,9 +10,9 @@ from cdislogging import get_logger
 
 from indexclient.client import IndexClient
 
-from scripts.aws_replicate import object_exists
-from scripts.settings import INDEXD, PROJECT_ACL
-from scripts.utils import (
+from dcfdataservice.aws_replicate import object_exists
+from dcfdataservice.settings import INDEXD, PROJECT_ACL
+from dcfdataservice.utils import (
     get_aws_bucket_name,
     get_google_bucket_name,
     get_fileinfo_list_from_csv_manifest,
@@ -20,12 +20,12 @@ from scripts.utils import (
     get_ignored_files,
     get_structured_object_key,
 )
-from scripts.indexd_utils import (
+from dcfdataservice.indexd_utils import (
     remove_url_from_indexd_record,
     delete_record_from_indexd,
 )
-from scripts.errors import UserError, APIError
-from scripts.settings import IGNORED_FILES
+from dcfdataservice.errors import UserError, APIError
+from dcfdataservice.settings import IGNORED_FILES
 
 logger = get_logger("DCFRedacts")
 

@@ -5,7 +5,6 @@ import logging
 
 class GCSObjectStreamUpload(object):
     def __init__(self, client, bucket_name, blob_name, chunk_size=2560 * 8 * 1024):
-
         self._client = client
         self._bucket = self._client.bucket(bucket_name)
         self._blob = self._bucket.blob(blob_name)
