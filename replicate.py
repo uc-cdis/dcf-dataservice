@@ -63,13 +63,15 @@ def parse_arguments():
 if __name__ == "__main__":
     start = timeit.default_timer()
     args = parse_arguments()
-    webhook = WebhookClient(SLACK_URL)
-
-    try:
-        slack_call = webhook.send(text=f"Starting {args.action}")
-        assert slack_call.status_code == 200
-    except AssertionError as e:
-        logger.error("The slack hook has encountered an error: Detail {}".format(e))
+    if SLACK_URL:
+        try:
+            webhook = WebhookClient(SLACK_URL)
+            slack_call = webhook.send(text=f"Starting {args.action}")
+            assert slack_call.status_code == 200
+        except AssertionError as e:
+            logger.error("The slack hook has encountered an error: Detail {}".format(e))
+    else:
+        logger.warning("SLACK_URL not configured")
 
     if args.action == "aws_replicate" or args.action == "indexing":
         job_name = "copying" if args.action == "aws_replicate" else "indexing"
@@ -106,8 +108,9 @@ if __name__ == "__main__":
     end = timeit.default_timer()
     print("Total time: {} seconds".format(end - start))
 
-    try:
-        slack_call = webhook.send(text=f"Completed {args.action}")
-        assert slack_call.status_code == 200
-    except AssertionError as e:
-        logger.error("The slack hook has encountered an error: Detail {}".format(e))
+    if SLACK_URL:
+        try:
+            slack_call = webhook.send(text=f"Completed {args.action}")
+            assert slack_call.status_code == 200
+        except AssertionError as e:
+            logger.error("The slack hook has encountered an error: Detail {}".format(e))

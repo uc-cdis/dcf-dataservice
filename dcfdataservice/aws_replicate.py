@@ -127,18 +127,14 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            error_code = int(e.response["Error"]["Code"])
-            if error_code == 403:
-                logger.error(
-                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
-                )
-                raise
-            else:
-                logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(
-                        bucket_name, e
-                    )
-                )
+            logger.error(
+                "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Error listing objects for bucket {bucket_name}")
+            logger.error(f"Erroring with message {e}")
+            raise
 
         mutexLock.acquire()
         objects.update(result)
@@ -826,6 +822,7 @@ def run(
     """
     start processes and log after they finish
     """
+    logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
@@ -833,12 +830,14 @@ def run(
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
+        logger.error(f"Log bucket does not exist")
         return
 
     log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
     s3 = boto3.client("s3")
     try:
+        logger.info("Downloading log file")
         s3.download_file(
             global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt"
         )
