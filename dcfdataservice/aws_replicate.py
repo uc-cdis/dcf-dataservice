@@ -416,7 +416,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
             if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
-                        "Streaming: {}. Size {} (MB). Class {}".format(
+                        "Streaming: {} from GDC API. Size {} (MB). Class {}.".format(
                             object_key,
                             int(fi["size"] * 1.0 / 1024 / 1024),
                             storage_class,
@@ -750,9 +750,7 @@ def validate_uploaded_data(
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
         logger.warning(
-            "Can not stream the object {} to {}. Etag check fails".format(
-                fi.get("id"), target_bucket
-            )
+            f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')}, got: {meta_data.get('ETag', '')}"
         )
         return False
 
