@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import (
+from dcfdataservice.settings import (
     PROJECT_ACL,
     INDEXD,
     GDC_TOKEN,
@@ -31,10 +31,10 @@ from scripts.settings import (
     POSTFIX_1_EXCEPTION,
     POSTFIX_2_EXCEPTION,
 )
-from scripts import utils
-from scripts.utils import generate_chunk_data_list, prepare_data
-from scripts.errors import UserError, APIError
-from scripts.indexd_utils import update_url
+from dcfdataservice import utils
+from dcfdataservice.utils import generate_chunk_data_list, prepare_data
+from dcfdataservice.errors import UserError, APIError
+from dcfdataservice.indexd_utils import update_url
 
 global logger
 
@@ -127,18 +127,14 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            error_code = int(e.response["Error"]["Code"])
-            if error_code == 403:
-                logger.error(
-                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
-                )
-                raise
-            else:
-                logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(
-                        bucket_name, e
-                    )
-                )
+            logger.error(
+                "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Error listing objects for bucket {bucket_name}")
+            logger.error(f"Erroring with message {e}")
+            raise
 
         mutexLock.acquire()
         objects.update(result)
@@ -417,10 +413,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
-                        "Streaming: {}. Size {} (MB). Class {}".format(
+                        "Streaming: {} from GDC API. Size {} (MB). Class {}.".format(
                             object_key,
                             int(fi["size"] * 1.0 / 1024 / 1024),
                             storage_class,
@@ -754,9 +750,7 @@ def validate_uploaded_data(
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
         logger.warning(
-            "Can not stream the object {} to {}. Etag check fails".format(
-                fi.get("id"), target_bucket
-            )
+            f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')}, got: {meta_data.get('ETag', '')}"
         )
         return False
 
@@ -826,6 +820,8 @@ def run(
     """
     start processes and log after they finish
     """
+    resume_logger("./log.txt")
+    logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
@@ -833,19 +829,19 @@ def run(
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
+        logger.error(f"Log bucket does not exist")
         return
 
     log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
     s3 = boto3.client("s3")
     try:
+        logger.info("Downloading log file")
         s3.download_file(
             global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt"
         )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
-
-    resume_logger("./log.txt")
 
     copied_objects, source_objects = {}, {}
 

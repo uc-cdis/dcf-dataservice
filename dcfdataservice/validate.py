@@ -6,10 +6,10 @@ from urllib.parse import urlparse
 
 from indexclient.client import IndexClient
 
-from scripts import utils
-from scripts.errors import UserError
-from scripts.aws_replicate import bucket_exists, build_object_dataset_aws
-from scripts.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
+from dcfdataservice import utils
+from dcfdataservice.errors import UserError
+from dcfdataservice.aws_replicate import bucket_exists, build_object_dataset_aws
+from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
@@ -233,7 +233,6 @@ def run(global_config):
         out_filename = out_manifests[idx].strip()
 
         if _pass or FORCE_CREATE_MANIFEST:
-
             if not _pass and FORCE_CREATE_MANIFEST:
                 logger.warning(
                     "Validation failed but creating final manifest anyway..."

@@ -14,12 +14,12 @@ import boto3
 import copy
 import pytest
 import google
-import scripts.aws_replicate
-from scripts.google_replicate import exec_google_copy, resumable_streaming_copy
+import dcfdataservice.aws_replicate
+from dcfdataservice.google_replicate import exec_google_copy, resumable_streaming_copy
 from google.cloud import storage
 
-from scripts.errors import APIError
-from scripts import utils, indexd_utils
+from dcfdataservice.errors import APIError
+from dcfdataservice import utils, indexd_utils
 
 TEST_UUID = "11111111111111111111111111111111"
 TEST_FILENAME = "test"
@@ -119,10 +119,10 @@ def gen_mock_manifest_data():
     return 16 * [fake]
 
 
-@patch("scripts.utils.get_google_bucket_name")
+@patch("dcfdataservice.utils.get_google_bucket_name")
 @patch("google.cloud.storage.Client")
-@patch("scripts.google_replicate.blob_exists")
-@patch("scripts.google_replicate.bucket_exists")
+@patch("dcfdataservice.google_replicate.blob_exists")
+@patch("dcfdataservice.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called(
     mock_bucket_exists, mock_blob_exist, mock_client, mock_get_google_bucket_name
 ):
@@ -132,8 +132,8 @@ def test_resumable_streaming_copy_called(
 
     mock_bucket_exists.return_value = True
     mock_blob_exist.side_effect = [False, False]
-    scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
+    dcfdataservice.google_replicate.resumable_streaming_copy = MagicMock()
+    dcfdataservice.google_replicate._check_and_handle_changed_acl_object = MagicMock()
     mock_get_google_bucket_name.side_effect = ["test", "test"]
     exec_google_copy(
         {
@@ -146,13 +146,13 @@ def test_resumable_streaming_copy_called(
         {"11111111": "test"},
         {},
     )
-    assert scripts.google_replicate.resumable_streaming_copy.called == True
+    assert dcfdataservice.google_replicate.resumable_streaming_copy.called == True
 
 
-@patch("scripts.indexd_utils.update_url")
-@patch("scripts.utils.get_google_bucket_name")
-@patch("scripts.google_replicate.blob_exists")
-@patch("scripts.google_replicate.bucket_exists")
+@patch("dcfdataservice.indexd_utils.update_url")
+@patch("dcfdataservice.utils.get_google_bucket_name")
+@patch("dcfdataservice.google_replicate.blob_exists")
+@patch("dcfdataservice.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_not_called_due_to_existed_blob(
     mock_bucket_exists, mock_blob_exist, mock_get_google_bucket_name, mock_update_url
 ):
@@ -161,7 +161,7 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
     """
     mock_bucket_exists.return_value = True
     mock_blob_exist.return_value = True
-    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    dcfdataservice.google_replicate.resumable_streaming_copy = MagicMock()
     mock_get_google_bucket_name.return_value = "test"
     google.cloud.storage.Client = MagicMock()
 
@@ -176,12 +176,12 @@ def test_resumable_streaming_copy_not_called_due_to_existed_blob(
         {"11111111": "test"},
         {},
     )
-    assert scripts.google_replicate.resumable_streaming_copy.called == False
+    assert dcfdataservice.google_replicate.resumable_streaming_copy.called == False
     assert mock_update_url.called == True
 
 
-@patch("scripts.utils.get_google_bucket_name")
-@patch("scripts.google_replicate.bucket_exists")
+@patch("dcfdataservice.utils.get_google_bucket_name")
+@patch("dcfdataservice.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
     mock_bucket_exists, mock_get_google_bucket_name
 ):
@@ -190,7 +190,7 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
     """
     mock_bucket_exists.return_value = False
     google.cloud.storage.Client = MagicMock()
-    scripts.google_replicate.resumable_streaming_copy = MagicMock()
+    dcfdataservice.google_replicate.resumable_streaming_copy = MagicMock()
     mock_get_google_bucket_name.return_value = "test"
     exec_google_copy(
         {
@@ -203,13 +203,13 @@ def test_resumable_streaming_copy_not_called_due_to_not_existed_bucket(
         {"11111111": "test"},
         {},
     )
-    assert scripts.google_replicate.resumable_streaming_copy.called == False
+    assert dcfdataservice.google_replicate.resumable_streaming_copy.called == False
 
 
-@patch("scripts.utils.get_google_bucket_name")
-@patch("scripts.indexd_utils.update_url")
-@patch("scripts.google_replicate.blob_exists")
-@patch("scripts.google_replicate.bucket_exists")
+@patch("dcfdataservice.utils.get_google_bucket_name")
+@patch("dcfdataservice.indexd_utils.update_url")
+@patch("dcfdataservice.google_replicate.blob_exists")
+@patch("dcfdataservice.google_replicate.bucket_exists")
 def test_resumable_streaming_copy_called_one_time(
     mock_bucket_exists, mock_blob_exist, mock_update_url, mock_get_google_bucket_name
 ):
@@ -219,10 +219,10 @@ def test_resumable_streaming_copy_called_one_time(
     """
     mock_bucket_exists.return_value = True
     mock_blob_exist.side_effect = [False, True]
-    scripts.google_replicate.resumable_streaming_copy = MagicMock()
-    scripts.google_replicate.fail_resumable_copy_blob = MagicMock()
-    scripts.google_replicate.fail_resumable_copy_blob.return_value = False
-    scripts.google_replicate._check_and_handle_changed_acl_object = MagicMock()
+    dcfdataservice.google_replicate.resumable_streaming_copy = MagicMock()
+    dcfdataservice.google_replicate.fail_resumable_copy_blob = MagicMock()
+    dcfdataservice.google_replicate.fail_resumable_copy_blob.return_value = False
+    dcfdataservice.google_replicate._check_and_handle_changed_acl_object = MagicMock()
     mock_get_google_bucket_name.return_value = "test"
     exec_google_copy(
         {
@@ -235,7 +235,7 @@ def test_resumable_streaming_copy_called_one_time(
         {"11111111": "test"},
         {},
     )
-    assert scripts.google_replicate.resumable_streaming_copy.call_count == 1
+    assert dcfdataservice.google_replicate.resumable_streaming_copy.call_count == 1
     assert mock_update_url.call_count == 1
 
 
@@ -252,7 +252,7 @@ def test_streamUpload_called(mock_requests_get, mock_client):
 
     mock_value = Mock_Requests(200)
     mock_requests_get.return_value = mock_value
-    scripts.google_replicate.streaming = MagicMock()
+    dcfdataservice.google_replicate.streaming = MagicMock()
     resumable_streaming_copy(
         {"fileid": "test_file_id", "file_name": "test file name", "size": 1},
         mock_client,
@@ -260,7 +260,7 @@ def test_streamUpload_called(mock_requests_get, mock_client):
         "blob_test",
         {},
     )
-    assert scripts.google_replicate.streaming.called
+    assert dcfdataservice.google_replicate.streaming.called
 
 
 @patch("google.cloud.storage.Client")
@@ -276,7 +276,7 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
             self.message = message
 
     mock_requests_get.return_value = Mock_Requests(status_code=400, message="error")
-    scripts.google_replicate.streaming = MagicMock()
+    dcfdataservice.google_replicate.streaming = MagicMock()
     with pytest.raises(APIError):
         resumable_streaming_copy(
             {"id": "test_file_id", "file_name": "test file name", "size": 1},
@@ -285,27 +285,27 @@ def test_streamUpload_not_called(mock_requests_get, mock_client):
             "blob_test",
             {},
         )
-    assert not scripts.google_replicate.streaming.called
+    assert not dcfdataservice.google_replicate.streaming.called
 
 
-@patch("scripts.utils.get_aws_bucket_name")
+@patch("dcfdataservice.utils.get_aws_bucket_name")
 def test_call_aws_cli_called(mock_aws):
     """
     Test that the aws cli is called since the object storage class is standard
     """
-    scripts.aws_replicate.logger = MagicMock()
+    dcfdataservice.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
     utils.get_aws_bucket_name = MagicMock()
 
     mock_aws.return_value = "tcga-open"
 
-    scripts.aws_replicate.bucket_exists = MagicMock()
-    scripts.aws_replicate.bucket_exists.return_value = True
-    scripts.aws_replicate.object_exists = MagicMock()
-    scripts.aws_replicate.object_exists.return_value = True
-    scripts.aws_replicate.get_object_storage_class = MagicMock()
+    dcfdataservice.aws_replicate.bucket_exists = MagicMock()
+    dcfdataservice.aws_replicate.bucket_exists.return_value = True
+    dcfdataservice.aws_replicate.object_exists = MagicMock()
+    dcfdataservice.aws_replicate.object_exists.return_value = True
+    dcfdataservice.aws_replicate.get_object_storage_class = MagicMock()
     boto3.session.Session = MagicMock()
-    scripts.aws_replicate.get_object_storage_class.return_value = "STANDARD"
+    dcfdataservice.aws_replicate.get_object_storage_class.return_value = "STANDARD"
 
     manager = Manager()
     manager_ns = manager.Namespace()
@@ -313,28 +313,28 @@ def test_call_aws_cli_called(mock_aws):
     manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
-    job_info = scripts.aws_replicate.JobInfo(
+    job_info = dcfdataservice.aws_replicate.JobInfo(
         {}, gen_mock_manifest_data()[0], 1, 1, "", {}, {}, manager_ns, "bucket"
     )
 
-    scripts.aws_replicate.exec_aws_copy(lock, False, job_info)
+    dcfdataservice.aws_replicate.exec_aws_copy(lock, False, job_info)
     assert subprocess.Popen.call_count == 1
 
 
-@patch("scripts.utils.get_aws_bucket_name")
+@patch("dcfdataservice.utils.get_aws_bucket_name")
 def test_call_streamming_method_called(mock_aws):
     """
     Test that the streamming method is called since the object is Glacier
     """
-    scripts.aws_replicate.logger = MagicMock()
+    dcfdataservice.aws_replicate.logger = MagicMock()
     subprocess.Popen = MagicMock()
-    scripts.aws_replicate.stream_object_from_gdc_api = MagicMock()
+    dcfdataservice.aws_replicate.stream_object_from_gdc_api = MagicMock()
     mock_aws.return_value = "tcga-open"
 
-    scripts.aws_replicate.bucket_exists = MagicMock()
-    scripts.aws_replicate.bucket_exists.return_value = True
-    scripts.aws_replicate.object_exists = MagicMock()
-    scripts.aws_replicate.object_exists.return_value = False
+    dcfdataservice.aws_replicate.bucket_exists = MagicMock()
+    dcfdataservice.aws_replicate.bucket_exists.return_value = True
+    dcfdataservice.aws_replicate.object_exists = MagicMock()
+    dcfdataservice.aws_replicate.object_exists.return_value = False
 
     source_objects = {"11111111111111111/abc.bam": {"StorageClass": "GLACIER"}}
     copied_objects = {}
@@ -344,7 +344,7 @@ def test_call_streamming_method_called(mock_aws):
     manager_ns.total_copied_data = 0
     lock = manager.Lock()
 
-    job_info = scripts.aws_replicate.JobInfo(
+    job_info = dcfdataservice.aws_replicate.JobInfo(
         {},
         gen_mock_manifest_data()[0],
         1,
@@ -355,9 +355,9 @@ def test_call_streamming_method_called(mock_aws):
         manager_ns,
         "bucket",
     )
-    scripts.aws_replicate.exec_aws_copy(lock, False, job_info)
+    dcfdataservice.aws_replicate.exec_aws_copy(lock, False, job_info)
     assert subprocess.Popen.call_count == 0
-    assert scripts.aws_replicate.stream_object_from_gdc_api.call_count == 1
+    assert dcfdataservice.aws_replicate.stream_object_from_gdc_api.call_count == 1
 
 
 def test_remove_changed_url():
@@ -406,7 +406,9 @@ def test_is_changed_acl_object():
             "file_name": "test_file_name",
         }
     }
-    assert scripts.aws_replicate.is_changed_acl_object(fi, copied_objects, "tcga-open")
+    assert dcfdataservice.aws_replicate.is_changed_acl_object(
+        fi, copied_objects, "tcga-open"
+    )
 
     copied_objects = {
         "gdc-ccle-2-open/test_id/test_file_name": {
@@ -414,12 +416,12 @@ def test_is_changed_acl_object():
             "file_name": "test_file_name",
         }
     }
-    assert scripts.aws_replicate.is_changed_acl_object(
+    assert dcfdataservice.aws_replicate.is_changed_acl_object(
         fi, copied_objects, "gdc-ccle-controlled"
     )
 
 
-@patch("scripts.indexd_utils.PROJECT_ACL", PROJECT_ACL)
+@patch("dcfdataservice.indexd_utils.PROJECT_ACL", PROJECT_ACL)
 def test_update_url_with_new_acl(reset_records):
     """
     Test that updates indexd with new acl
@@ -436,7 +438,7 @@ def test_update_url_with_new_acl(reset_records):
     assert doc.acl == ["phs000218", "phs000219"]
 
 
-@patch("scripts.indexd_utils.PROJECT_ACL", PROJECT_ACL)
+@patch("dcfdataservice.indexd_utils.PROJECT_ACL", PROJECT_ACL)
 def test_update_url_with_new_url(reset_records):
     """
     Test that update indexd with new s3 url
@@ -454,7 +456,7 @@ def test_update_url_with_new_url(reset_records):
     assert doc.urls == ["s3://tcga-2-controlled/uuid1/filename1"]
 
 
-@patch("scripts.indexd_utils.PROJECT_ACL", PROJECT_ACL)
+@patch("dcfdataservice.indexd_utils.PROJECT_ACL", PROJECT_ACL)
 def test_update_url_with_new_url2(reset_records):
     """
     Test that update indexd with new gs url
