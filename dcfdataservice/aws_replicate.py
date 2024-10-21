@@ -38,6 +38,7 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
+OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 RETRIES_NUM = 5
 
 
@@ -127,9 +128,16 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
         except KeyError as e:
             logger.warning("{} is empty. Detail {}".format(bucket_name, e))
         except botocore.exceptions.ClientError as e:
-            logger.error(
-                "Can not access the bucket {}. Detail {}".format(bucket_name, e)
-            )
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 403:
+                logger.error(
+                    "Can not access the bucket {}. Detail {}".format(bucket_name, e)
+                )
+                raise
+            else:
+                logger.error(
+                    "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
+                )
             raise
         except Exception as e:
             logger.error(f"Error listing objects for bucket {bucket_name}")
@@ -324,8 +332,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         None
     """
     fi = jobinfo.fi
-    session = boto3.session.Session()
-    s3 = session.resource("s3")
 
     try:
         target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
@@ -333,6 +339,9 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         logger.warning(e)
         return
 
+    profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
+    session = boto3.session.Session(profile_name=profile_name)
+    s3 = session.resource("s3")
     pFile = None
     try:
         if not bucket_exists(s3, target_bucket):
@@ -345,26 +354,21 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
-            logger.info("acl object is changed. Move object to the right bucket")
-            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
-                utils.get_aws_reversed_acl_bucket_name(target_bucket),
-                object_key,
-                target_bucket,
-                object_key,
-            )
+            logger.info("acl object is changed. Delete the object in the old bucket")
+            old_bucket = utils.get_aws_reversed_acl_bucket_name(target_bucket)
+            profile2 = OPEN_ACCOUNT_PROFILE if "-2-" in old_bucket else None
+            cmd = "aws s3 rm s3://{}/{}".format(old_bucket, object_key)
+            if profile2:
+                cmd = f"{cmd} --profile {profile2}"
             if not jobinfo.global_config.get("quiet", False):
                 logger.info(cmd)
             if not quick_test:
                 subprocess.Popen(shlex.split(cmd)).wait()
-                try:
-                    update_url(fi, jobinfo.indexclient)
-                except APIError as e:
-                    logger.warning(e)
             else:
                 pFile = ProcessingFile(fi["id"], fi["size"], "AWS", None)
 
         # only copy ones not exist in target buckets
-        elif "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
+        if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
             source_key = object_key
             object_key_object_exists = object_exists(s3, jobinfo.bucket, source_key)
             if not object_key_object_exists:
@@ -542,6 +546,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 chunk = urllib.request.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
+                logger.info(
+                    f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
+                )
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -595,7 +602,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     "quiet"
                 ):
                     logger.info(
-                        "Downloading {}. Received {} MB".format(
+                        "Uploading {}. Received {} MB".format(
                             fi.get("id"),
                             thead_control.sig_update_turn
                             * 1.0
@@ -640,7 +647,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         )
     except botocore.exceptions.ClientError as error:
         logger.error(
-            "Error when create multiple part upload for object with uuid{}. Detail {}".format(
+            "Error when create multiple part upload for object with uuid {}. Detail {}".format(
                 object_path, error
             )
         )
