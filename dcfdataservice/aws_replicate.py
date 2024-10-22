@@ -38,7 +38,6 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
-OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 RETRIES_NUM = 5
 
 
@@ -339,8 +338,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         logger.warning(e)
         return
 
-    profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
-    session = boto3.session.Session(profile_name=profile_name)
+    session = boto3.session.Session()
     s3 = session.resource("s3")
     pFile = None
     try:
@@ -355,20 +353,25 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
             logger.info("acl object is changed. Delete the object in the old bucket")
-            old_bucket = utils.get_aws_reversed_acl_bucket_name(target_bucket)
-            profile2 = OPEN_ACCOUNT_PROFILE if "-2-" in old_bucket else None
-            cmd = "aws s3 rm s3://{}/{}".format(old_bucket, object_key)
-            if profile2:
-                cmd = f"{cmd} --profile {profile2}"
+            cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
+                utils.get_aws_reversed_acl_bucket_name(target_bucket),
+                object_key,
+                target_bucket,
+                object_key,
+            )
             if not jobinfo.global_config.get("quiet", False):
                 logger.info(cmd)
             if not quick_test:
                 subprocess.Popen(shlex.split(cmd)).wait()
+                try:
+                    update_url(fi, jobinfo.indexclient)
+                except APIError as e:
+                    logger.warning(e)
             else:
                 pFile = ProcessingFile(fi["id"], fi["size"], "AWS", None)
 
         # only copy ones not exist in target buckets
-        if "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
+        elif "{}/{}".format(target_bucket, object_key) not in jobinfo.copied_objects:
             source_key = object_key
             object_key_object_exists = object_exists(s3, jobinfo.bucket, source_key)
             if not object_key_object_exists:
@@ -662,7 +665,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         start, end = data_range
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
 
-    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+    pool = ThreadPool(global_config.get("multi_part_upload_threads", 20))
     results = pool.map(_handler, tasks)
     pool.close()
     pool.join()
