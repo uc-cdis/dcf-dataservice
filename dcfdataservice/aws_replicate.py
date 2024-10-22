@@ -668,7 +668,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         start, end = data_range
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
 
-    pool = ThreadPool(global_config.get("multi_part_upload_threads", 20))
+    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
     results = pool.map(_handler, tasks)
     pool.close()
     pool.join()
