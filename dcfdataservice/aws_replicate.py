@@ -751,6 +751,8 @@ def validate_uploaded_data(
         )
         return False
 
+    logger.info(f"metadata {meta_data}")
+
     if meta_data.get("ETag") is None:
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
