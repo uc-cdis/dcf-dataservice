@@ -765,6 +765,7 @@ def validate_uploaded_data(
         logger.warning(
             f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')} or {etags}, got: {meta_data.get('ETag', '')}"
         )
+        logger.warning(md5_digests)
         return False
 
     return True
