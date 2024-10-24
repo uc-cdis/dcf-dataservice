@@ -763,7 +763,7 @@ def validate_uploaded_data(
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
         logger.warning(
-            f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')}, got: {meta_data.get('ETag', '')}"
+            f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')} or {etags}, got: {meta_data.get('ETag', '')}"
         )
         return False
 
