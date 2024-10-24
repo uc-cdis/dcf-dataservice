@@ -700,7 +700,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
     )
 
     if not sig_check_pass:
@@ -715,7 +715,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
 
 def validate_uploaded_data(
-    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
 ):
     """
     validate uploaded data
@@ -751,6 +751,14 @@ def validate_uploaded_data(
         )
         return False
 
+    size_in_bucket = meta_data.get("ContentLength")
+
+    if size_in_bucket != fi.get("size"):
+        logger.warning(
+            f"Size in bucket {size_in_bucket} foes not match file size {fi.get('size')}"
+        )
+        return False
+
     logger.info(f"metadata {meta_data}")
 
     if meta_data.get("ETag") is None:
@@ -764,10 +772,11 @@ def validate_uploaded_data(
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
+        logger.info(f"Parts info for file {fi.get('id')}: {parts}")
+        logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
         logger.warning(
             f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')} or {etags}, got: {meta_data.get('ETag', '')}"
         )
-        logger.warning(md5_digests)
         return False
 
     return True
