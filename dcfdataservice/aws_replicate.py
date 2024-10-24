@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import (
+from dcfdataservice.settings import (
     PROJECT_ACL,
     INDEXD,
     GDC_TOKEN,
@@ -31,14 +31,16 @@ from scripts.settings import (
     POSTFIX_1_EXCEPTION,
     POSTFIX_2_EXCEPTION,
 )
-from scripts import utils
-from scripts.utils import generate_chunk_data_list, prepare_data
-from scripts.errors import UserError, APIError
-from scripts.indexd_utils import update_url
+from dcfdataservice import utils
+from dcfdataservice.utils import generate_chunk_data_list, prepare_data
+from dcfdataservice.errors import UserError, APIError
+from dcfdataservice.indexd_utils import update_url
 
 global logger
 
 RETRIES_NUM = 5
+
+OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 
 
 class ProcessingFile(object):
@@ -135,10 +137,13 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                 raise
             else:
                 logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(
-                        bucket_name, e
-                    )
+                    "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
                 )
+            raise
+        except Exception as e:
+            logger.error(f"Error listing objects for bucket {bucket_name}")
+            logger.error(f"Erroring with message {e}")
+            raise
 
         mutexLock.acquire()
         objects.update(result)
@@ -328,8 +333,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         None
     """
     fi = jobinfo.fi
-    session = boto3.session.Session()
-    s3 = session.resource("s3")
 
     try:
         target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
@@ -337,6 +340,9 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         logger.warning(e)
         return
 
+    profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
+    session = boto3.session.Session(profile_name=profile_name)
+    s3 = session.resource("s3")
     pFile = None
     try:
         if not bucket_exists(s3, target_bucket):
@@ -349,7 +355,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
-            logger.info("acl object is changed. Move object to the right bucket")
+            logger.info("acl object is changed. Delete the object in the old bucket")
             cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
                 utils.get_aws_reversed_acl_bucket_name(target_bucket),
                 object_key,
@@ -417,10 +423,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
-                        "Streaming: {}. Size {} (MB). Class {}".format(
+                        "Streaming: {} from GDC API. Size {} (MB). Class {}.".format(
                             object_key,
                             int(fi["size"] * 1.0 / 1024 / 1024),
                             storage_class,
@@ -546,6 +552,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 chunk = urllib.request.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
+                logger.info(
+                    f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
+                )
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -599,7 +608,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     "quiet"
                 ):
                     logger.info(
-                        "Downloading {}. Received {} MB".format(
+                        "Uploading {}. Received {} MB".format(
                             fi.get("id"),
                             thead_control.sig_update_turn
                             * 1.0
@@ -644,7 +653,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         )
     except botocore.exceptions.ClientError as error:
         logger.error(
-            "Error when create multiple part upload for object with uuid{}. Detail {}".format(
+            "Error when create multiple part upload for object with uuid {}. Detail {}".format(
                 object_path, error
             )
         )
@@ -691,7 +700,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
     )
 
     if not sig_check_pass:
@@ -706,7 +715,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
 
 def validate_uploaded_data(
-    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
 ):
     """
     validate uploaded data
@@ -742,6 +751,16 @@ def validate_uploaded_data(
         )
         return False
 
+    size_in_bucket = meta_data.get("ContentLength")
+
+    if size_in_bucket != fi.get("size"):
+        logger.warning(
+            f"Size in bucket {size_in_bucket} foes not match file size {fi.get('size')}"
+        )
+        return False
+
+    logger.info(f"metadata {meta_data}")
+
     if meta_data.get("ETag") is None:
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
@@ -753,10 +772,10 @@ def validate_uploaded_data(
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
+        logger.info(f"Parts info for file {fi.get('id')}: {parts}")
+        logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
         logger.warning(
-            "Can not stream the object {} to {}. Etag check fails".format(
-                fi.get("id"), target_bucket
-            )
+            f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')} or {etags}, got: {meta_data.get('ETag', '')}"
         )
         return False
 
@@ -826,6 +845,8 @@ def run(
     """
     start processes and log after they finish
     """
+    resume_logger("./log.txt")
+    logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
@@ -833,19 +854,19 @@ def run(
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
+        logger.error(f"Log bucket does not exist")
         return
 
     log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
     s3 = boto3.client("s3")
     try:
+        logger.info("Downloading log file")
         s3.download_file(
             global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt"
         )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
-
-    resume_logger("./log.txt")
 
     copied_objects, source_objects = {}, {}
 

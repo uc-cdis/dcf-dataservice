@@ -11,13 +11,13 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 import json
 
-from scripts.google_replicate import google_copy_wrapper
-from scripts.utils import (
+from dcfdataservice.google_replicate import google_copy_wrapper
+from dcfdataservice.utils import (
     get_ignored_files,
     build_object_dataset_gs,
     prepare_txt_manifest_google_dataflow,
 )
-from scripts.settings import IGNORED_FILES, PROJECT_ACL
+from dcfdataservice.settings import IGNORED_FILES, PROJECT_ACL
 
 try:
     unicode  # pylint: disable=unicode-builtin
