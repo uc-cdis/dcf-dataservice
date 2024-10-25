@@ -10,12 +10,12 @@ import shlex
 import hashlib
 import re
 import urllib
-import urllib2
 
 import threading
 from threading import Thread
 
 import json
+import urllib.request
 import boto3
 import botocore
 
@@ -540,7 +540,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
-                req = urllib2.Request(
+                req = urllib.request.Request(
                     data_endpoint,
                     headers={
                         "X-Auth-Token": GDC_TOKEN,
@@ -550,14 +550,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     },
                 )
 
-                chunk = urllib2.urlopen(req).read()
+                chunk = urllib.request.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
                 logger.info(
                     f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
                 )
 
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 logger.warning(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e
