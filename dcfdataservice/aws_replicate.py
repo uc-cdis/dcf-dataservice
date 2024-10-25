@@ -10,6 +10,7 @@ import shlex
 import hashlib
 import re
 import urllib
+import urllib2
 
 import threading
 from threading import Thread
@@ -539,7 +540,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
-                req = urllib.request.Request(
+                req = urllib2.Request(
                     data_endpoint,
                     headers={
                         "X-Auth-Token": GDC_TOKEN,
@@ -549,14 +550,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     },
                 )
 
-                chunk = urllib.request.urlopen(req).read()
+                chunk = urllib2.urlopen(req).read()
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
                 logger.info(
                     f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
                 )
 
-            except urllib.error.HTTPError as e:
+            except urllib2.HTTPError as e:
                 logger.warning(
                     "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
                         e
@@ -741,12 +742,9 @@ def validate_uploaded_data(
     # etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
 
     etags = ""
-    if len(md5_digests) == 1:
-        etags = md5_digests[0].hexdigest()
-    else:
-        digests = b"".join(m.digest() for m in md5_digests)
-        digests_md5 = hashlib.md5(digests).hexdigest()
-        etags = f"{digests_md5}-{len(md5_digests)}"
+    digests = b"".join(m.digest() for m in md5_digests)
+    digests_md5 = hashlib.md5(digests).hexdigest()
+    etags = f"{digests_md5}-{len(md5_digests)}"
 
     if total_bytes_received != fi.get("size"):
         logger.warning(
@@ -770,8 +768,6 @@ def validate_uploaded_data(
         )
         return False
 
-    logger.info(f"metadata {meta_data}")
-
     if meta_data.get("ETag") is None:
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
@@ -783,6 +779,7 @@ def validate_uploaded_data(
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
+        logger.info(f"metadata {fi.get('md5')}: {meta_data}")
         logger.info(f"Parts info for file {fi.get('id')}: {parts}")
         logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
         logger.warning(
