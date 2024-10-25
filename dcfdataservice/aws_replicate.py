@@ -779,6 +779,7 @@ def validate_uploaded_data(
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
+        logger.info(f"Sig for {fi.get('md5')}: {sig} ---> {sig.hexdigest()}")
         logger.info(f"metadata {fi.get('md5')}: {meta_data}")
         logger.info(f"Parts info for file {fi.get('id')}: {parts}")
         logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
