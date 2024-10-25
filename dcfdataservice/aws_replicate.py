@@ -583,7 +583,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
 
-        md5 = hashlib.md5(chunk).digest()
+        md5 = hashlib.md5(chunk)
 
         tries = 0
         while tries < RETRIES_NUM:
@@ -705,6 +705,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
     if not sig_check_pass:
         try:
+            logger.warning(
+                f"Object validation failed, deleting object from location: {object_path}"
+            )
             thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
         except botocore.exceptions.ClientError as error:
             logger.warning(error)
@@ -735,7 +738,15 @@ def validate_uploaded_data(
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
     # compute local etag from list of md5s
-    etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
+    # etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
+
+    etags = ""
+    if len(md5_digests) == 1:
+        etags = md5_digests[0].hexdigest()
+    else:
+        digests = b"".join(m.digest() for m in md5_digests)
+        digests_md5 = hashlib.md5(digests).hexdigest()
+        etags = f"{digests_md5}-{len(md5_digests)}"
 
     if total_bytes_received != fi.get("size"):
         logger.warning(
