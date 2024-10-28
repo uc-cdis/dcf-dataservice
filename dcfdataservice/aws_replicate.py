@@ -596,7 +596,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     PartNumber=chunk_info["part_number"],
                     UploadId=multipart_upload.get("UploadId"),
                 )
-                logger.info(f"md5 for locally calculated chunk: {md5}")
+                logger.info(f"md5 for locally calculated chunk: {md5.hexdigest()}")
                 logger.info(f"md5 from aws etag: {res['ETag']}")
 
                 while thead_control.sig_update_turn != chunk_info["part_number"]:
@@ -784,7 +784,9 @@ def validate_uploaded_data(
         logger.info(f"Sig for {fi.get('id')}: {sig} ---> {sig.hexdigest()}")
         logger.info(f"metadata {fi.get('md5')}: {meta_data}")
         logger.info(f"Parts info for file {fi.get('id')}: {parts}")
-        logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
+        logger.info(
+            f"md5 digests for info for file {fi.get('id')}: {md5_digests.hexdigest()}"
+        )
         logger.warning(
             f"Can not stream the object {fi.get('id')} to {target_bucket}. Etag check fails. Expecting: {fi.get('md5')} or {etags}, got: {meta_data.get('ETag', '')}"
         )
