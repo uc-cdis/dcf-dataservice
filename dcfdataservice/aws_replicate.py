@@ -596,6 +596,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     PartNumber=chunk_info["part_number"],
                     UploadId=multipart_upload.get("UploadId"),
                 )
+                logger.info(f"md5 for locally calculated chunk: {md5}")
+                logger.info(f"md5 from aws etag: {res['ETag']}")
 
                 while thead_control.sig_update_turn != chunk_info["part_number"]:
                     time.sleep(1)
@@ -779,7 +781,7 @@ def validate_uploaded_data(
         return False
 
     if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
-        logger.info(f"Sig for {fi.get('md5')}: {sig} ---> {sig.hexdigest()}")
+        logger.info(f"Sig for {fi.get('id')}: {sig} ---> {sig.hexdigest()}")
         logger.info(f"metadata {fi.get('md5')}: {meta_data}")
         logger.info(f"Parts info for file {fi.get('id')}: {parts}")
         logger.info(f"md5 digests for info for file {fi.get('id')}: {md5_digests}")
