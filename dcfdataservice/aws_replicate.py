@@ -584,8 +584,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
 
-        md5 = hashlib.md5(chunk)
-
         tries = 0
         while tries < RETRIES_NUM:
             try:
@@ -596,8 +594,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     PartNumber=chunk_info["part_number"],
                     UploadId=multipart_upload.get("UploadId"),
                 )
-                logger.info(f"md5 for locally calculated chunk: {md5.hexdigest()}")
-                logger.info(f"md5 from aws etag: {res['ETag']}")
 
                 while thead_control.sig_update_turn != chunk_info["part_number"]:
                     time.sleep(1)
@@ -621,7 +617,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                         )
                     )
 
-                return res, chunk_info["part_number"], md5, len(chunk)
+                return res, chunk_info["part_number"], len(chunk)
 
             except botocore.exceptions.ClientError as e:
                 logger.warning(e)
@@ -681,9 +677,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
     sorted_results = sorted(results, key=lambda x: x[1])
 
-    for res, part_number, md5, chunk_size in sorted_results:
+    for res, part_number, chunk_size in sorted_results:
         parts.append({"ETag": res["ETag"], "PartNumber": part_number})
-        md5_digests.append(md5)
         total_bytes_received += chunk_size
 
     try:
@@ -703,7 +698,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
+        fi, thread_s3, target_bucket, sig, total_bytes_received
     )
 
     if not sig_check_pass:
@@ -721,7 +716,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
 
 def validate_uploaded_data(
-    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received, parts
+    fi,
+    thread_s3,
+    target_bucket,
+    sig,
+    total_bytes_received,
 ):
     """
     validate uploaded data
@@ -731,7 +730,6 @@ def validate_uploaded_data(
         thread_s3(s3client): s3 client
         target_bucket(str): aws bucket
         sig(sig): md5 of downloaded data from api
-        md5_digests(list(md5)): list of chunk md5
         total_bytes_received(int): total data in bytes
 
     Returns:
@@ -739,14 +737,6 @@ def validate_uploaded_data(
     """
 
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
-    # compute local etag from list of md5s
-    # etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
-
-    etags = ""
-    digests = b"".join(m.digest() for m in md5_digests)
-    digests_md5 = hashlib.md5(digests).hexdigest()
-    etags = f"{digests_md5}-{len(md5_digests)}"
 
     if total_bytes_received != fi.get("size"):
         logger.warning(
