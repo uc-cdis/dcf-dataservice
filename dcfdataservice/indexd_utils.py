@@ -16,7 +16,7 @@ if os.getenv("AUTH_NAMESPACE"):
     NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").strip("/")
     logger.info("using namespace {}".format(NAMESPACE))
 else:
-    logger.info("not using any auth namespace")
+    logger.warning("not using any auth namespace")
 
 
 def _remove_changed_url(doc, url):
