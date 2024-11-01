@@ -210,6 +210,8 @@ def exec_google_copy(fi, ignored_dict, global_config):
     Returns:
         DataFlowLog
     """
+    msg = f"Starting to process file {fi['id']}"
+    DataFlowLog(message=msg)
     if fi["size"] == 0:
         msg = "can not copy {} to GOOGLE bucket since it is empty file".format(fi["id"])
         return DataFlowLog(message=msg)
