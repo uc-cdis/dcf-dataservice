@@ -167,12 +167,16 @@ def delete_object(sess, bucket_name, blob_name):
 
 
 def google_copy_wrapper(fi, ignored_dict, global_config):
-    msg = "Starting google exec wrapper"
-    logger.info(msg)
-    DataFlowLog(message=msg)
+
     try:
+        msg = "Starting google exec wrapper"
+        logger.info(msg)
+        DataFlowLog(message=msg)
         datalog = exec_google_copy(fi, ignored_dict, global_config)
     except Exception as e:
+        msg = f"Error starting google exec wrapper {e}"
+        logger.info(msg)
+        DataFlowLog(message=msg)
         datalog = DataFlowLog(message="Internal error. Detail {}".format(e))
 
     if global_config.get("log_bucket") and global_config.get("release"):
