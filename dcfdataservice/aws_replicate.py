@@ -41,7 +41,7 @@ global logger
 
 RETRIES_NUM = 5
 
-OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+OPEN_ACCOUNT_PROFILE = "dcf-open-buckets"
 
 
 class ProcessingFile(object):
