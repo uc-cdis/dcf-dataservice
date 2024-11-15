@@ -41,7 +41,7 @@ global logger
 
 RETRIES_NUM = 5
 
-OPEN_ACCOUNT_PROFILE = "data_refresh_open"
+OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 
 
 class ProcessingFile(object):
@@ -341,8 +341,8 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         logger.warning(e)
         return
 
-    # profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
-    session = boto3.session.Session()
+    profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
+    session = boto3.session.Session(profile_name=profile_name)
     s3 = session.resource("s3")
     pFile = None
     try:
