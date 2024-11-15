@@ -2,6 +2,7 @@ from socket import error as SocketError
 import errno
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
+import reqeusts
 import time
 
 from functools import partial
@@ -41,7 +42,14 @@ global logger
 
 RETRIES_NUM = 5
 
-OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+OPEN_ACCOUNT_PROFILE = "data_refresh_open"
+
+PROXIES = [
+    "http://proxy1_ip:port",
+    "http://proxy2_ip:port",
+    "http://proxy3_ip:port",
+    # Add more proxies as needed
+]
 
 
 class ProcessingFile(object):
@@ -536,7 +544,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         """
         tries = 0
         request_success = False
-
+        proxy = PROXIES[chunk_info["part_number"] % len(PROXIES)]
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
@@ -549,8 +557,16 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                         ),
                     },
                 )
+                proxy_handler = urllib.request.ProxyHandler(
+                    {"http": proxy, "https": proxy}
+                )
+                opener = urllib.request.build_opener(proxy_handler)
+                # Use opener to make the request, ensuring it goes through the proxy
+                with opener.open(req) as response:
+                    chunk = response.read()
 
-                chunk = urllib.request.urlopen(req).read()
+                # chunk = urllib.request.urlopen(req).read()
+
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
                 logger.info(
