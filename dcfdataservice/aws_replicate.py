@@ -342,7 +342,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         return
 
     # profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
-    session = boto3.session.Session()
+    session = boto3.session.Session(profile="default")
     s3 = session.resource("s3")
     pFile = None
     try:
@@ -932,7 +932,7 @@ def run(
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
-    session = boto3.session.Session()
+    session = boto3.session.Session(profile="default")
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
