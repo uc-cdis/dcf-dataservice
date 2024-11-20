@@ -653,8 +653,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
                     data_stream = io.BytesIO(response.read())
 
-                    if len(response) == fi.get("size"):
-                        request_success = True
+                    # if len(response) == fi.get("size"):
+                    #     request_success = True
 
             except urllib.error.HTTPError as e:
                 logger.warning(
