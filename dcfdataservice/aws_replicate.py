@@ -1,3 +1,4 @@
+import io
 from socket import error as SocketError
 import errno
 from multiprocessing import Pool, Manager
@@ -342,7 +343,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         return
 
     # profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
-    session = boto3.session.Session(profile="default")
+    session = boto3.session.Session(profile_name="default")
     s3 = session.resource("s3")
     pFile = None
     try:
@@ -646,12 +647,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     data_endpoint, headers={"X-Auth-Token": GDC_TOKEN}
                 )
 
-                data_stream = urllib.request.urlopen(req).read()
+                # data_stream = urllib.request.urlopen(req).read()
+                with urllib.request.urlopen(req) as response:
+                    logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
 
-                logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
+                    data_stream = io.BytesIO(response.read())
 
-                if len(data_stream) == fi.get("size"):
-                    request_success = True
+                    if len(data_stream) == fi.get("size"):
+                        request_success = True
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -932,7 +935,7 @@ def run(
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
-    session = boto3.session.Session(profile="default")
+    session = boto3.session.Session(profile_name="default")
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
