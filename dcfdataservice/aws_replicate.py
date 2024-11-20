@@ -680,6 +680,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         tries = 0
         while tries < RETRIES_NUM:
             try:
+                logger.info(
+                    f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
+                )
                 res = thread_s3.upload_fileobj(
                     Fileobj=data_stream,
                     Bucket=target_bucket,
@@ -722,7 +725,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     # prepare to compute local etag
     md5_digests = []
 
-    if size >= 5 * 1024 * 1024:
+    if size >= 10 * 1024 * 1024:
         try:
             multipart_upload = thread_s3.create_multipart_upload(
                 Bucket=target_bucket, Key=object_path
