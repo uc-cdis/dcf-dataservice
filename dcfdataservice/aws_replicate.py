@@ -640,7 +640,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         tries = 0
         request_success = False
 
-        while tries < RETRIES_NUM and not request_success:
+        while tries < RETRIES_NUM and not request_success:  # something wrong here
             try:
                 req = urllib.request.Request(
                     data_endpoint, headers={"X-Auth-Token": GDC_TOKEN}
@@ -649,6 +649,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 data_stream = urllib.request.urlopen(req).read()
 
                 logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
+
+                if len(data_stream) == fi.get("size"):
+                    request_success = True
 
             except urllib.error.HTTPError as e:
                 logger.warning(
