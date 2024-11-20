@@ -639,7 +639,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         streaming whole data from api to aws bucket without using multipart uplaod
         """
         download_tries = 0
-        request_success = False
 
         while download_tries < RETRIES_NUM:  # something wrong here
             try:
@@ -680,12 +679,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                         except botocore.exceptions.ClientError as e:
                             logger.warning(e)
                             time.sleep(5)
-                            tries += 1
+                            upload_tries += 1
                         except Exception as e:
                             logger.warning(e)
                             time.sleep(5)
-                            tries += 1
-                        if tries == RETRIES_NUM:
+                            upload_tries += 1
+                        if upload_tries == RETRIES_NUM:
                             raise botocore.exceptions.ClientError(
                                 "Can not upload chunk data of {} to {}".format(
                                     fi["id"], target_bucket
@@ -701,20 +700,20 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 time.sleep(5)
                 if e.code == 403:
                     break
-                tries += 1
+                upload_tries += 1
             except SocketError as e:
                 if e.errno != errno.ECONNRESET:
                     logger.warning(
                         "Connection reset. Take a sleep and retry. Detail {}".format(e)
                     )
                     time.sleep(60)
-                    tries += 1
+                    upload_tries += 1
             except Exception as e:
                 logger.warning(e)
                 time.sleep(5)
-                tries += 1
+                upload_tries += 1
 
-        if tries == RETRIES_NUM:
+        if download_tries == RETRIES_NUM:
             raise Exception(
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
