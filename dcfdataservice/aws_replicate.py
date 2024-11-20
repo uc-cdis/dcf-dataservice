@@ -633,12 +633,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
             )
 
-    def _handler_single_upload(data_info):
+    def _handler_single_upload():
         """
         streaming whole data from api to aws bucket without using multipart uplaod
-
-        Args:
-            data_info (dict): _description_
         """
         tries = 0
         request_success = False
@@ -695,7 +692,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
                 logger.info(f"Uploaded file {fi.get('id')}")
 
-                return res, data_info
+                return res
 
             except botocore.exceptions.ClientError as e:
                 logger.warning(e)
@@ -795,7 +792,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
             )
     else:
         pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-        results = pool.map(_handler_multipart, tasks)
+        results = pool.map(
+            _handler_single_upload
+        )  # fix this. tasks should be some info about the file
         pool.close()
         pool.join()
 
