@@ -791,12 +791,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "successfully stream file {} to {}".format(object_path, target_bucket)
             )
     else:
-        pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-        results = pool.map(
-            _handler_single_upload
-        )  # fix this. tasks should be some info about the file
-        pool.close()
-        pool.join()
+        _handler_single_upload()
+        # pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+        # results = pool.map(
+        #     _handler_single_upload
+        # )
+        # pool.close()
+        # pool.join()
 
 
 def validate_uploaded_data(
