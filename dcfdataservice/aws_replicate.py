@@ -638,10 +638,10 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         """
         streaming whole data from api to aws bucket without using multipart uplaod
         """
-        tries = 0
+        download_tries = 0
         request_success = False
 
-        while tries < RETRIES_NUM and not request_success:  # something wrong here
+        while download_tries < RETRIES_NUM:  # something wrong here
             try:
                 req = urllib.request.Request(
                     data_endpoint, headers={"X-Auth-Token": GDC_TOKEN}
@@ -654,8 +654,43 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     data_stream = io.BytesIO(response.read())
                     stream_size = data_stream.getbuffer().nbytes
                     logger.info(f"Data stream size: {stream_size} bytes")
-                    if stream_size == fi.get("size"):
-                        request_success = True
+                    if stream_size != fi.get("size"):
+                        raise Exception(
+                            f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
+                        )
+                    upload_tries = 0
+                    while upload_tries < RETRIES_NUM:
+                        try:
+                            logger.info(
+                                f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
+                            )
+                            res = thread_s3.upload_fileobj(
+                                Fileobj=data_stream,
+                                Bucket=target_bucket,
+                                Key=object_path,
+                            )
+
+                            thread_control.mutexLock.acquire()
+                            thread_control.sig_update_turn += 1
+                            thread_control.mutexLock.release()
+
+                            logger.info(f"Uploaded file {fi.get('id')}")
+
+                            return res
+                        except botocore.exceptions.ClientError as e:
+                            logger.warning(e)
+                            time.sleep(5)
+                            tries += 1
+                        except Exception as e:
+                            logger.warning(e)
+                            time.sleep(5)
+                            tries += 1
+                        if tries == RETRIES_NUM:
+                            raise botocore.exceptions.ClientError(
+                                "Can not upload chunk data of {} to {}".format(
+                                    fi["id"], target_bucket
+                                )
+                            )
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -682,40 +717,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         if tries == RETRIES_NUM:
             raise Exception(
                 "Can not open http connection to gdc api {}".format(data_endpoint)
-            )
-
-        tries = 0
-        while tries < RETRIES_NUM:
-            try:
-                logger.info(
-                    f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
-                )
-                res = thread_s3.upload_fileobj(
-                    Fileobj=data_stream,
-                    Bucket=target_bucket,
-                    Key=object_path,
-                )
-
-                thread_control.mutexLock.acquire()
-                thread_control.sig_update_turn += 1
-                thread_control.mutexLock.release()
-
-                logger.info(f"Uploaded file {fi.get('id')}")
-
-                return res
-
-            except botocore.exceptions.ClientError as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-            except Exception as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-
-        if tries == RETRIES_NUM:
-            raise botocore.exceptions.ClientError(
-                "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
             )
 
     thread_control = ThreadControl()
