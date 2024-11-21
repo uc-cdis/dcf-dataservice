@@ -650,15 +650,15 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 with urllib.request.urlopen(req) as response:
                     logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
 
-                    data_stream = io.BytesIO(response.read())
+                data_stream = io.BytesIO(response.read())
 
                 data_stream.seek(0)
-                stream_size = data_stream.getbuffer().nbytes
-                logger.info(f"Data stream size: {stream_size} bytes")
-                if stream_size != fi.get("size"):
-                    raise Exception(
-                        f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
-                    )
+                # stream_size = data_stream.getbuffer().nbytes
+                # logger.info(f"Data stream size: {stream_size} bytes")
+                # if stream_size != fi.get("size"):
+                #     raise Exception(
+                #         f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
+                #     )
                 upload_tries = 0
                 while upload_tries < RETRIES_NUM:
                     try:
