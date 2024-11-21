@@ -651,45 +651,47 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
 
                     data_stream = io.BytesIO(response.read())
-                    stream_size = data_stream.getbuffer().nbytes
-                    logger.info(f"Data stream size: {stream_size} bytes")
-                    if stream_size != fi.get("size"):
-                        raise Exception(
-                            f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
+
+                data_stream.seek(0)
+                stream_size = data_stream.getbuffer().nbytes
+                logger.info(f"Data stream size: {stream_size} bytes")
+                if stream_size != fi.get("size"):
+                    raise Exception(
+                        f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
+                    )
+                upload_tries = 0
+                while upload_tries < RETRIES_NUM:
+                    try:
+                        logger.info(
+                            f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
                         )
-                    upload_tries = 0
-                    while upload_tries < RETRIES_NUM:
-                        try:
-                            logger.info(
-                                f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
-                            )
-                            res = thread_s3.upload_fileobj(
-                                Fileobj=data_stream,
-                                Bucket=target_bucket,
-                                Key=object_path,
-                            )
+                        res = thread_s3.upload_fileobj(
+                            Fileobj=data_stream,
+                            Bucket=target_bucket,
+                            Key=object_path,
+                        )
 
-                            thread_control.mutexLock.acquire()
-                            thread_control.sig_update_turn += 1
-                            thread_control.mutexLock.release()
+                        thread_control.mutexLock.acquire()
+                        thread_control.sig_update_turn += 1
+                        thread_control.mutexLock.release()
 
-                            logger.info(f"Uploaded file {fi.get('id')}")
+                        logger.info(f"Uploaded file {fi.get('id')}")
 
-                            return res
-                        except botocore.exceptions.ClientError as e:
-                            logger.warning(e)
-                            time.sleep(5)
-                            upload_tries += 1
-                        except Exception as e:
-                            logger.warning(e)
-                            time.sleep(5)
-                            upload_tries += 1
-                        if upload_tries == RETRIES_NUM:
-                            raise botocore.exceptions.ClientError(
-                                "Can not upload chunk data of {} to {}".format(
-                                    fi["id"], target_bucket
-                                )
+                        return res
+                    except botocore.exceptions.ClientError as e:
+                        logger.warning(e)
+                        time.sleep(5)
+                        upload_tries += 1
+                    except Exception as e:
+                        logger.warning(e)
+                        time.sleep(5)
+                        upload_tries += 1
+                    if upload_tries == RETRIES_NUM:
+                        raise botocore.exceptions.ClientError(
+                            "Can not upload chunk data of {} to {}".format(
+                                fi["id"], target_bucket
                             )
+                        )
 
             except urllib.error.HTTPError as e:
                 logger.warning(
