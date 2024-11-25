@@ -734,82 +734,82 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     # prepare to compute local etag
     md5_digests = []
 
-    if size >= 10 * 1024 * 1024:
-        try:
-            multipart_upload = thread_s3.create_multipart_upload(
-                Bucket=target_bucket, Key=object_path
-            )
-        except botocore.exceptions.ClientError as error:
-            logger.error(
-                "Error when create multiple part upload for object with uuid {}. Detail {}".format(
-                    object_path, error
-                )
-            )
-            return
-
-        chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
-
-        tasks = []
-        for part_number, data_range in enumerate(
-            generate_chunk_data_list(fi["size"], chunk_data_size)
-        ):
-            start, end = data_range
-            tasks.append({"start": start, "end": end, "part_number": part_number + 1})
-
-        pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-        results = pool.map(_handler_multipart, tasks)
-        pool.close()
-        pool.join()
-
-        parts = []
-        total_bytes_received = 0
-
-        sorted_results = sorted(results, key=lambda x: x[1])
-
-        for res, part_number, chunk_size in sorted_results:
-            parts.append({"ETag": res["ETag"], "PartNumber": part_number})
-            total_bytes_received += chunk_size
-
-        try:
-            thread_s3.complete_multipart_upload(
-                Bucket=target_bucket,
-                Key=object_path,
-                MultipartUpload={"Parts": parts},
-                UploadId=multipart_upload["UploadId"],
-                RequestPayer="requester",
-            )
-        except botocore.exceptions.ClientError as error:
-            logger.warning(
-                "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
-                    fi.get("id"), error
-                )
-            )
-            return
-
-        sig_check_pass = validate_uploaded_data(
-            fi, thread_s3, target_bucket, sig, total_bytes_received
+    # if size >= 10 * 1024 * 1024:
+    try:
+        multipart_upload = thread_s3.create_multipart_upload(
+            Bucket=target_bucket, Key=object_path
         )
-
-        if not sig_check_pass:
-            try:
-                logger.warning(
-                    f"Object validation failed, deleting object from location: {object_path}"
-                )
-                thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
-            except botocore.exceptions.ClientError as error:
-                logger.warning(error)
-        else:
-            logger.info(
-                "successfully stream file {} to {}".format(object_path, target_bucket)
+    except botocore.exceptions.ClientError as error:
+        logger.error(
+            "Error when create multiple part upload for object with uuid {}. Detail {}".format(
+                object_path, error
             )
+        )
+        return
+
+    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
+
+    tasks = []
+    for part_number, data_range in enumerate(
+        generate_chunk_data_list(fi["size"], chunk_data_size)
+    ):
+        start, end = data_range
+        tasks.append({"start": start, "end": end, "part_number": part_number + 1})
+
+    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+    results = pool.map(_handler_multipart, tasks)
+    pool.close()
+    pool.join()
+
+    parts = []
+    total_bytes_received = 0
+
+    sorted_results = sorted(results, key=lambda x: x[1])
+
+    for res, part_number, chunk_size in sorted_results:
+        parts.append({"ETag": res["ETag"], "PartNumber": part_number})
+        total_bytes_received += chunk_size
+
+    try:
+        thread_s3.complete_multipart_upload(
+            Bucket=target_bucket,
+            Key=object_path,
+            MultipartUpload={"Parts": parts},
+            UploadId=multipart_upload["UploadId"],
+            RequestPayer="requester",
+        )
+    except botocore.exceptions.ClientError as error:
+        logger.warning(
+            "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
+                fi.get("id"), error
+            )
+        )
+        return
+
+    sig_check_pass = validate_uploaded_data(
+        fi, thread_s3, target_bucket, sig, total_bytes_received
+    )
+
+    if not sig_check_pass:
+        try:
+            logger.warning(
+                f"Object validation failed, deleting object from location: {object_path}"
+            )
+            thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
+        except botocore.exceptions.ClientError as error:
+            logger.warning(error)
     else:
-        _handler_single_upload()
-        # pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-        # results = pool.map(
-        #     _handler_single_upload
-        # )
-        # pool.close()
-        # pool.join()
+        logger.info(
+            "successfully stream file {} to {}".format(object_path, target_bucket)
+        )
+    # else:
+    #     _handler_single_upload()
+    #     # pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+    #     # results = pool.map(
+    #     #     _handler_single_upload
+    #     # )
+    #     # pool.close()
+    #     # pool.join()
 
 
 def validate_uploaded_data(
