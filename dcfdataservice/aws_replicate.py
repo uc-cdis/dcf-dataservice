@@ -737,7 +737,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     # if size >= 10 * 1024 * 1024:
     try:
         multipart_upload = thread_s3.create_multipart_upload(
-            Bucket=target_bucket, Key=object_path
+            Bucket=target_bucket,
+            Key=object_path,
+            ACL="bucket-owner-full-control",
         )
     except botocore.exceptions.ClientError as error:
         logger.error(
