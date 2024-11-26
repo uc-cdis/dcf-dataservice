@@ -89,10 +89,13 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
 
     logger.info("DRY RUN: {}".format(dry_run))
 
-    if manifest.startswith("s3://"):
-        file_infos = get_fileinfo_list_from_s3_manifest(manifest)
-    else:
-        file_infos = get_fileinfo_list_from_csv_manifest(manifest)
+    try:
+        if manifest.startswith("s3://"):
+            file_infos = get_fileinfo_list_from_s3_manifest(manifest)
+        else:
+            file_infos = get_fileinfo_list_from_csv_manifest(manifest)
+    except Exception as e:
+        logger.error(f"Could not get manifest {manifest}. Error: {e}")
 
     s3 = boto3.resource("s3")
     gs_client = storage.Client()
