@@ -199,7 +199,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     logger.info("Start to check if {} needs to be removed from AWS".format(f["id"]))
     bucket = s3.Bucket(target_bucket)
 
-    key = join(f.get("id"), f.get("filename"))
+    key = join(f.get("id"), f.get("file_name"))
     full_path = join("s3://" + target_bucket, key)
     deleting_object = {"Key": key}
     deletion_log = DeletionLog(url=full_path)
@@ -254,7 +254,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     logger.info("Start to check if {} needs to be removed from GS".format(f["id"]))
     key = get_structured_object_key(f["id"], ignored_dict)
     if not key:
-        key = join(f.get("id"), f.get("filename"))
+        key = join(f.get("id"), f.get("file_name"))
     full_path = join("gs://" + target_bucket, key)
     deletion_log = DeletionLog(url=full_path)
     bucket = client.get_bucket(target_bucket)
