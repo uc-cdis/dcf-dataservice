@@ -254,7 +254,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
     logger.info("Start to check if {} needs to be removed from GS".format(f["id"]))
     key = get_structured_object_key(f["id"], ignored_dict)
     if not key:
-        key = join(f.get("id"), f.get("file_name"))
+        key = join(f.get("id"), f.get("filename") or f.get("file_name"))
     full_path = join("gs://" + target_bucket, key)
     deletion_log = DeletionLog(url=full_path)
     bucket = client.get_bucket(target_bucket)
