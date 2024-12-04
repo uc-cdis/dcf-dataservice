@@ -945,7 +945,7 @@ def run(
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
         logger.error(f"Log bucket does not exist")
-        # return
+        # return # TODO: uncomment this later
 
     log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
