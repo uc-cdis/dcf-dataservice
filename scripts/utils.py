@@ -472,7 +472,8 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
         for row in csv_reader:
             try:
                 record = get_record_with_retry(row["id"])
-                result[row["id"]] = record["urls"]
+                record_json = record.to_json()
+                result[row["id"]] = record_json["urls"]
             except Exception as e:
                 logger.error(f"Could not find record {row['id']}. Errored with {e}")
                 errored_list.append(row["id"])
