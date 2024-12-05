@@ -77,7 +77,7 @@ def run(global_config):
 
     indexd_records = {}
     for manifest_file in manifest_files:
-        records = utils.get_indexd_record_from_GDC_files(manifest_file)
+        records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
         indexd_records.update(records)
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
