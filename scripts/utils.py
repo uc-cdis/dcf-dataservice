@@ -433,6 +433,12 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
 
+    s3 = boto3.resource("s3")
+
+    manifest_file = manifest_file.strip()
+    out = urlparse(manifest_file)
+    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest_read")
+
     def get_record_with_retry(guid, max_retries=5, base_delay=1, backoff_factor=2):
         """
         Get a record from indexd with retries and exponential backoff.
@@ -461,7 +467,7 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
                 time.sleep(wait_time)
 
     # open GDC manifest file to extract guids
-    with open(manifest_file, "r") as csvfile:
+    with open("./manifest_read", "r") as csvfile:
         csv_reader = csv.DictReader(csvfile, delimiter="\t")
         for row in csv_reader:
             try:
