@@ -1,6 +1,7 @@
 import os
 import boto3
 import csv
+import time
 import random
 from google.cloud import storage
 import threading
@@ -414,3 +415,64 @@ def get_indexd_records():
         results[doc.did] = doc.urls
 
     return results
+
+
+def get_indexd_record_from_GDC_files(manifest_file, logger):
+    """
+    Get single indexd records for all GDC records
+    Args:
+        manifest_file (str): GDC manifest location
+    """
+    result = {}
+    gdc_id_list = []
+    errored_list = []
+
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+
+    def get_record_with_retry(guid, max_retries=5, base_delay=1, backoff_factor=2):
+        """
+        Get a record from indexd with retries and exponential backoff.
+        Args:
+            guid (str): The GUID to fetch.
+            max_retries (int): Maximum number of retry attempts.
+            base_delay (int): Initial delay between retries in seconds.
+            backoff_factor (int): Multiplicative factor for exponential backoff.
+        Returns:
+            dict: The record from indexd if successful.
+        Raises:
+            Exception: If all retries fail.
+        """
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                return indexd_client.get(guid)
+            except Exception as e:
+                attempt += 1
+                if attempt == max_retries:
+                    raise
+                wait_time = base_delay * (backoff_factor ** (attempt - 1))
+                logger.warning(
+                    f"Retrying {guid}: attempt {attempt}/{max_retries}, retrying in {wait_time}s. Error: {e}"
+                )
+                time.sleep(wait_time)
+
+    # open GDC manifest file to extract guids
+    with open(manifest_file, "r") as csvfile:
+        csv_reader = csv.DictReader(csvfile, delimiter="\t")
+        for row in csv_reader:
+            try:
+                record = get_record_with_retry(row["id"])
+                result[row["id"]] = record["urls"]
+            except Exception as e:
+                logger.error(f"Could not find record {row['id']}. Errored with {e}")
+                errored_list.append(row["id"])
+
+    if errored_list:
+        logger.warning(
+            f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
+        )
+    return result
