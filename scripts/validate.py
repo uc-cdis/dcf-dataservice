@@ -79,16 +79,21 @@ def run(global_config, map_file={}):
     indexd_records = {}
 
     if global_config.get("map_file"):
+        logger.info("Using Map file")
         indexd_records = utils.download_and_parse_map_file(
             global_config.get("map_file")
         )
+
     else:
         for manifest_file in manifest_files:
             records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
             indexd_records.update(records)
+    logger.info("Building aws dataset")
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+    logger.info("Building gs dataset")
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
+    logger.info("Done building object datasets")
     if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
