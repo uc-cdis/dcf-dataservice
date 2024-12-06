@@ -19,7 +19,7 @@ def resume_logger(filename=None):
     logger = get_logger("Validation", filename)
 
 
-def run(global_config):
+def run(global_config, map_file={}):
     """
     Given manifests run validation process to check if all the objects exist and are indexed correctly
     Args:
@@ -28,6 +28,7 @@ def run(global_config):
             'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
             'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
             'FORCE_CREATE_MANIFEST': 'True' 'False'
+            'map_file': 's3://location/to/map_file.json'
         }
 
     Returns:
@@ -76,9 +77,15 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = {}
-    for manifest_file in manifest_files:
-        records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
-        indexd_records.update(records)
+
+    if global_config.get("map_file"):
+        indexd_records = utils.download_and_parse_map_file(
+            global_config.get("map_file")
+        )
+    else:
+        for manifest_file in manifest_files:
+            records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
+            indexd_records.update(records)
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 

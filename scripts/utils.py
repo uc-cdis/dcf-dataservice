@@ -1,6 +1,7 @@
 import os
 import boto3
 import csv
+import json
 import time
 import random
 from google.cloud import storage
@@ -483,3 +484,34 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
             f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
         )
     return result
+
+
+def download_and_parse_map_file(file_location):
+    """Downloads the map file and loads it as a readable dictionary
+
+    Args:
+        file_location (str): file location in s3 bucket
+
+    Returns:
+        dict: The contents of the map file as a dictionary.
+    """
+    # Initialize S3 resource
+    s3 = boto3.resource("s3")
+
+    # Strip any extra spaces
+    file_location = file_location.strip()
+
+    # Parse the S3 URL
+    parsed_url = urlparse(file_location)
+    bucket_name = parsed_url.netloc
+    object_key = parsed_url.path.lstrip("/")
+
+    # Download the file to a local temporary location
+    local_file_path = "./map_file.json"
+    s3.meta.client.download_file(bucket_name, object_key, local_file_path)
+
+    # Load the JSON file as a dictionary
+    with open(local_file_path, "r") as file:
+        data = json.load(file)
+
+    return data
