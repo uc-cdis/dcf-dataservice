@@ -19,9 +19,7 @@ except Exception as e:
 
 PROJECT_ACL = {}
 try:
-    with open(
-        "/home/dcfprod/dcfprod/apis_configs/dcf_dataservice/GDC_project_map.json", "r"
-    ) as f:
+    with open("/dcf-dataservice/GDC_project_map.json", "r") as f:
         PROJECT_ACL = json.loads(f.read())
 except Exception as e:
     print("Can not read GDC_project_map.json file. Detail {}".format(e))
