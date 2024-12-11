@@ -18,7 +18,7 @@ except Exception as e:
     print("Can not read dcf_dataservice_credentials.json file. Detail {}".format(e))
 
 
-PROJECT_ACL = {}
+# PROJECT_ACL = {}
 try:
     with open("/dcf-dataservice/GDC_project_map.json", "r") as f:
         PROJECT_ACL = json.loads(f.read())
