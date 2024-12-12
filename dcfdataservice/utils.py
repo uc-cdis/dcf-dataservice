@@ -480,3 +480,100 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
             f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
         )
     return result
+
+
+def get_indexd_record_from_GDC_files(manifest_file, logger):
+    """
+    Get single indexd records for all GDC records
+    Args:
+        manifest_file (str): GDC manifest location
+    """
+    result = {}
+    gdc_id_list = []
+    errored_list = []
+
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+
+    s3 = boto3.resource("s3")
+
+    manifest_file = manifest_file.strip()
+    out = urlparse(manifest_file)
+    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest_read")
+
+    def get_record_with_retry(guid, max_retries=5, base_delay=1, backoff_factor=2):
+        """
+        Get a record from indexd with retries and exponential backoff.
+        Args:
+            guid (str): The GUID to fetch.
+            max_retries (int): Maximum number of retry attempts.
+            base_delay (int): Initial delay between retries in seconds.
+            backoff_factor (int): Multiplicative factor for exponential backoff.
+        Returns:
+            dict: The record from indexd if successful.
+        Raises:
+            Exception: If all retries fail.
+        """
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                return indexd_client.get(guid)
+            except Exception as e:
+                attempt += 1
+                if attempt == max_retries:
+                    raise
+                wait_time = base_delay * (backoff_factor ** (attempt - 1))
+                logger.warning(
+                    f"Retrying {guid}: attempt {attempt}/{max_retries}, retrying in {wait_time}s. Error: {e}"
+                )
+                time.sleep(wait_time)
+
+    # open GDC manifest file to extract guids
+    with open("./manifest_read", "r") as csvfile:
+        csv_reader = csv.DictReader(csvfile, delimiter="\t")
+        for row in csv_reader:
+            try:
+                record = get_record_with_retry(row["id"])
+                record_json = record.to_json()
+                result[row["id"]] = record_json["urls"]
+            except Exception as e:
+                logger.error(f"Could not find record {row['id']}. Errored with {e}")
+                errored_list.append(row["id"])
+
+    if errored_list:
+        logger.warning(
+            f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
+        )
+    return result
+
+
+def download_and_parse_map_file(file_location):
+    """Downloads the map file and loads it as a readable dictionary
+    Args:
+        file_location (str): file location in s3 bucket
+    Returns:
+        dict: The contents of the map file as a dictionary.
+    """
+    # Initialize S3 resource
+    s3 = boto3.resource("s3")
+
+    # Strip any extra spaces
+    file_location = file_location.strip()
+
+    # Parse the S3 URL
+    parsed_url = urlparse(file_location)
+    bucket_name = parsed_url.netloc
+    object_key = parsed_url.path.lstrip("/")
+
+    # Download the file to a local temporary location
+    local_file_path = "./map_file.json"
+    s3.meta.client.download_file(bucket_name, object_key, local_file_path)
+
+    # Load the JSON file as a dictionary
+    with open(local_file_path, "r") as file:
+        data = json.load(file)
+
+    return data

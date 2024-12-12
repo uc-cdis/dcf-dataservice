@@ -28,6 +28,7 @@ def run(global_config):
             'manifest_files': 's3://input/active_manifest.tsv, s3://input/legacy_manifest.tsv'
             'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
             'FORCE_CREATE_MANIFEST': 'True' 'False'
+            'map_file': 's3://location/to/map_file.json'
         }
 
     Returns:
@@ -76,12 +77,23 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = {}
-    for manifest_file in manifest_files:
-        records = utils.get_indexd_record_from_GDC_files()
-        indexd_records.update(records)
+
+    if global_config.get("map_file"):
+        logger.info("Using Map file")
+        indexd_records = utils.download_and_parse_map_file(
+            global_config.get("map_file")
+        )
+
+    else:
+        for manifest_file in manifest_files:
+            records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
+            indexd_records.update(records)
+    logger.info("Building aws dataset")
     aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+    logger.info("Building gs dataset")
     gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
+    logger.info("Done building object datasets")
     if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
@@ -236,6 +248,7 @@ def run(global_config):
         out_filename = out_manifests[idx].strip()
 
         if _pass or FORCE_CREATE_MANIFEST:
+
             if not _pass and FORCE_CREATE_MANIFEST:
                 logger.warning(
                     "Validation failed but creating final manifest anyway..."
