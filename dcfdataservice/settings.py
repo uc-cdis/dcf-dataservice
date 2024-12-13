@@ -7,7 +7,9 @@ INDEXD = {
 }
 
 SLACK_URL = ""
+
 GDC_TOKEN = ""
+
 try:
     with open("/secrets/dcf_dataservice_credentials.json", "r") as f:
         data = json.loads(f.read())
