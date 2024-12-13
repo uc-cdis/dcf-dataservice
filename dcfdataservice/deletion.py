@@ -199,7 +199,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     logger.info("Start to check if {} needs to be removed from AWS".format(f["id"]))
     bucket = s3.Bucket(target_bucket)
 
-    key = join(f.get("id"), f.get("file_name"))
+    key = join(f.get("id"), f.get("filename") or f.get("file_name"))
     full_path = join("s3://" + target_bucket, key)
     deleting_object = {"Key": key}
     deletion_log = DeletionLog(url=full_path)
