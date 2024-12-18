@@ -9,7 +9,7 @@ RUN curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tm
 RUN mkdir -p /usr/local/gcloud \
   && tar -C /usr/local/gcloud -xvf /tmp/google-cloud-sdk.tar.gz \
   && /usr/local/gcloud/google-cloud-sdk/install.sh
-ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
+ENV PATH=$PATH:/usr/local/gcloud/google-cloud-sdk/bin
 
 
 COPY . /dcf-dataservice
@@ -19,4 +19,4 @@ RUN poetry config virtualenvs.create false \
     && poetry install -vv --no-root --no-dev --no-interaction \
     && poetry show -v
 
-CMD /bin/bash
+CMD ["/bin/bash"]
