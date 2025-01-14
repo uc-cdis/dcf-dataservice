@@ -96,6 +96,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             file_infos = get_fileinfo_list_from_csv_manifest(manifest)
     except Exception as e:
         logger.error(f"Could not get manifest {manifest}. Error: {e}")
+        return
 
     s3 = boto3.resource("s3")
     gs_client = storage.Client()

@@ -175,9 +175,10 @@ def google_copy_wrapper(fi, ignored_dict, global_config):
         datalog = exec_google_copy(fi, ignored_dict, global_config)
     except Exception as e:
         msg = f"Error starting google exec wrapper {e}"
-        logger.info(msg)
+        logger.error(msg)
         DataFlowLog(message=msg)
         datalog = DataFlowLog(message="Internal error. Detail {}".format(e))
+        return
 
     if global_config.get("log_bucket") and global_config.get("release"):
         with open(fi["id"], "w") as f:
