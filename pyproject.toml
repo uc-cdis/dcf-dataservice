@@ -27,6 +27,8 @@ slack-sdk = "3.19.3"
 cdislogging = "1.1.1"
 cdiserrors = "1.0.0"
 indexclient = "2.1.0"
+urllib3 = "<=1.26.19 || >=2.2.2"
+
 
 
 [tool.poetry.group.dev.dependencies]
