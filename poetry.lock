@@ -665,13 +665,13 @@ files = [
 
 [[package]]
 name = "google-api-core"
-version = "2.24.0"
+version = "2.24.1"
 description = "Google API client core library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_api_core-2.24.0-py3-none-any.whl", hash = "sha256:10d82ac0fca69c82a25b3efdeefccf6f28e02ebb97925a8cce8edbfe379929d9"},
-    {file = "google_api_core-2.24.0.tar.gz", hash = "sha256:e255640547a597a4da010876d333208ddac417d60add22b6851a0c66a831fcaf"},
+    {file = "google_api_core-2.24.1-py3-none-any.whl", hash = "sha256:bc78d608f5a5bf853b80bd70a795f703294de656c096c0968320830a4bc280f1"},
+    {file = "google_api_core-2.24.1.tar.gz", hash = "sha256:f8b36f5456ab0dd99a1b693a40a31d1e7757beea380ad1b38faaf8941eae9d8a"},
 ]
 
 [package.dependencies]
@@ -1476,12 +1476,12 @@ type = ["pytest-mypy"]
 
 [[package]]
 name = "indexclient"
-version = "2.2.0"
+version = "2.3.1"
 description = ""
 optional = false
 python-versions = "*"
 files = [
-    {file = "indexclient-2.2.0.tar.gz", hash = "sha256:dac4687d136f45d78a4bad0ccf6650b2f81ead81d7d47a560081a6d7ee69aa42"},
+    {file = "indexclient-2.3.1.tar.gz", hash = "sha256:0beaf865aab58112961092aa58d06e31ca1cc8da26e9cd5cf84430d2f6567a0d"},
 ]
 
 [package.dependencies]
@@ -3174,4 +3174,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "b907a15f841c5b7aaf318911d0e9a6770d5531b1faed93182fb9b8df39a4c46e" # pragma: allowlist secret
+content-hash = "d9e74633e384b45486dd8f7e7029d14c7f67f069fbeae0407ebb27726002ce42" # pragma: allowlist-secret
