@@ -16,4 +16,4 @@ setuptools>=67.0.0, <68.0.0
 slack-sdk==3.19.3
 cdislogging==1.1.1
 cdiserrors==1.0.0
-indexclient==2.1.0
+indexclient==2.3.1
