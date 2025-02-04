@@ -17,3 +17,4 @@ slack-sdk==3.19.3
 cdislogging==1.1.1
 cdiserrors==1.0.0
 indexclient==2.3.1
+urllib3<=1.26.19
