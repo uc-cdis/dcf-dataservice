@@ -1,3 +1,4 @@
+import io
 from socket import error as SocketError
 import errno
 from multiprocessing import Pool, Manager
@@ -15,6 +16,7 @@ import threading
 from threading import Thread
 
 import json
+import urllib.request
 import boto3
 import botocore
 
@@ -23,7 +25,7 @@ from urllib.parse import urlparse
 from cdislogging import get_logger
 from indexclient.client import IndexClient
 
-from scripts.settings import (
+from dcfdataservice.settings import (
     PROJECT_ACL,
     INDEXD,
     GDC_TOKEN,
@@ -31,14 +33,16 @@ from scripts.settings import (
     POSTFIX_1_EXCEPTION,
     POSTFIX_2_EXCEPTION,
 )
-from scripts import utils
-from scripts.utils import generate_chunk_data_list, prepare_data
-from scripts.errors import UserError, APIError
-from scripts.indexd_utils import update_url
+from dcfdataservice import utils
+from dcfdataservice.utils import generate_chunk_data_list, prepare_data
+from dcfdataservice.errors import UserError, APIError
+from dcfdataservice.indexd_utils import update_url
 
 global logger
 
 RETRIES_NUM = 5
+
+OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 
 
 class ProcessingFile(object):
@@ -135,10 +139,13 @@ def build_object_dataset_aws(project_acl, logger, awsbucket=None):
                 raise
             else:
                 logger.error(
-                    "Can not list objects of the bucket {}. Detail {}".format(
-                        bucket_name, e
-                    )
+                    "Can not detect the bucket {}. Detail {}".format(bucket_name, e)
                 )
+            raise
+        except Exception as e:
+            logger.error(f"Error listing objects for bucket {bucket_name}")
+            logger.error(f"Erroring with message {e}")
+            raise
 
         mutexLock.acquire()
         objects.update(result)
@@ -328,8 +335,6 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         None
     """
     fi = jobinfo.fi
-    session = boto3.session.Session()
-    s3 = session.resource("s3")
 
     try:
         target_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
@@ -337,6 +342,9 @@ def exec_aws_copy(lock, quick_test, jobinfo):
         logger.warning(e)
         return
 
+    # profile_name = OPEN_ACCOUNT_PROFILE if "-2-" in target_bucket else "default"
+    session = boto3.session.Session(profile_name="default")
+    s3 = session.resource("s3")
     pFile = None
     try:
         if not bucket_exists(s3, target_bucket):
@@ -349,7 +357,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
 
         # object already exists in dcf but acl is changed
         if is_changed_acl_object(fi, jobinfo.copied_objects, target_bucket):
-            logger.info("acl object is changed. Move object to the right bucket")
+            logger.info("acl object is changed. Delete the object in the old bucket")
             cmd = 'aws s3 mv "s3://{}/{}" "s3://{}/{}" --acl bucket-owner-full-control'.format(
                 utils.get_aws_reversed_acl_bucket_name(target_bucket),
                 object_key,
@@ -417,10 +425,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
-                        "Streaming: {}. Size {} (MB). Class {}".format(
+                        "Streaming: {} from GDC API. Size {} (MB). Class {}.".format(
                             object_key,
                             int(fi["size"] * 1.0 / 1024 / 1024),
                             storage_class,
@@ -515,7 +523,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
             self.mutexLock = threading.Lock()
             self.sig_update_turn = 1
 
-    def _handler(chunk_info):
+    def _handler_multipart(chunk_info):
         """
         streamming chunk data from api to aws bucket
 
@@ -529,7 +537,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         """
         tries = 0
         request_success = False
-
         chunk = None
         while tries < RETRIES_NUM and not request_success:
             try:
@@ -544,8 +551,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 )
 
                 chunk = urllib.request.urlopen(req).read()
+
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
+                logger.info(
+                    f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
+                )
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -574,8 +585,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
 
-        md5 = hashlib.md5(chunk).digest()
-
         tries = 0
         while tries < RETRIES_NUM:
             try:
@@ -587,21 +596,21 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                     UploadId=multipart_upload.get("UploadId"),
                 )
 
-                while thead_control.sig_update_turn != chunk_info["part_number"]:
+                while thread_control.sig_update_turn != chunk_info["part_number"]:
                     time.sleep(1)
 
-                thead_control.mutexLock.acquire()
+                thread_control.mutexLock.acquire()
                 sig.update(chunk)
-                thead_control.sig_update_turn += 1
-                thead_control.mutexLock.release()
+                thread_control.sig_update_turn += 1
+                thread_control.mutexLock.release()
 
-                if thead_control.sig_update_turn % 10 == 0 and not global_config.get(
+                if thread_control.sig_update_turn % 10 == 0 and not global_config.get(
                     "quiet"
                 ):
                     logger.info(
-                        "Downloading {}. Received {} MB".format(
+                        "Uploading {}. Received {} MB".format(
                             fi.get("id"),
-                            thead_control.sig_update_turn
+                            thread_control.sig_update_turn
                             * 1.0
                             / 1024
                             / 1024
@@ -609,7 +618,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                         )
                     )
 
-                return res, chunk_info["part_number"], md5, len(chunk)
+                return res, chunk_info["part_number"], len(chunk)
 
             except botocore.exceptions.ClientError as e:
                 logger.warning(e)
@@ -625,7 +634,93 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
             )
 
-    thead_control = ThreadControl()
+    def _handler_single_upload():
+        """
+        streaming whole data from api to aws bucket without using multipart uplaod
+        """
+        download_tries = 0
+
+        while download_tries < RETRIES_NUM:  # something wrong here
+            try:
+                req = urllib.request.Request(
+                    data_endpoint, headers={"X-Auth-Token": GDC_TOKEN}
+                )
+
+                # data_stream = urllib.request.urlopen(req).read()
+                with urllib.request.urlopen(req) as response:
+                    logger.info(f"Downloading {fi.get('id')}: {fi.get('size')}")
+
+                data_stream = io.BytesIO(response.read())
+
+                data_stream.seek(0)
+                # stream_size = data_stream.getbuffer().nbytes
+                # logger.info(f"Data stream size: {stream_size} bytes")
+                # if stream_size != fi.get("size"):
+                #     raise Exception(
+                #         f"Downloading {fi.get('id')}. Expecting file size: {fi.get('size')}, got: {stream_size} bytes"
+                #     )
+                upload_tries = 0
+                while upload_tries < RETRIES_NUM:
+                    try:
+                        logger.info(
+                            f"Attempting to upload object {fi.get('id')} to s3 with upload file object"
+                        )
+                        res = thread_s3.upload_fileobj(
+                            Fileobj=data_stream,
+                            Bucket=target_bucket,
+                            Key=object_path,
+                        )
+
+                        thread_control.mutexLock.acquire()
+                        thread_control.sig_update_turn += 1
+                        thread_control.mutexLock.release()
+
+                        logger.info(f"Uploaded file {fi.get('id')}")
+
+                        return res
+                    except botocore.exceptions.ClientError as e:
+                        logger.warning(e)
+                        time.sleep(5)
+                        upload_tries += 1
+                    except Exception as e:
+                        logger.warning(e)
+                        time.sleep(5)
+                        upload_tries += 1
+                    if upload_tries == RETRIES_NUM:
+                        raise botocore.exceptions.ClientError(
+                            "Can not upload chunk data of {} to {}".format(
+                                fi["id"], target_bucket
+                            )
+                        )
+
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
+                        e
+                    )
+                )
+                time.sleep(5)
+                if e.code == 403:
+                    break
+                upload_tries += 1
+            except SocketError as e:
+                if e.errno != errno.ECONNRESET:
+                    logger.warning(
+                        "Connection reset. Take a sleep and retry. Detail {}".format(e)
+                    )
+                    time.sleep(60)
+                    upload_tries += 1
+            except Exception as e:
+                logger.warning(e)
+                time.sleep(5)
+                upload_tries += 1
+
+        if download_tries == RETRIES_NUM:
+            raise Exception(
+                "Can not open http connection to gdc api {}".format(data_endpoint)
+            )
+
+    thread_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
     data_endpoint = (
@@ -633,18 +728,22 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         if DATA_ENDPT
         else "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
     )
+    size = int(fi.get("size"))
 
     sig = hashlib.md5()
     # prepare to compute local etag
     md5_digests = []
 
+    # if size >= 10 * 1024 * 1024:
     try:
         multipart_upload = thread_s3.create_multipart_upload(
-            Bucket=target_bucket, Key=object_path
+            Bucket=target_bucket,
+            Key=object_path,
+            ACL="bucket-owner-full-control",
         )
     except botocore.exceptions.ClientError as error:
         logger.error(
-            "Error when create multiple part upload for object with uuid{}. Detail {}".format(
+            "Error when create multiple part upload for object with uuid {}. Detail {}".format(
                 object_path, error
             )
         )
@@ -660,7 +759,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
 
     pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-    results = pool.map(_handler, tasks)
+    results = pool.map(_handler_multipart, tasks)
     pool.close()
     pool.join()
 
@@ -669,9 +768,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
 
     sorted_results = sorted(results, key=lambda x: x[1])
 
-    for res, part_number, md5, chunk_size in sorted_results:
+    for res, part_number, chunk_size in sorted_results:
         parts.append({"ETag": res["ETag"], "PartNumber": part_number})
-        md5_digests.append(md5)
         total_bytes_received += chunk_size
 
     try:
@@ -691,11 +789,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+        fi, thread_s3, target_bucket, sig, total_bytes_received
     )
 
     if not sig_check_pass:
         try:
+            logger.warning(
+                f"Object validation failed, deleting object from location: {object_path}"
+            )
             thread_s3.delete_object(Bucket=target_bucket, Key=object_path)
         except botocore.exceptions.ClientError as error:
             logger.warning(error)
@@ -703,10 +804,22 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         logger.info(
             "successfully stream file {} to {}".format(object_path, target_bucket)
         )
+    # else:
+    #     _handler_single_upload()
+    #     # pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+    #     # results = pool.map(
+    #     #     _handler_single_upload
+    #     # )
+    #     # pool.close()
+    #     # pool.join()
 
 
 def validate_uploaded_data(
-    fi, thread_s3, target_bucket, sig, md5_digests, total_bytes_received
+    fi,
+    thread_s3,
+    target_bucket,
+    sig,
+    total_bytes_received,
 ):
     """
     validate uploaded data
@@ -716,7 +829,6 @@ def validate_uploaded_data(
         thread_s3(s3client): s3 client
         target_bucket(str): aws bucket
         sig(sig): md5 of downloaded data from api
-        md5_digests(list(md5)): list of chunk md5
         total_bytes_received(int): total data in bytes
 
     Returns:
@@ -724,9 +836,6 @@ def validate_uploaded_data(
     """
 
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
-    # compute local etag from list of md5s
-    etags = hashlib.md5(b"".join(md5_digests)).hexdigest() + "-" + str(len(md5_digests))
 
     if total_bytes_received != fi.get("size"):
         logger.warning(
@@ -742,6 +851,14 @@ def validate_uploaded_data(
         )
         return False
 
+    size_in_bucket = meta_data.get("ContentLength")
+
+    if size_in_bucket != fi.get("size"):
+        logger.warning(
+            f"Size in bucket {size_in_bucket} foes not match file size {fi.get('size')}"
+        )
+        return False
+
     if meta_data.get("ETag") is None:
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
@@ -749,14 +866,6 @@ def validate_uploaded_data(
     if sig.hexdigest() != fi.get("md5"):
         logger.warning(
             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
-        )
-        return False
-
-    if meta_data.get("ETag", "").replace('"', "") not in {fi.get("md5"), etags}:
-        logger.warning(
-            "Can not stream the object {} to {}. Etag check fails".format(
-                fi.get("id"), target_bucket
-            )
         )
         return False
 
@@ -826,26 +935,28 @@ def run(
     """
     start processes and log after they finish
     """
+    resume_logger("./log.txt")
+    logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
-    session = boto3.session.Session()
+    session = boto3.session.Session(profile_name="default")
     s3_sess = session.resource("s3")
 
     if not bucket_exists(s3_sess, global_config.get("log_bucket")):
-        return
+        logger.error(f"Log bucket does not exist")
+        # return # TODO: uncomment this later
 
     log_filename = manifest_file.split("/")[-1].replace(".tsv", ".txt")
 
     s3 = boto3.client("s3")
     try:
+        logger.info("Downloading log file")
         s3.download_file(
             global_config.get("log_bucket"), release + "/" + log_filename, "./log.txt"
         )
     except botocore.exceptions.ClientError as e:
         print("Can not download log. Detail {}".format(e))
-
-    resume_logger("./log.txt")
 
     copied_objects, source_objects = {}, {}
 

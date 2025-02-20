@@ -19,9 +19,9 @@ from google.auth.transport.requests import AuthorizedSession
 
 from cdislogging import get_logger
 
-from scripts.settings import GDC_TOKEN
+from dcfdataservice.settings import GDC_TOKEN
 
-from scripts.utils import generate_chunk_data_list
+from dcfdataservice.utils import generate_chunk_data_list
 
 
 logger = get_logger("GoogleReplication")
@@ -98,7 +98,6 @@ def delete_object(sess, bucket_name, blob_name):
 
 
 def resumable_upload_chunk_to_gs(sess, chunk_data, bucket_name, key, part_number):
-
     object_part_name = key + "-" + str(part_number) if part_number else key
 
     res = get_object_metadata(sess, bucket_name, object_part_name)
@@ -290,7 +289,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, endpoint=None):
             self.chunk_sizes = []
 
     def _call_back(chunk_info, chunk):
-
         while (
             thead_control.sig_update_turn != chunk_info["part_number"]
             and not thead_control.let_exit

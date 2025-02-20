@@ -3,9 +3,9 @@ from urllib.parse import urlparse
 import logging as logger
 from retry import retry
 
-from scripts import utils
-from scripts.errors import APIError, UserError
-from scripts.settings import PROJECT_ACL
+from dcfdataservice import utils
+from dcfdataservice.errors import APIError, UserError
+from dcfdataservice.settings import PROJECT_ACL
 
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
@@ -16,7 +16,7 @@ if os.getenv("AUTH_NAMESPACE"):
     NAMESPACE = "/" + os.getenv("AUTH_NAMESPACE").strip("/")
     logger.info("using namespace {}".format(NAMESPACE))
 else:
-    logger.info("not using any auth namespace")
+    logger.warning("not using any auth namespace")
 
 
 def _remove_changed_url(doc, url):

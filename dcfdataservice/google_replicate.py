@@ -9,7 +9,7 @@ import subprocess
 
 from google.cloud import storage
 from google.cloud.storage import Blob
-from scripts.google_resumable_upload import GCSObjectStreamUpload
+from dcfdataservice.google_resumable_upload import GCSObjectStreamUpload
 from google.auth.transport.requests import AuthorizedSession
 
 from google.api_core.exceptions import BadRequest, Forbidden
@@ -18,10 +18,16 @@ import logging as logger
 
 from indexclient.client import IndexClient
 
-from scripts import utils
-from scripts.errors import APIError, UserError, StreamError
-from scripts.settings import PROJECT_ACL, INDEXD, GDC_TOKEN, IGNORED_FILES, DATA_ENDPT
-from scripts import indexd_utils
+from dcfdataservice import utils
+from dcfdataservice.errors import APIError, UserError, StreamError
+from dcfdataservice.settings import (
+    PROJECT_ACL,
+    INDEXD,
+    GDC_TOKEN,
+    IGNORED_FILES,
+    DATA_ENDPT,
+)
+from dcfdataservice import indexd_utils
 
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
 
@@ -161,10 +167,18 @@ def delete_object(sess, bucket_name, blob_name):
 
 
 def google_copy_wrapper(fi, ignored_dict, global_config):
+
     try:
+        msg = "Starting google exec wrapper"
+        logger.info(msg)
+        DataFlowLog(message=msg)
         datalog = exec_google_copy(fi, ignored_dict, global_config)
     except Exception as e:
+        msg = f"Error starting google exec wrapper {e}"
+        logger.error(msg)
+        DataFlowLog(message=msg)
         datalog = DataFlowLog(message="Internal error. Detail {}".format(e))
+        return
 
     if global_config.get("log_bucket") and global_config.get("release"):
         with open(fi["id"], "w") as f:
@@ -204,6 +218,8 @@ def exec_google_copy(fi, ignored_dict, global_config):
     Returns:
         DataFlowLog
     """
+    msg = f"Starting to process file {fi['id']}"
+    DataFlowLog(message=msg)
     if fi["size"] == 0:
         msg = "can not copy {} to GOOGLE bucket since it is empty file".format(fi["id"])
         return DataFlowLog(message=msg)
