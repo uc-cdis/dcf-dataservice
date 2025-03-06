@@ -229,7 +229,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
                 )
         else:
             logger.warning("Can not delete {} from AWS".format(f["id"]))
-            if "Error" in res:
+            if "Errors" in res:
                 deletion_log.message = str(res.Error)
             else:
                 logger.warning(res)
