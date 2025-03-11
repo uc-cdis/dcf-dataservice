@@ -440,7 +440,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi,
+                            target_bucket,
+                            jobinfo.global_config,
+                            jobinfo,
                         )
                     except Exception as e:
                         # catch generic exception to prevent the code from terminating
