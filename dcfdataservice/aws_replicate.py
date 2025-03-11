@@ -496,7 +496,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     )
 
 
-def stream_object_from_gdc_api(fi, target_bucket, global_config):
+def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     """
     Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from
     gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
@@ -555,7 +555,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
                     request_success = True
                 logger.info(
-                    f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
+                    f"Downloading {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}"
                 )
 
             except urllib.error.HTTPError as e:
@@ -749,7 +749,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         )
         return
 
-    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
+    chunk_data_size = global_config.get("data_chunk_size", 2000) * 1024 * 1024
 
     tasks = []
     for part_number, data_range in enumerate(
@@ -812,6 +812,28 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     #     # )
     #     # pool.close()
     #     # pool.join()
+    jobinfo.manager_ns.total_processed_files += 1
+    jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
+    if pFile:
+        jobinfo.manager_ns.pFiles = jobinfo.manager_ns.pFiles + [pFile]
+    if not quick_test and jobinfo.manager_ns.total_processed_files % 5 == 0:
+        try:
+            session.client("s3").upload_file(
+                "./log.txt",
+                jobinfo.global_config.get("log_bucket"),
+                jobinfo.release + "/log.txt",
+            )
+        except Exception as e:
+            logger.error(e)
+    lock.release()
+    logger.info(
+        "{}/{} objects are processed and {}/{} (GiB) is copied".format(
+            jobinfo.manager_ns.total_processed_files,
+            jobinfo.total_files,
+            int(jobinfo.manager_ns.total_copied_data),
+            int(jobinfo.total_copying_data),
+        )
+    )
 
 
 def validate_uploaded_data(
@@ -1024,40 +1046,40 @@ def run(
             )
         except Exception as e:
             logger.error(e)
-    else:
-        logger.info("=======================SUMMARY=======================")
-        n_copying_gdcapi = 0
-        total_copying_gdcapi = 0
-        n_copying_aws_intelligent_tiering = 0
-        total_copying_aws_intelligent_tiering = 0
-        n_copying_aws_non_intelligent_tiering = 0
-        total_copying_aws_non_intelligent_tiering = 0
-        logger.info("Total size of pFiles: {}".format(len(manager_ns.pFiles)))
-        for pFile in manager_ns.pFiles:
-            if pFile.copy_method == "GDCAPI":
-                n_copying_gdcapi += 1
-                total_copying_gdcapi += pFile.size
-            elif pFile.original_storage == "INTELLIGENT_TIERING":
-                n_copying_aws_intelligent_tiering += 1
-                total_copying_aws_intelligent_tiering += pFile.size
-            else:
-                n_copying_aws_non_intelligent_tiering += 1
-                total_copying_aws_non_intelligent_tiering += pFile.size
 
-        logger.info(
-            "Total files are copied by GDC API {}. Total {}(GiB)".format(
-                n_copying_gdcapi, total_copying_gdcapi * 1.0 / 1024 / 1024 / 1024
-            )
+    logger.info("=======================SUMMARY=======================")
+    n_copying_gdcapi = 0
+    total_copying_gdcapi = 0
+    n_copying_aws_intelligent_tiering = 0
+    total_copying_aws_intelligent_tiering = 0
+    n_copying_aws_non_intelligent_tiering = 0
+    total_copying_aws_non_intelligent_tiering = 0
+    logger.info("Total size of pFiles: {}".format(len(manager_ns.pFiles)))
+    for pFile in manager_ns.pFiles:
+        if pFile.copy_method == "GDCAPI":
+            n_copying_gdcapi += 1
+            total_copying_gdcapi += pFile.size
+        elif pFile.original_storage == "INTELLIGENT_TIERING":
+            n_copying_aws_intelligent_tiering += 1
+            total_copying_aws_intelligent_tiering += pFile.size
+        else:
+            n_copying_aws_non_intelligent_tiering += 1
+            total_copying_aws_non_intelligent_tiering += pFile.size
+
+    logger.info(
+        "Total files are copied by GDC API {}. Total {}(GiB)".format(
+            n_copying_gdcapi, total_copying_gdcapi * 1.0 / 1024 / 1024 / 1024
         )
-        logger.info(
-            "Total files are copied by AWS CLI {} with intelligent tiering storage classes. Total {}(GiB)".format(
-                n_copying_aws_intelligent_tiering,
-                total_copying_aws_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
-            )
+    )
+    logger.info(
+        "Total files are copied by AWS CLI {} with intelligent tiering storage classes. Total {}(GiB)".format(
+            n_copying_aws_intelligent_tiering,
+            total_copying_aws_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
         )
-        logger.info(
-            "Total files are copied by AWS CLI {} with non-intelligent tiering storage classes. Total {}(GiB)".format(
-                n_copying_aws_non_intelligent_tiering,
-                total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
-            )
+    )
+    logger.info(
+        "Total files are copied by AWS CLI {} with non-intelligent tiering storage classes. Total {}(GiB)".format(
+            n_copying_aws_non_intelligent_tiering,
+            total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
         )
+    )
