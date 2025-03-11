@@ -408,7 +408,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi,
+                            target_bucket,
+                            jobinfo.global_config,
+                            jobinfo,
                         )
                         update_url(fi, jobinfo.indexclient)
                     except Exception as e:
