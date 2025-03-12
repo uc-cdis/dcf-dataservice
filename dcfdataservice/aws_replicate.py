@@ -755,7 +755,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         )
         return
 
-    chunk_data_size = global_config.get("data_chunk_size", 300) * 1024 * 1024
+    chunk_data_size = global_config.get("data_chunk_size", 200) * 1024 * 1024
     print(f"chunk data size {chunk_data_size}")
 
     tasks = []
