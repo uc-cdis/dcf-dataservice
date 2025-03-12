@@ -756,6 +756,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         return
 
     chunk_data_size = global_config.get("data_chunk_size", 2000) * 1024 * 1024
+    print(f"chunk data size {chunk_data_size}")
 
     tasks = []
     for part_number, data_range in enumerate(
@@ -820,18 +821,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     #     # pool.join()
     jobinfo.manager_ns.total_processed_files += 1
     jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
-    if pFile:
-        jobinfo.manager_ns.pFiles = jobinfo.manager_ns.pFiles + [pFile]
-    if not quick_test and jobinfo.manager_ns.total_processed_files % 5 == 0:
-        try:
-            session.client("s3").upload_file(
-                "./log.txt",
-                jobinfo.global_config.get("log_bucket"),
-                jobinfo.release + "/log.txt",
-            )
-        except Exception as e:
-            logger.error(e)
-    lock.release()
     logger.info(
         "{}/{} objects are processed and {}/{} (GiB) is copied".format(
             jobinfo.manager_ns.total_processed_files,
