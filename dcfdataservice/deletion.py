@@ -68,7 +68,7 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         release(str): data release
         dry_run(bool): True the program does not really delete the file (for report purpose)
     """
-    session = boto3.session.Session(profile_name="fence_bot")
+    session = boto3.session.Session(profile_name="default")
     s3_sess = session.resource("s3")
 
     try:
