@@ -20,6 +20,7 @@ import json
 import urllib.request
 import boto3
 import botocore
+from botocore.exceptions import ClientError
 
 from urllib.parse import urlparse
 
@@ -618,7 +619,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
             )
 
         tries = 0
-        while tries < RETRIES_NUM:
+        for attempt in range(RETRIES_NUM):
             try:
                 res = thread_s3.upload_part(
                     Body=chunk,
@@ -631,40 +632,67 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 while thread_control.sig_update_turn != chunk_info["part_number"]:
                     time.sleep(1)
 
-                thread_control.mutexLock.acquire()
-                sig.update(chunk)
-                thread_control.sig_update_turn += 1
-                thread_control.mutexLock.release()
+                with thread_control.mutexLock:
+                    sig.update(chunk)
+                    thread_control.sig_update_turn += 1
 
-                if thread_control.sig_update_turn % 10 == 0 and not global_config.get(
-                    "quiet"
-                ):
-                    logger.info(
-                        "Uploading {}. Received {} MB".format(
-                            fi.get("id"),
-                            thread_control.sig_update_turn
-                            * 1.0
-                            / 1024
-                            / 1024
-                            * chunk_data_size,
+                    # Log progress every 10 parts
+                    if (
+                        thread_control.sig_update_turn % 10 == 0
+                        and not global_config.get("quiet")
+                    ):
+                        mb_uploaded = (
+                            thread_control.sig_update_turn * chunk_data_size
+                        ) / (1024**2)
+                        logger.info(
+                            f"Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded"
                         )
-                    )
 
                 return res, chunk_info["part_number"], len(chunk)
 
-            except botocore.exceptions.ClientError as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-            except Exception as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
+                # thread_control.mutexLock.acquire()
+                # sig.update(chunk)
+                # thread_control.sig_update_turn += 1
+                # thread_control.mutexLock.release()
 
-        if tries == RETRIES_NUM:
-            raise botocore.exceptions.ClientError(
-                "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
-            )
+                # if thread_control.sig_update_turn % 10 == 0 and not global_config.get(
+                #     "quiet"
+                # ):
+                #     logger.info(
+                #         "Uploading {}. Received {} MB".format(
+                #             fi.get("id"),
+                #             thread_control.sig_update_turn
+                #             * 1.0
+                #             / 1024
+                #             / 1024
+                #             * chunk_data_size,
+                #         )
+                #     )
+
+                # return res, chunk_info["part_number"], len(chunk)
+
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                logger.warning(
+                    f"Upload failed (attempt {attempt+1}/{RETRIES_NUM}) - "
+                    f"Part {chunk_info['part_number']}: {error_code} - {e.response['Error']['Message']}"
+                )
+                if attempt < RETRIES_NUM - 1:  # Don't sleep on final attempt
+                    backoff_time = min(5 * (2**attempt), 30)  # Exponential backoff
+                    time.sleep(backoff_time)
+
+            except Exception as e:
+                logger.warning(
+                    f"Unexpected error (attempt {attempt+1}/{RETRIES_NUM}) - "
+                    f"Part {chunk_info['part_number']}: {type(e).__name__} - {str(e)}"
+                )
+                if attempt < RETRIES_NUM - 1:
+                    time.sleep(5)
+
+        raise Exception(
+            f"Failed to upload part {chunk_info['part_number']} of {fi['id']} "
+            f"after {RETRIES_NUM} attempts"
+        )
 
     def _handler_single_upload():
         """
