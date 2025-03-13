@@ -576,8 +576,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
             except urllib.error.HTTPError as e:
                 logger.warning(
-                    "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
-                        e
+                    "Fail to open http connection to gdc api. Take a sleep and retry. Detail {} for file {}".format(
+                        e,
+                        data_endpoint,
                     )
                 )
                 time.sleep(5)
