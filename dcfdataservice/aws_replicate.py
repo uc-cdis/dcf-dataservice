@@ -15,6 +15,7 @@ import urllib
 import threading
 from threading import Thread
 
+from http.client import IncompleteRead
 import json
 import urllib.request
 import boto3
@@ -558,8 +559,16 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
                 chunk = urllib.request.urlopen(req).read()
 
-                if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
-                    request_success = True
+                # Validate chunk size
+                expected_size = chunk_info["end"] - chunk_info["start"] + 1
+                if len(chunk) != expected_size:
+                    logger.warning(
+                        f"Incomplete chunk received. Expected {expected_size} bytes, got {len(chunk)}"
+                    )
+                    raise IncompleteRead(chunk, expected_size)
+
+                request_success = True
+
                 logger.info(
                     f"Downloading {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}"
                 )
@@ -572,8 +581,18 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 )
                 time.sleep(5)
                 if e.code == 403:
+                    logger.error("Forbidden - stopping retries")
                     break
                 tries += 1
+
+            except IncompleteRead as e:
+                logger.warning(
+                    f"Incomplete read error: {e}. Expected {e.expected} bytes, received {len(e.partial)}"
+                )
+                logger.warning("Retrying chunk download...")
+                time.sleep(5)
+                tries += 1
+
             except SocketError as e:
                 if e.errno != errno.ECONNRESET:
                     logger.warning(
@@ -582,13 +601,20 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     time.sleep(60)
                     tries += 1
             except Exception as e:
-                logger.warning(e)
+                logger.warning(f"Unexpected error: {type(e).__name__}: {str(e)}")
                 time.sleep(5)
                 tries += 1
 
+        if not request_success:
+            raise ConnectionError(
+                f"Failed to download chunk after {RETRIES_NUM} attempts. "
+                f"Last error: {type(e).__name__}: {str(e)}"
+            )
         if tries == RETRIES_NUM:
             raise Exception(
-                "Can not open http connection to gdc api {}".format(data_endpoint)
+                "Retries exceeded allowed retries. Can not open http connection to gdc api {}".format(
+                    data_endpoint
+                )
             )
 
         tries = 0
@@ -755,7 +781,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         )
         return
 
-    chunk_data_size = global_config.get("data_chunk_size", 256 * 1024 * 1024)
+    chunk_data_size = global_config.get("chunk_size", 256) * 1024 * 1024
     print(f"chunk data size {chunk_data_size}")
 
     tasks = []
