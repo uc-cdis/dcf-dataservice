@@ -755,7 +755,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         )
         return
 
-    chunk_data_size = global_config.get("data_chunk_size", 128 * 1024 * 1024)
+    chunk_data_size = global_config.get("data_chunk_size", 256 * 1024 * 1024)
     print(f"chunk data size {chunk_data_size}")
 
     tasks = []
@@ -764,6 +764,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     ):
         start, end = data_range
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
+
+    if global_config.get("multi_part_upload_threads"):
+        print(f"Thread Size: {global_config.get('multi_part_upload_threads')}")
 
     pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
     results = pool.map(_handler_multipart, tasks)
