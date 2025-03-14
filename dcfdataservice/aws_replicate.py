@@ -560,8 +560,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                         ),
                     },
                 )
-
+                start_time = time.time()
                 chunk = urllib.request.urlopen(req).read()
+                end_time = time.time()
 
                 # Validate chunk size
                 expected_size = chunk_info["end"] - chunk_info["start"] + 1
@@ -574,7 +575,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 request_success = True
 
                 logger.info(
-                    f"Downloading {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}"
+                    f"Downloaded {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}. Download time: {end_time-start_time}"
                 )
 
             except urllib.error.HTTPError as e:
