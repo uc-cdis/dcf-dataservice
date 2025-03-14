@@ -531,169 +531,171 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
             self.mutexLock = threading.Lock()
             self.sig_update_turn = 1
 
-    def _handler_multipart(chunk_info):
-        """
-        streamming chunk data from api to aws bucket
+        def _handler_multipart(chunk_info):
+            """
+            Streaming chunk data from API to AWS bucket with exponential backoff for retries.
 
-        Args:
-            chunk_info(dict):
-                {
-                    "start": start,
-                    "end": end,
-                    "part_number": part_number
-                }
-        """
-        tries = 0
-        request_success = False
-        chunk = None
-        while tries < RETRIES_NUM and not request_success:
-            try:
-                req = urllib.request.Request(
-                    data_endpoint,
-                    headers={
-                        "X-Auth-Token": GDC_TOKEN,
-                        "Range": "bytes={}-{}".format(
-                            chunk_info["start"], chunk_info["end"]
-                        ),
-                    },
-                )
-
-                chunk = urllib.request.urlopen(req).read()
-
-                # Validate chunk size
-                expected_size = chunk_info["end"] - chunk_info["start"] + 1
-                if len(chunk) != expected_size:
-                    logger.warning(
-                        f"Incomplete chunk received. Expected {expected_size} bytes, got {len(chunk)}"
+            Args:
+                chunk_info(dict):
+                    {
+                        "start": start,
+                        "end": end,
+                        "part_number": part_number
+                    }
+            """
+            tries = 0
+            request_success = False
+            chunk = None
+            for attempt in range(RETRIES_NUM):
+                try:
+                    logger.info(
+                        f"[Thread {threading.current_thread().name}] Attempt #{attempt} to download record {data_endpoint}. Part number: {chunk_info['part_number']}"
                     )
-                    raise IncompleteRead(chunk, expected_size)
-
-                request_success = True
-
-                logger.info(
-                    f"Downloading {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}"
-                )
-
-            except urllib.error.HTTPError as e:
-                logger.warning(
-                    "Fail to open http connection to gdc api. Take a sleep and retry. Detail {} for file {}".format(
-                        e,
+                    req = urllib.request.Request(
                         data_endpoint,
+                        headers={
+                            "X-Auth-Token": GDC_TOKEN,
+                            "Range": "bytes={}-{}".format(
+                                chunk_info["start"], chunk_info["end"]
+                            ),
+                        },
                     )
-                )
-                time.sleep(5)
-                if e.code == 403:
-                    logger.error("Forbidden - stopping retries")
-                    break
-                tries += 1
 
-            except IncompleteRead as e:
-                logger.warning(
-                    f"Incomplete read error: {e}. Expected {e.expected} bytes, received {len(e.partial)}"
-                )
-                logger.warning("Retrying chunk download...")
-                time.sleep(5)
-                tries += 1
+                    chunk = urllib.request.urlopen(req).read()
 
-            except SocketError as e:
-                if e.errno != errno.ECONNRESET:
-                    logger.warning(
-                        "Connection reset. Take a sleep and retry. Detail {}".format(e)
-                    )
-                    time.sleep(60)
-                    tries += 1
-            except Exception as e:
-                logger.warning(f"Unexpected error: {type(e).__name__}: {str(e)}")
-                time.sleep(5)
-                tries += 1
-
-        if not request_success:
-            raise ConnectionError(
-                f"Failed to download chunk after {RETRIES_NUM} attempts. "
-                f"Last error: {type(e).__name__}: {str(e)}"
-            )
-        if tries == RETRIES_NUM:
-            raise Exception(
-                "Retries exceeded allowed retries. Can not open http connection to gdc api {}".format(
-                    data_endpoint
-                )
-            )
-
-        tries = 0
-        for attempt in range(RETRIES_NUM):
-            try:
-                res = thread_s3.upload_part(
-                    Body=chunk,
-                    Bucket=target_bucket,
-                    Key=object_path,
-                    PartNumber=chunk_info["part_number"],
-                    UploadId=multipart_upload.get("UploadId"),
-                )
-
-                while thread_control.sig_update_turn != chunk_info["part_number"]:
-                    time.sleep(1)
-
-                with thread_control.mutexLock:
-                    sig.update(chunk)
-                    thread_control.sig_update_turn += 1
-
-                    # Log progress every 10 parts
-                    if (
-                        thread_control.sig_update_turn % 10 == 0
-                        and not global_config.get("quiet")
-                    ):
-                        mb_uploaded = (
-                            thread_control.sig_update_turn * chunk_data_size
-                        ) / (1024**2)
-                        logger.info(
-                            f"Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded"
+                    # Validate chunk size
+                    expected_size = chunk_info["end"] - chunk_info["start"] + 1
+                    if len(chunk) != expected_size:
+                        logger.warning(
+                            f"Incomplete chunk received. Expected {expected_size} bytes, got {len(chunk)}"
                         )
+                        raise IncompleteRead(chunk, expected_size)
 
-                return res, chunk_info["part_number"], len(chunk)
+                    request_success = True
 
-                # thread_control.mutexLock.acquire()
-                # sig.update(chunk)
-                # thread_control.sig_update_turn += 1
-                # thread_control.mutexLock.release()
+                    logger.info(
+                        f"Downloading {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}"
+                    )
 
-                # if thread_control.sig_update_turn % 10 == 0 and not global_config.get(
-                #     "quiet"
-                # ):
-                #     logger.info(
-                #         "Uploading {}. Received {} MB".format(
-                #             fi.get("id"),
-                #             thread_control.sig_update_turn
-                #             * 1.0
-                #             / 1024
-                #             / 1024
-                #             * chunk_data_size,
-                #         )
-                #     )
+                except urllib.error.HTTPError as e:
+                    logger.warning(
+                        "Failed to open http connection to GDC API. Retrying... Detail: {} for file {}".format(
+                            e,
+                            data_endpoint,
+                        )
+                    )
+                    if e.code == 403:
+                        logger.error("Forbidden - stopping retries")
+                        break
+                    else:
+                        if attempt < RETRIES_NUM - 1:
+                            backoff_time = min(5 * (2**attempt), 30)
+                            logger.warning(
+                                f"Retrying download in {backoff_time} seconds..."
+                            )
+                            time.sleep(backoff_time)
+                    tries += 1
 
-                # return res, chunk_info["part_number"], len(chunk)
+                except IncompleteRead as e:
+                    logger.warning(
+                        f"Incomplete read error: {e}. Expected {e.expected} bytes, received {len(e.partial)}"
+                    )
+                    logger.warning("Retrying chunk download...")
+                    if attempt < RETRIES_NUM - 1:
+                        backoff_time = min(5 * (2**attempt), 30)
+                        logger.warning(
+                            f"Retrying download in {backoff_time} seconds..."
+                        )
+                        time.sleep(backoff_time)
+                    tries += 1
 
-            except ClientError as e:
-                error_code = e.response["Error"]["Code"]
-                logger.warning(
-                    f"Upload failed (attempt {attempt+1}/{RETRIES_NUM}) - "
-                    f"Part {chunk_info['part_number']}: {error_code} - {e.response['Error']['Message']}"
+                except SocketError as e:
+                    if e.errno != errno.ECONNRESET:
+                        logger.warning(f"Connection reset: {e}")
+                    else:
+                        logger.warning(f"Socket Error: {e}")
+                    if attempt < RETRIES_NUM - 1:
+                        backoff_time = min(5 * (2**attempt), 30)
+                        logger.warning(
+                            f"Retrying download in {backoff_time} seconds..."
+                        )
+                        time.sleep(backoff_time)
+                    tries += 1
+
+                except Exception as e:
+                    logger.warning(
+                        f"Unexpected download error: {type(e).__name__}: {str(e)}"
+                    )
+                    if attempt < RETRIES_NUM - 1:
+                        backoff_time = min(5 * (2**attempt), 30)
+                        logger.warning(
+                            f"Retrying download in {backoff_time} seconds..."
+                        )
+                        time.sleep(backoff_time)
+                    tries += 1
+
+            if not request_success:
+                raise ConnectionError(
+                    f"Failed to download chunk after {RETRIES_NUM} attempts. "
+                    f"Last error: {type(e).__name__}: {str(e)}"
                 )
-                if attempt < RETRIES_NUM - 1:  # Don't sleep on final attempt
-                    backoff_time = min(5 * (2**attempt), 30)  # Exponential backoff
-                    time.sleep(backoff_time)
 
-            except Exception as e:
-                logger.warning(
-                    f"Unexpected error (attempt {attempt+1}/{RETRIES_NUM}) - "
-                    f"Part {chunk_info['part_number']}: {type(e).__name__} - {str(e)}"
-                )
-                if attempt < RETRIES_NUM - 1:
-                    time.sleep(5)
+            tries = 0
+            for attempt in range(RETRIES_NUM):
+                try:
+                    res = thread_s3.upload_part(
+                        Body=chunk,
+                        Bucket=target_bucket,
+                        Key=object_path,
+                        PartNumber=chunk_info["part_number"],
+                        UploadId=multipart_upload.get("UploadId"),
+                    )
 
-        raise Exception(
-            f"Failed to upload part {chunk_info['part_number']} of {fi['id']} "
-            f"after {RETRIES_NUM} attempts"
-        )
+                    while thread_control.sig_update_turn != chunk_info["part_number"]:
+                        time.sleep(1)
+
+                    with thread_control.mutexLock:
+                        sig.update(chunk)
+                        thread_control.sig_update_turn += 1
+
+                        if (
+                            thread_control.sig_update_turn % 10 == 0
+                            and not global_config.get("quiet")
+                        ):
+                            mb_uploaded = (
+                                thread_control.sig_update_turn * chunk_data_size
+                            ) / (1024**2)
+                            logger.info(
+                                f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded"
+                            )
+
+                    return res, chunk_info["part_number"], len(chunk)
+
+                except ClientError as e:
+                    error_code = e.response["Error"]["Code"]
+                    logger.warning(
+                        f"Upload failed (attempt {attempt+1}/{RETRIES_NUM}) - "
+                        f"Part {chunk_info['part_number']}: {error_code} - {e.response['Error']['Message']}"
+                    )
+                    if attempt < RETRIES_NUM - 1:
+                        backoff_time = min(5 * (2**attempt), 30)
+                        logger.warning(f"Retrying upload in {backoff_time} seconds...")
+                        time.sleep(backoff_time)
+
+                except Exception as e:
+                    logger.warning(
+                        f"Unexpected upload error (attempt {attempt+1}/{RETRIES_NUM}) - "
+                        f"Part {chunk_info['part_number']}: {type(e).__name__} - {str(e)}"
+                    )
+                    if attempt < RETRIES_NUM - 1:
+                        backoff_time = min(5 * (2**attempt), 30)
+                        logger.warning(f"Retrying upload in {backoff_time} seconds...")
+                        time.sleep(backoff_time)
+
+            raise Exception(
+                f"Failed to upload part {chunk_info['part_number']} of {fi['id']} "
+                f"after {RETRIES_NUM} attempts"
+            )
 
     def _handler_single_upload():
         """
@@ -811,7 +813,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         return
 
     chunk_data_size = global_config.get("chunk_size", 256) * 1024 * 1024
-    print(f"chunk data size {chunk_data_size}")
 
     tasks = []
     for part_number, data_range in enumerate(
