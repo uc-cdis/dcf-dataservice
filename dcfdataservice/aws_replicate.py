@@ -577,6 +577,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 logger.info(
                     f"Downloaded {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}. Download time: {end_time-start_time}"
                 )
+                break
 
             except urllib.error.HTTPError as e:
                 logger.warning(
@@ -629,7 +630,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     time.sleep(backoff_time)
                 tries += 1
 
-        if not request_success:
+        if not request_success or attempt == RETRIES_NUM - 1:
             raise ConnectionError(
                 f"Failed to download chunk after {RETRIES_NUM} attempts. "
                 f"Last error: {type(e).__name__}: {str(e)}"
@@ -638,6 +639,10 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         tries = 0
         for attempt in range(RETRIES_NUM):
             try:
+                logger.info(
+                    f"[Thread {threading.current_thread().name}] Attempt #{attempt} to upload record {data_endpoint}. Part number: {chunk_info['part_number']}"
+                )
+                upload_start_time = time.time()
                 res = thread_s3.upload_part(
                     Body=chunk,
                     Bucket=target_bucket,
@@ -652,16 +657,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 with thread_control.mutexLock:
                     sig.update(chunk)
                     thread_control.sig_update_turn += 1
-
-                    if (
-                        thread_control.sig_update_turn % 10 == 0
-                        and not global_config.get("quiet")
-                    ):
+                    upload_end_time = time.time()
+                    if not global_config.get("quiet"):
                         mb_uploaded = (
                             thread_control.sig_update_turn * chunk_data_size
                         ) / (1024**2)
                         logger.info(
-                            f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded"
+                            f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}"
                         )
 
                 return res, chunk_info["part_number"], len(chunk)
