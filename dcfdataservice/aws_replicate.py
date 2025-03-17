@@ -527,10 +527,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         Class for thread synchronization
         """
 
-        def __init__(self):
+        def __init__(self, total_parts):
             self.mutexLock = threading.Lock()
-            self.sig_update_turn = 1
+            self.chunk_hashes = {}  # Track hashes by part number
             self.completed_parts = set()
+            self.total_parts = total_parts
 
     def _handler_multipart(chunk_info):
         """
@@ -566,6 +567,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 end_time = time.time()
 
                 # Validate chunk size
+                chunk_hash = hashlib.md5(chunk).digest()
+
                 expected_size = chunk_info["end"] - chunk_info["start"] + 1
                 if len(chunk) != expected_size:
                     logger.warning(
@@ -653,14 +656,17 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 )
 
                 with thread_control.mutexLock:
-                    mb_uploaded = (thread_control.sig_update_turn * chunk_data_size) / (
-                        1024**2
-                    )
+                    thread_control.completed_parts.add(part_number)
+                    completed = len(thread_control.completed_parts)
+                    total = thread_control.total_parts
+
+                    progress_pct = (completed / total) * 100
+                    mb_uploaded = (completed * chunk_data_size) / 1024 / 1024
+
                     upload_end_time = time.time()
                     logger.info(
-                        f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}"
+                        f"[Thread {threading.current_thread().name}] Uploaded {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}. Progress: {progress_pct}"
                     )
-                    sig.update(chunk)
 
                 return res, chunk_info["part_number"], len(chunk)
 
@@ -848,7 +854,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, total_bytes_received
+        fi, thread_s3, target_bucket, total_bytes_received, thread_control
     )
 
     if not sig_check_pass:
@@ -887,8 +893,8 @@ def validate_uploaded_data(
     fi,
     thread_s3,
     target_bucket,
-    sig,
     total_bytes_received,
+    thread_control,
 ):
     """
     validate uploaded data
@@ -904,13 +910,24 @@ def validate_uploaded_data(
        bool: pass or not
     """
 
-    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
     if total_bytes_received != fi.get("size"):
         logger.warning(
             "Can not stream the object {}. Size does not match".format(fi.get("id"))
         )
         return False
+
+    ordered_hashes = [
+        thread_control.chunk_hashes[part_num]
+        for part_num in sorted(thread_control.chunk_hashes)
+    ]
+
+    if len(ordered_hashes) > 1:  # AWS-style multipart ETag
+        combined_hash = hashlib.md5(b"".join(ordered_hashes)).hexdigest()
+        final_etag = f"{combined_hash}-{len(ordered_hashes)}"
+    else:  # Single part
+        final_etag = hashlib.md5(ordered_hashes[0]).hexdigest()
+
+    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
     try:
         meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
@@ -932,7 +949,7 @@ def validate_uploaded_data(
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
 
-    if sig.hexdigest() != fi.get("md5"):
+    if final_etag != fi.get("md5"):
         logger.warning(
             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
         )
