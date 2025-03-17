@@ -530,6 +530,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         def __init__(self):
             self.mutexLock = threading.Lock()
             self.sig_update_turn = 1
+            self.completed_parts = set()
 
     def _handler_multipart(chunk_info):
         """
@@ -657,22 +658,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
                     # Calculate progress
                     completed = len(thread_control.completed_parts)
-                    total_parts = thread_control.total_parts
 
-                    # Update signature if needed (order-independent hash)
-                    if thread_control.enable_validation:
-                        thread_control.file_hash.update(chunk)
+                    mb_uploaded = (completed * chunk_data_size) / (1024**2)
+                    logger.info(f"Upload progress: {mb_uploaded:.2f} MB ")
 
-                    # Log progress every 10% or 10 parts, whichever comes first
-                    if (
-                        completed % max(1, total_parts // 10) == 0
-                        or completed % 10 == 0
-                    ):
-                        mb_uploaded = (completed * chunk_data_size) / (1024**2)
-                        logger.info(
-                            f"Upload progress: {mb_uploaded:.2f} MB "
-                            f"({completed}/{total_parts} parts)"
-                        )
+                    sig.update(chunk)
 
                 return res, chunk_info["part_number"], len(chunk)
 
