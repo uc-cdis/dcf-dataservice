@@ -831,7 +831,11 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         else "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
     )
     size = int(fi.get("size"))
-    thread_control = ThreadControl(total_parts=calculate_total_parts(size))
+    thread_control = ThreadControl(
+        total_parts=calculate_total_parts(
+            size, global_config.get("chunk_size", 256) * 1024 * 1024
+        )
+    )
 
     try:
         multipart_upload = thread_s3.create_multipart_upload(
