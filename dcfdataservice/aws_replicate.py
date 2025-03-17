@@ -1,6 +1,7 @@
 import io
 from socket import error as SocketError
 import errno
+import math
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
 import time
@@ -45,6 +46,46 @@ global logger
 RETRIES_NUM = 5
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+
+
+def calculate_total_parts(file_size_bytes, chunk_size_bytes):
+    """
+    Calculate total parts for predetermined chunk size
+
+    Args:
+        file_size_bytes (int): Total file size in bytes
+        chunk_size_bytes (int): Fixed chunk size in bytes
+
+    Returns:
+        int: Total number of parts required
+
+    Raises:
+        ValueError: If chunk size violates AWS constraints
+    """
+
+    # AWS S3 requirements
+    MIN_CHUNK = 5 * 1024**2  # 5 MiB
+    MAX_PARTS = 10_000
+
+    # Validate chunk size meets AWS minimum
+    if chunk_size_bytes < MIN_CHUNK:
+        raise ValueError(
+            f"Chunk size {chunk_size_bytes} bytes too small. "
+            f"Minimum 5 MiB ({MIN_CHUNK} bytes) required"
+        )
+
+    # Calculate total parts
+    total_parts = math.ceil(file_size_bytes / chunk_size_bytes)
+
+    # Verify AWS part limit
+    if total_parts > MAX_PARTS:
+        max_allowed_size = MAX_PARTS * chunk_size_bytes
+        raise ValueError(
+            f"File too large ({file_size_bytes} bytes) for {chunk_size_bytes} byte chunks. "
+            f"Max allowed: {max_allowed_size} bytes with {MAX_PARTS} parts"
+        )
+
+    return total_parts
 
 
 class ProcessingFile(object):
@@ -782,7 +823,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
 
-    thread_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
     data_endpoint = (
@@ -791,12 +831,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         else "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
     )
     size = int(fi.get("size"))
+    thread_control = ThreadControl(total_parts=calculate_total_parts(size))
 
-    sig = hashlib.md5()
-    # prepare to compute local etag
-    md5_digests = []
-
-    # if size >= 10 * 1024 * 1024:
     try:
         multipart_upload = thread_s3.create_multipart_upload(
             Bucket=target_bucket,
