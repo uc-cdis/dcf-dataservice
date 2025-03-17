@@ -651,19 +651,27 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     UploadId=multipart_upload.get("UploadId"),
                 )
 
-                while thread_control.sig_update_turn != chunk_info["part_number"]:
-                    time.sleep(1)
-
                 with thread_control.mutexLock:
-                    sig.update(chunk)
-                    thread_control.sig_update_turn += 1
-                    upload_end_time = time.time()
-                    if not global_config.get("quiet"):
-                        mb_uploaded = (
-                            thread_control.sig_update_turn * chunk_data_size
-                        ) / (1024**2)
+                    # Add to completed parts set
+                    thread_control.completed_parts.add(part_number)
+
+                    # Calculate progress
+                    completed = len(thread_control.completed_parts)
+                    total_parts = thread_control.total_parts
+
+                    # Update signature if needed (order-independent hash)
+                    if thread_control.enable_validation:
+                        thread_control.file_hash.update(chunk)
+
+                    # Log progress every 10% or 10 parts, whichever comes first
+                    if (
+                        completed % max(1, total_parts // 10) == 0
+                        or completed % 10 == 0
+                    ):
+                        mb_uploaded = (completed * chunk_data_size) / (1024**2)
                         logger.info(
-                            f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}"
+                            f"Upload progress: {mb_uploaded:.2f} MB "
+                            f"({completed}/{total_parts} parts)"
                         )
 
                 return res, chunk_info["part_number"], len(chunk)
