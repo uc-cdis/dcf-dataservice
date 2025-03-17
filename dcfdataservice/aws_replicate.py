@@ -653,15 +653,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                 )
 
                 with thread_control.mutexLock:
-                    # Add to completed parts set
-                    thread_control.completed_parts.add(part_number)
-
-                    # Calculate progress
-                    completed = len(thread_control.completed_parts)
-
-                    mb_uploaded = (completed * chunk_data_size) / (1024**2)
-                    logger.info(f"Upload progress: {mb_uploaded:.2f} MB ")
-
+                    mb_uploaded = (thread_control.sig_update_turn * chunk_data_size) / (
+                        1024**2
+                    )
+                    upload_end_time = time.time()
+                    logger.info(
+                        f"[Thread {threading.current_thread().name}] Uploading {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}"
+                    )
                     sig.update(chunk)
 
                 return res, chunk_info["part_number"], len(chunk)
