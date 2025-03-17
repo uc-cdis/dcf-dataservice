@@ -4,6 +4,12 @@ import errno
 import math
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from socket import error as SocketError
+import signal
+import sys
 import time
 
 from functools import partial
@@ -46,6 +52,57 @@ global logger
 RETRIES_NUM = 5
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+
+# Configure retry strategy for downloads
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD", "GET", "OPTIONS"],
+)
+
+download_adapter = HTTPAdapter(max_retries=retry_strategy)
+upload_retries = 3  # Separate retry count for S3 uploads
+
+
+class TransferMonitor:
+    def __init__(self, total_parts):
+        self.lock = threading.Lock()
+        self.start_time = time.time()
+        self.completed_parts = set()
+        self.total_parts = total_parts
+        self.attempts = {}
+        self.failed_parts = set()
+        self.bytes_transferred = 0
+        self.last_progress_log = 0
+
+    def update_progress(self, part_number, bytes_transferred):
+        with self.lock:
+            self.completed_parts.add(part_number)
+            self.bytes_transferred += bytes_transferred
+            now = time.time()
+
+            # Throttle progress logging
+            if now - self.last_progress_log > 5:  # Log every 5 seconds
+                elapsed = now - self.start_time
+                speed = self.bytes_transferred / elapsed if elapsed > 0 else 0
+                remaining = (
+                    (self.total_parts - len(self.completed_parts))
+                    * (elapsed / len(self.completed_parts))
+                    if self.completed_parts
+                    else 0
+                )
+
+                logger.info(
+                    "Transfer Progress",
+                    completed=f"{len(self.completed_parts)}/{self.total_parts}",
+                    percentage=f"{(len(self.completed_parts)/self.total_parts)*100:.1f}%",
+                    transferred=f"{self.bytes_transferred/(1024**2):.2f}MB",
+                    speed=f"{speed/(1024**2):.2f}MB/s",
+                    eta=f"{remaining/60:.1f}min" if remaining else "N/A",
+                    failed=len(self.failed_parts),
+                )
+                self.last_progress_log = now
 
 
 def calculate_total_parts(file_size_bytes, chunk_size_bytes):
@@ -574,168 +631,111 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
             self.completed_parts = set()
             self.total_parts = total_parts
 
-    def _handler_multipart(chunk_info):
-        """
-        Streaming chunk data from API to AWS bucket with exponential backoff for retries.
+    def _handler_multipart(chunk_info, monitor):
+        part_number = chunk_info["part_number"]
+        chunk_id = f"{fi['id']}-part-{part_number}"
 
-        Args:
-            chunk_info(dict):
-                {
-                    "start": start,
-                    "end": end,
-                    "part_number": part_number
-                }
-        """
-        tries = 0
-        request_success = False
-        chunk = None
-        for attempt in range(RETRIES_NUM):
-            try:
-                logger.info(
-                    f"[Thread {threading.current_thread().name}] Attempt #{attempt} to download record {data_endpoint}. Part number: {chunk_info['part_number']}"
-                )
-                req = urllib.request.Request(
-                    data_endpoint,
-                    headers={
-                        "X-Auth-Token": GDC_TOKEN,
-                        "Range": "bytes={}-{}".format(
-                            chunk_info["start"], chunk_info["end"]
-                        ),
+        # Register SIGINT handler for graceful shutdown
+        def signal_handler(sig, frame):
+            logger.warning("Interrupt received, saving state...")
+            with open(f"progress_{fi['id']}.json", "w") as f:
+                json.dump(
+                    {
+                        "completed": list(monitor.completed_parts),
+                        "failed": list(monitor.failed_parts),
                     },
+                    f,
                 )
-                start_time = time.time()
-                chunk = urllib.request.urlopen(req).read()
-                end_time = time.time()
+            sys.exit(0)
 
-                # Validate chunk size
-                chunk_hash = hashlib.md5(chunk).digest()
+        signal.signal(signal.SIGINT, signal_handler)
 
-                expected_size = chunk_info["end"] - chunk_info["start"] + 1
-                if len(chunk) != expected_size:
-                    logger.warning(
-                        f"Incomplete chunk received. Expected {expected_size} bytes, got {len(chunk)}"
-                    )
-                    raise IncompleteRead(chunk, expected_size)
-
-                request_success = True
-
-                logger.info(
-                    f"Downloaded {fi.get('id')}: {chunk_data_size*chunk_info['part_number']}/{fi.get('size')}. Download time: {end_time-start_time}"
-                )
-                break
-
-            except urllib.error.HTTPError as e:
-                logger.warning(
-                    "Failed to open http connection to GDC API. Retrying... Detail: {} for file {}".format(
-                        e,
-                        data_endpoint,
-                    )
-                )
-                if e.code == 403:
-                    logger.error("Forbidden - stopping retries")
-                    break
-                else:
-                    if attempt < RETRIES_NUM - 1:
-                        backoff_time = min(5 * (2**attempt), 30)
-                        logger.warning(
-                            f"Retrying download in {backoff_time} seconds..."
-                        )
-                        time.sleep(backoff_time)
-                tries += 1
-
-            except IncompleteRead as e:
-                logger.warning(
-                    f"Incomplete read error: {e}. Expected {e.expected} bytes, received {len(e.partial)}"
-                )
-                logger.warning("Retrying chunk download...")
-                if attempt < RETRIES_NUM - 1:
-                    backoff_time = min(5 * (2**attempt), 30)
-                    logger.warning(f"Retrying download in {backoff_time} seconds...")
-                    time.sleep(backoff_time)
-                tries += 1
-
-            except SocketError as e:
-                if e.errno != errno.ECONNRESET:
-                    logger.warning(f"Connection reset: {e}")
-                else:
-                    logger.warning(f"Socket Error: {e}")
-                if attempt < RETRIES_NUM - 1:
-                    backoff_time = min(5 * (2**attempt), 30)
-                    logger.warning(f"Retrying download in {backoff_time} seconds...")
-                    time.sleep(backoff_time)
-                tries += 1
-
-            except Exception as e:
-                logger.warning(
-                    f"Unexpected download error: {type(e).__name__}: {str(e)}"
-                )
-                if attempt < RETRIES_NUM - 1:
-                    backoff_time = min(5 * (2**attempt), 30)
-                    logger.warning(f"Retrying download in {backoff_time} seconds...")
-                    time.sleep(backoff_time)
-                tries += 1
-
-        if not request_success or attempt == RETRIES_NUM - 1:
-            raise ConnectionError(
-                f"Failed to download chunk after {RETRIES_NUM} attempts. "
-                f"Last error: {type(e).__name__}: {str(e)}"
-            )
-
-        tries = 0
-        for attempt in range(RETRIES_NUM):
+        # Download with retries and streaming
+        for attempt in range(RETRIES_NUM + 1):
             try:
-                logger.info(
-                    f"[Thread {threading.current_thread().name}] Attempt #{attempt} to upload record {data_endpoint}. Part number: {chunk_info['part_number']}"
-                )
-                upload_start_time = time.time()
-                res = thread_s3.upload_part(
-                    Body=chunk,
-                    Bucket=target_bucket,
-                    Key=object_path,
-                    PartNumber=chunk_info["part_number"],
-                    UploadId=multipart_upload.get("UploadId"),
-                )
+                session = requests.Session()
+                session.mount("https://", download_adapter)
 
-                with thread_control.mutexLock:
-                    thread_control.completed_parts.add(part_number)
-                    completed = len(thread_control.completed_parts)
-                    total = thread_control.total_parts
+                headers = {
+                    "X-Auth-Token": GDC_TOKEN,
+                    "Range": f"bytes={chunk_info['start']}-{chunk_info['end']}",
+                }
 
-                    progress_pct = (completed / total) * 100
-                    mb_uploaded = (completed * chunk_data_size) / 1024 / 1024
+                logger.debug("Download attempt started", attempt=attempt + 1)
+                start_time = time.time()
 
-                    upload_end_time = time.time()
-                    logger.info(
-                        f"[Thread {threading.current_thread().name}] Uploaded {fi['id']} - Progress: {mb_uploaded:.2f} MB uploaded. Upload time: {upload_end_time - upload_start_time}. Progress: {progress_pct}"
-                    )
+                with session.get(
+                    data_endpoint,
+                    headers=headers,
+                    stream=True,
+                    timeout=(3.05, 30),  # Connect/read timeouts
+                ) as response:
+                    response.raise_for_status()
+                    expected_size = chunk_info["end"] - chunk_info["start"] + 1
 
-                return res, chunk_info["part_number"], len(chunk)
+                    # Stream directly to S3 with progress tracking
+                    upload_success = False
+                    for upload_attempt in range(upload_retries + 1):
+                        try:
+                            logger.debug(
+                                "Upload attempt started", attempt=upload_attempt + 1
+                            )
 
-            except ClientError as e:
-                error_code = e.response["Error"]["Code"]
-                logger.warning(
-                    f"Upload failed (attempt {attempt+1}/{RETRIES_NUM}) - "
-                    f"Part {chunk_info['part_number']}: {error_code} - {e.response['Error']['Message']}"
-                )
-                if attempt < RETRIES_NUM - 1:
-                    backoff_time = min(5 * (2**attempt), 30)
-                    logger.warning(f"Retrying upload in {backoff_time} seconds...")
-                    time.sleep(backoff_time)
+                            # Create a file-like object from the response stream
+                            file_obj = io.BytesIO()
+                            downloaded_bytes = 0
+                            for chunk in response.iter_content(chunk_size=8192):
+                                file_obj.write(chunk)
+                                downloaded_bytes += len(chunk)
+                                monitor.update_progress(part_number, len(chunk))
 
-            except Exception as e:
-                logger.warning(
-                    f"Unexpected upload error (attempt {attempt+1}/{RETRIES_NUM}) - "
-                    f"Part {chunk_info['part_number']}: {type(e).__name__} - {str(e)}"
-                )
-                if attempt < RETRIES_NUM - 1:
-                    backoff_time = min(5 * (2**attempt), 30)
-                    logger.warning(f"Retrying upload in {backoff_time} seconds...")
-                    time.sleep(backoff_time)
+                            # Verify downloaded size
+                            if downloaded_bytes != expected_size:
+                                raise IncompleteRead(
+                                    f"Expected {expected_size}, got {downloaded_bytes}"
+                                )
 
-        raise Exception(
-            f"Failed to upload part {chunk_info['part_number']} of {fi['id']} "
-            f"after {RETRIES_NUM} attempts"
-        )
+                            # Reset buffer position and upload
+                            file_obj.seek(0)
+                            res = thread_s3.upload_part(
+                                Body=file_obj,
+                                Bucket=target_bucket,
+                                Key=object_path,
+                                PartNumber=part_number,
+                                UploadId=multipart_upload["UploadId"],
+                            )
+
+                            # Verify ETag matches MD5
+                            md5 = hashlib.md5(file_obj.getvalue()).hexdigest()
+                            if res["ETag"].strip('"') != md5:
+                                raise ValueError("ETag verification failed")
+
+                            upload_success = True
+                            break
+
+                        except (ClientError, SocketError) as e:
+                            logger.warning(
+                                "Upload failed",
+                                error=str(e),
+                                attempt=upload_attempt + 1,
+                            )
+                            if upload_attempt == upload_retries:
+                                raise
+                            time.sleep(min(2**upload_attempt, 10))
+
+                    if upload_success:
+                        logger.info("Chunk completed successfully")
+                        return res
+
+            except (requests.RequestException, IncompleteRead) as e:
+                logger.error("Download failed", error=str(e), attempt=attempt + 1)
+                if attempt == RETRIES_NUM:
+                    with monitor.lock:
+                        monitor.failed_parts.add(part_number)
+                    raise
+                time.sleep(min(2**attempt, 10))
+
+        raise Exception(f"Failed after {RETRIES_NUM} download attempts")
 
     def _handler_single_upload():
         """
@@ -831,11 +831,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         else "https://api.gdc.cancer.gov/data/{}".format(fi.get("id"))
     )
     size = int(fi.get("size"))
-    thread_control = ThreadControl(
-        total_parts=calculate_total_parts(
-            size, global_config.get("chunk_size", 256) * 1024 * 1024
-        )
-    )
 
     try:
         multipart_upload = thread_s3.create_multipart_upload(
@@ -853,6 +848,13 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
     chunk_data_size = global_config.get("chunk_size", 256) * 1024 * 1024
 
+    thread_control = ThreadControl(
+        total_parts=calculate_total_parts(
+            size,
+            chunk_data_size,
+        )
+    )
+
     tasks = []
     for part_number, data_range in enumerate(
         generate_chunk_data_list(fi["size"], chunk_data_size)
@@ -863,10 +865,24 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     if global_config.get("multi_part_upload_threads"):
         print(f"Thread Size: {global_config.get('multi_part_upload_threads')}")
 
-    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-    results = pool.map(_handler_multipart, tasks)
-    pool.close()
-    pool.join()
+    total_parts = calculate_total_parts(fi["size"], chunk_data_size)
+    monitor = TransferMonitor(total_parts)
+
+    try:
+        pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+        results = pool.map(partial(_handler_multipart, monitor=monitor), tasks)
+        pool.close()
+        pool.join()
+    except Exception as e:
+        logger.critical("Fatal error in transfer", error=str(e))
+    finally:
+        logger.info(
+            "Transfer Summary",
+            success=len(monitor.completed_parts),
+            failed=len(monitor.failed_parts),
+            duration=time.time() - monitor.start_time,
+            avg_speed=f"{monitor.bytes_transferred/(time.time()-monitor.start_time)/(1024**2):.2f}MB/s",
+        )
 
     parts = []
     total_bytes_received = 0
