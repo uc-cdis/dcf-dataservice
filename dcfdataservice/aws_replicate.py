@@ -697,10 +697,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     calculated_md5 = md5.hexdigest()
                     if res["ETag"].strip('"') != calculated_md5:
                         logger.error(
-                            "ETag verification failed",
-                            expected=calculated_md5,
-                            received=res["ETag"],
-                            part=part_number,
+                            f"Etag verification failed. Expected {calculated_md5}, Received: {res['ETag']}. Part number: {part_number}"
                         )
                         raise ValueError("ETag mismatch")
 
