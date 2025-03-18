@@ -642,21 +642,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         part_number = chunk_info["part_number"]
         chunk_id = f"{fi['id']}-part-{part_number}"
 
-        # Register SIGINT handler for graceful shutdown
-        def signal_handler(sig, frame):
-            logger.warning("Interrupt received, saving state...")
-            with open(f"progress_{fi['id']}.json", "w") as f:
-                json.dump(
-                    {
-                        "completed": list(monitor.completed_parts),
-                        "failed": list(monitor.failed_parts),
-                    },
-                    f,
-                )
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, signal_handler)
-
         # Download with retries and streaming
         for attempt in range(RETRIES_NUM + 1):
             try:
@@ -1086,6 +1071,18 @@ def run(
     """
     start processes and log after they finish
     """
+
+    # Add this at the beginning of run()
+    def main_signal_handler(sig, frame):
+        logger.warning(
+            "Main thread interrupt received, initiating graceful shutdown..."
+        )
+        # Add any cleanup logic needed
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, main_signal_handler)
+    signal.signal(signal.SIGTERM, main_signal_handler)
+
     resume_logger("./log.txt")
     logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
