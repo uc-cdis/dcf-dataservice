@@ -641,7 +641,12 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         part_number = chunk_info["part_number"]
         chunk_id = f"{fi['id']}-part-{part_number}"
 
-        # Download with retries and streaming
+        # Configuration values
+        download_chunk_size = 8192  # 8KB chunks for streaming
+        upload_chunk_size = (
+            global_config.get("chunk_size", 256) * 1024 * 1024
+        )  # S3 part size
+
         for attempt in range(RETRIES_NUM + 1):
             try:
                 session = requests.Session()
@@ -651,83 +656,66 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     "X-Auth-Token": GDC_TOKEN,
                     "Range": f"bytes={chunk_info['start']}-{chunk_info['end']}",
                 }
-                logger.info(
-                    f"Attempting Download for file {data_endpoint} attempt #{attempt}"
-                )
-                start_time = time.time()
 
                 with session.get(
                     data_endpoint,
                     headers=headers,
                     stream=True,
-                    timeout=(3.05, 30),  # Connect/read timeouts
+                    timeout=(3.05, 30),
                 ) as response:
                     response.raise_for_status()
                     expected_size = chunk_info["end"] - chunk_info["start"] + 1
+                    md5 = hashlib.md5()
+                    downloaded_data = io.BytesIO()
 
-                    # Stream directly to S3 with progress tracking
-                    upload_success = False
-                    for upload_attempt in range(upload_retries + 1):
-                        try:
-                            logger.info(
-                                f"Attempting Upload for file {data_endpoint} attempt #{upload_attempt}"
-                            )
+                    # Stream download in 8KB chunks
+                    for chunk in response.iter_content(chunk_size=download_chunk_size):
+                        if not chunk:
+                            continue
+                        downloaded_data.write(chunk)
+                        md5.update(chunk)
+                        monitor.update_progress(part_number, len(chunk))
 
-                            # Create a file-like object from the response stream
-                            file_obj = io.BytesIO()
-                            downloaded_bytes = 0
-                            for chunk in response.iter_content(chunk_size=8192):
-                                file_obj.write(chunk)
-                                downloaded_bytes += len(chunk)
-                                monitor.update_progress(part_number, len(chunk))
+                    # Validate downloaded size
+                    actual_size = downloaded_data.tell()
+                    if actual_size != expected_size:
+                        raise IncompleteRead(
+                            f"Expected {expected_size} bytes, got {actual_size}"
+                        )
 
-                            # Verify downloaded size
-                            if downloaded_bytes != expected_size:
-                                raise IncompleteRead(
-                                    f"Expected {expected_size}, got {downloaded_bytes}"
-                                )
+                    # Upload full S3 part chunk
+                    downloaded_data.seek(0)
+                    res = thread_s3.upload_part(
+                        Body=downloaded_data,
+                        Bucket=target_bucket,
+                        Key=object_path,
+                        PartNumber=part_number,
+                        UploadId=multipart_upload["UploadId"],
+                    )
 
-                            # Reset buffer position and upload
-                            file_obj.seek(0)
-                            res = thread_s3.upload_part(
-                                Body=file_obj,
-                                Bucket=target_bucket,
-                                Key=object_path,
-                                PartNumber=part_number,
-                                UploadId=multipart_upload["UploadId"],
-                            )
+                    # Verify ETag matches MD5 of entire part
+                    calculated_md5 = md5.hexdigest()
+                    if res["ETag"].strip('"') != calculated_md5:
+                        logger.error(
+                            "ETag verification failed",
+                            expected=calculated_md5,
+                            received=res["ETag"],
+                            part=part_number,
+                        )
+                        raise ValueError("ETag mismatch")
 
-                            # Verify ETag matches MD5
-                            md5 = hashlib.md5(file_obj.getvalue()).hexdigest()
-                            if res["ETag"].strip('"') != md5:
-                                raise ValueError("ETag verification failed")
-
-                            upload_success = True
-                            break
-
-                        except (ClientError, SocketError) as e:
-                            logger.warning(
-                                f"Upload failed for {data_endpoint} with error {e}"
-                            )
-                            if upload_attempt == upload_retries:
-                                raise
-                            time.sleep(min(2**upload_attempt, 10))
-
-                    if upload_success:
-                        logger.info("Chunk completed successfully")
-                        return res
-
+                    return res
             except (requests.RequestException, IncompleteRead) as e:
                 logger.error(
                     f"Download failed for {data_endpoint} with error: {e} after {attempt} attempts"
                 )
-                if attempt == RETRIES_NUM:
-                    with monitor.lock:
-                        monitor.failed_parts.add(part_number)
-                    raise
-                time.sleep(min(2**attempt, 10))
+            if attempt == RETRIES_NUM:
+                with monitor.lock:
+                    monitor.failed_parts.add(part_number)
+                raise
+            time.sleep(min(2**attempt, 10))
 
-        raise Exception(f"Failed after {RETRIES_NUM} download attempts")
+            raise Exception(f"Failed after {RETRIES_NUM} download attempts")
 
     def _handler_single_upload():
         """
