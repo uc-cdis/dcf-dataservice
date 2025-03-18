@@ -93,15 +93,22 @@ class TransferMonitor:
                     else 0
                 )
 
-                logger.info(
-                    "Transfer Progress",
-                    completed=f"{len(self.completed_parts)}/{self.total_parts}",
-                    percentage=f"{(len(self.completed_parts)/self.total_parts)*100:.1f}%",
-                    transferred=f"{self.bytes_transferred/(1024**2):.2f}MB",
-                    speed=f"{speed/(1024**2):.2f}MB/s",
-                    eta=f"{remaining/60:.1f}min" if remaining else "N/A",
-                    failed=len(self.failed_parts),
-                )
+                completed = f"{len(self.completed_parts)}/{self.total_parts}"
+                percentage = f"{(len(self.completed_parts)/self.total_parts)*100:.1f}%"
+                transferred = f"{self.bytes_transferred/(1024**2):.2f}MB"
+                speed = f"{speed/(1024**2):.2f}MB/s"
+                eta = f"{remaining/60:.1f}min" if remaining else "N/A"
+                failed = len(self.failed_parts)
+                transfer_progress = {
+                    "completed": completed,
+                    "percentage": percentage,
+                    "transferred": transferred,
+                    "speed": speed,
+                    "eta": eta,
+                    "failed": failed,
+                    "transfer_progress": transfer_progress,
+                }
+                logger.info(json.dumps({"summary": transfer_progress}))
                 self.last_progress_log = now
 
 
@@ -660,8 +667,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     "X-Auth-Token": GDC_TOKEN,
                     "Range": f"bytes={chunk_info['start']}-{chunk_info['end']}",
                 }
-
-                logger.debug("Download attempt started", attempt=attempt + 1)
+                logger.info(
+                    f"Attempting Download for file {data_endpoint} attempt #{attempt}"
+                )
                 start_time = time.time()
 
                 with session.get(
@@ -677,8 +685,8 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     upload_success = False
                     for upload_attempt in range(upload_retries + 1):
                         try:
-                            logger.debug(
-                                "Upload attempt started", attempt=upload_attempt + 1
+                            logger.info(
+                                f"Attempting Upload for file {data_endpoint} attempt #{upload_attempt}"
                             )
 
                             # Create a file-like object from the response stream
@@ -715,9 +723,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
                         except (ClientError, SocketError) as e:
                             logger.warning(
-                                "Upload failed",
-                                error=str(e),
-                                attempt=upload_attempt + 1,
+                                f"Upload failed for {data_endpoint} with error {e}"
                             )
                             if upload_attempt == upload_retries:
                                 raise
@@ -728,7 +734,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                         return res
 
             except (requests.RequestException, IncompleteRead) as e:
-                logger.error("Download failed", error=str(e), attempt=attempt + 1)
+                logger.error(
+                    f"Download failed for {data_endpoint} with error: {e} after {attempt} attempts"
+                )
                 if attempt == RETRIES_NUM:
                     with monitor.lock:
                         monitor.failed_parts.add(part_number)
@@ -874,7 +882,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         pool.close()
         pool.join()
     except Exception as e:
-        logger.critical("Fatal error in transfer", error=str(e))
+        logger.error(f"Fatal error in transfer: {e}")
     finally:
         avg_speed = f"{monitor.bytes_transferred/(time.time()-monitor.start_time)/(1024**2):.2f}MB/s"
         summary_json = {
