@@ -876,13 +876,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     except Exception as e:
         logger.critical("Fatal error in transfer", error=str(e))
     finally:
-        logger.info(
-            "Transfer Summary",
-            success=len(monitor.completed_parts),
-            failed=len(monitor.failed_parts),
-            duration=time.time() - monitor.start_time,
-            avg_speed=f"{monitor.bytes_transferred/(time.time()-monitor.start_time)/(1024**2):.2f}MB/s",
-        )
+        avg_speed = f"{monitor.bytes_transferred/(time.time()-monitor.start_time)/(1024**2):.2f}MB/s"
+        summary_json = {
+            "success": len(monitor.completed_parts),
+            "failed": len(monitor.failed_parts),
+            "duration": time.time() - monitor.start_time,
+            "avg_speed": avg_speed,
+        }
+        logger.info(json.dumps({"summary": summary_json}))
 
     parts = []
     total_bytes_received = 0
