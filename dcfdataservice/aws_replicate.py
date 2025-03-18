@@ -106,7 +106,6 @@ class TransferMonitor:
                     "speed": speed,
                     "eta": eta,
                     "failed": failed,
-                    "transfer_progress": transfer_progress,
                 }
                 logger.info(json.dumps({"summary": transfer_progress}))
                 self.last_progress_log = now
