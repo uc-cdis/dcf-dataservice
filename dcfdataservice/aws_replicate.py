@@ -76,7 +76,7 @@ class TransferMonitor:
         self.bytes_transferred = 0
         self.last_progress_log = 0
 
-    def update_progress(self, part_number, bytes_transferred):
+    def update_progress(self, part_number, bytes_transferred, data_endpoint):
         with self.lock:
             self.completed_parts.add(part_number)
             self.bytes_transferred += bytes_transferred
@@ -100,6 +100,7 @@ class TransferMonitor:
                 eta = f"{remaining/60:.1f}min" if remaining else "N/A"
                 failed = len(self.failed_parts)
                 transfer_progress = {
+                    "file": data_endpoint,
                     "completed": completed,
                     "percentage": percentage,
                     "transferred": transferred,
@@ -639,13 +640,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
 
     def _handler_multipart(chunk_info, monitor):
         part_number = chunk_info["part_number"]
-        chunk_id = f"{fi['id']}-part-{part_number}"
 
         # Configuration values
         download_chunk_size = 8192  # 8KB chunks for streaming
-        upload_chunk_size = (
-            global_config.get("chunk_size", 256) * 1024 * 1024
-        )  # S3 part size
 
         for attempt in range(RETRIES_NUM + 1):
             try:
@@ -661,7 +658,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                     data_endpoint,
                     headers=headers,
                     stream=True,
-                    timeout=(3.05, 30),
                 ) as response:
                     response.raise_for_status()
                     expected_size = chunk_info["end"] - chunk_info["start"] + 1
@@ -674,7 +670,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                             continue
                         downloaded_data.write(chunk)
                         md5.update(chunk)
-                        monitor.update_progress(part_number, len(chunk))
+                        monitor.update_progress(part_number, len(chunk), data_endpoint)
 
                     # Validate downloaded size
                     actual_size = downloaded_data.tell()
@@ -692,14 +688,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                         PartNumber=part_number,
                         UploadId=multipart_upload["UploadId"],
                     )
-
-                    # Verify ETag matches MD5 of entire part
-                    calculated_md5 = md5.hexdigest()
-                    if res["ETag"].strip('"') != calculated_md5:
-                        logger.error(
-                            f"Etag verification failed. Expected {calculated_md5}, Received: {res['ETag']}. Part number: {part_number}"
-                        )
-                        raise ValueError("ETag mismatch")
 
                     return res
             except (requests.RequestException, IncompleteRead) as e:
@@ -853,7 +841,9 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     except Exception as e:
         logger.error(f"Fatal error in transfer: {e}")
     finally:
-        avg_speed = f"{monitor.bytes_transferred/(time.time()-monitor.start_time)/(1024**2):.2f}MB/s"
+        mb_transferred = monitor.bytes_transferred / (1024**2)
+        time_elapsed = time.time() - monitor.start_time
+        avg_speed = mb_transferred / time_elapsed if time_elapsed > 0 else 0
         summary_json = {
             "success": len(monitor.completed_parts),
             "failed": len(monitor.failed_parts),
