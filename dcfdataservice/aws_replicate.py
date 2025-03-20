@@ -49,7 +49,7 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
-RETRIES_NUM = 5
+RETRIES_NUM = 10
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
 
@@ -833,6 +833,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     total_parts = calculate_total_parts(fi["size"], chunk_data_size)
     monitor = TransferMonitor(total_parts)
 
+    results = {}
     try:
         pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
         results = pool.map(partial(_handler_multipart, monitor=monitor), tasks)
