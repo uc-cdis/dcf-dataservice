@@ -689,7 +689,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                         UploadId=multipart_upload["UploadId"],
                     )
 
-                    return res, part_number, chunk_size
+                    return res, part_number, expected_size
             except (requests.RequestException, IncompleteRead) as e:
                 logger.error(
                     f"Download failed for {data_endpoint} with error: {e} after {attempt} attempts"
