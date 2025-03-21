@@ -689,7 +689,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
                         UploadId=multipart_upload["UploadId"],
                     )
 
-                    return res
+                    return (res, part_number, chunk_size)
             except (requests.RequestException, IncompleteRead) as e:
                 logger.error(
                     f"Download failed for {data_endpoint} with error: {e} after {attempt} attempts"
@@ -863,6 +863,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
         total_bytes_received += chunk_size
 
     try:
+        logger.info(f"Starting multipart upload for {object_path}")
         thread_s3.complete_multipart_upload(
             Bucket=target_bucket,
             Key=object_path,
@@ -870,6 +871,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
             UploadId=multipart_upload["UploadId"],
             RequestPayer="requester",
         )
+        logger.info(f"Successfully Completed Multipart Upload for {object_path}")
     except botocore.exceptions.ClientError as error:
         logger.warning(
             "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
