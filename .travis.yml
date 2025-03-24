@@ -4,12 +4,9 @@ python:
 - 3.6
 
 install:
-- curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py
-  | python -
-- source $HOME/.poetry/env
-- which poetry
-- poetry install -vv
-- poetry show
+-python3 -m pip install --user pipx
+-python3 -m pipx ensurepath
+-pipx install poetry
 
 script:
 - poetry run pytest -vv ./tests
