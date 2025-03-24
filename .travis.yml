@@ -1,22 +1,15 @@
-dist: xenial
-
-group: deprecated-2017Q2
-
 language: python
-
-python: "3.6"
-
-sudo: false
-
-cache: pip
-
-before_install:
-  # pip 20.3 gets stuck in an endless dependency resolution loop
-  - pip install --upgrade 'pip<20.3'
+dist: xenial
+python:
+- 3.6
 
 install:
-  - pip install -r requirements.txt
-  - pip install -r dev-requirements.txt
+- curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
+  | python -
+- source $HOME/.poetry/env
+- which poetry
+- poetry install -vv
+- poetry show
 
 script:
-- py.test -vv -s tests
+- poetry run pytest -vv ./tests
