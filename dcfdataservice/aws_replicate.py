@@ -425,7 +425,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 return
 
             # If storage class is DEEP_ARCHIVE or GLACIER, stream object from gdc api
-            if storage_class in {"DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"}:
+            if storage_class in {"DEEP_ARCHIVE", "GLACIER"}:
                 if not jobinfo.global_config.get("quiet", False):
                     logger.info(
                         "Streaming: {} from GDC API. Size {} (MB). Class {}.".format(
