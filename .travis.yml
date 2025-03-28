@@ -1,22 +1,12 @@
-dist: xenial
-
-group: deprecated-2017Q2
-
 language: python
-
-python: "3.6"
-
-sudo: false
-
-cache: pip
-
-before_install:
-  # pip 20.3 gets stuck in an endless dependency resolution loop
-  - pip install --upgrade 'pip<20.3'
+dist: xenial
+python:
+- 3.6
 
 install:
-  - pip install -r requirements.txt
-  - pip install -r dev-requirements.txt
+-python3 -m pip install --user pipx
+-python3 -m pipx ensurepath
+-pipx install poetry
 
 script:
-- py.test -vv -s tests
+- poetry run pytest -vv ./tests
