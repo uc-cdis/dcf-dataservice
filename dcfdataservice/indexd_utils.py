@@ -182,6 +182,14 @@ def delete_record_from_indexd(uuid, indexclient):
         uuid(str): did
         indexclient(IndexClient): indexd client
     """
-    doc = indexclient.get(uuid)
-    if doc:
-        doc.delete()
+    try:
+        doc = indexclient.get(uuid)
+        if doc:
+            doc.delete()
+    except Exception as e:
+        # Don't break for any reason
+        raise APIError(
+            "INDEX_CLIENT: Can not delete the record with uuid {}. Detail {}".format(
+                uuid, e
+            )
+        )
