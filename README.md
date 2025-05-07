@@ -110,6 +110,7 @@ IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
 aws_access_key_id=xxxxxxxxxx
 aws_secret_access_key=xxxxxxxx
 ```
+- Create `aws_fence_bot_secret` file. For qa environments it should be identical to `aws_creds_secret` above. For production environment, generate it by terraform module. https://github.com/uc-cdis/gen3-terraform/tree/master/tf_files/aws/modules/fence-bot-user
 
 *For GCP*
 - Create `gcloud-creds-secret` file containing GCP key
@@ -127,6 +128,9 @@ aws_secret_access_key=xxxxxxxx
   "client_x509_cert_url": xxxxxxxx
 }
 ```
+
+- Then we need to run `gen3 kubet-setup-data-replicate.sh` to refresh the secrets. Remember to pull from `cloud-automation` repo to ensure latest script is used.
+https://github.com/uc-cdis/cloud-automation/blob/master/gen3/bin/kube-setup-data-replicate.sh
 
 ### NIH Token
 - Download token
