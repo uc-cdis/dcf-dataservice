@@ -129,9 +129,6 @@ aws_secret_access_key=xxxxxxxx
 }
 ```
 
-- Then we need to run `gen3 kubet-setup-data-replicate.sh` to refresh the secrets. Remember to pull from `cloud-automation` repo to ensure latest script is used.
-https://github.com/uc-cdis/cloud-automation/blob/master/gen3/bin/kube-setup-data-replicate.sh
-
 ### NIH Token
 - Download token
 Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
@@ -141,8 +138,9 @@ Login to NIH (https://portal.gdc.cancer.gov/) and download token under user prof
 `vim dcf_dataservice_settings`
 `vim creds.json`
 
-- Run job to set secrets for cloud and NIH tokens
-`bash ./dcf-dataservice/jobs/kube-setup-scripts.sh`
+- Lastly to finish set tokens, we need to run `gen3 kubet-setup-data-replicate.sh` to refresh the secrets.
+Remember to pull from `cloud-automation` repo to ensure latest script is used.
+https://github.com/uc-cdis/cloud-automation/blob/master/gen3/bin/kube-setup-data-replicate.sh
 
 ## Run Replication Job
 ### Dry Run
