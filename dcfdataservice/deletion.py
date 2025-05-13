@@ -68,8 +68,14 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         release(str): data release
         dry_run(bool): True the program does not really delete the file (for report purpose)
     """
-    session = boto3.session.Session(profile_name="default")
-    s3_sess = session.resource("s3")
+    try:
+        logger.info("getting s3 session")
+        session = boto3.session.Session(profile_name="default")
+        s3_sess = session.resource("s3")
+        logger.info("s3 session established")
+    except Exception:
+        logger.error(e)
+        return
 
     try:
         s3_sess.meta.client.head_bucket(Bucket=log_bucket)
@@ -81,11 +87,17 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         )
         return
 
-    indexclient = IndexClient(
-        INDEXD["host"],
-        INDEXD["version"],
-        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
-    )
+    try:
+        logger.info("Getting Indexd client")
+        indexclient = IndexClient(
+            INDEXD["host"],
+            INDEXD["version"],
+            (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+        )
+        logger.info("Successful")
+    except Exception:
+        logger.error(e)
+        return
 
     logger.info("DRY RUN: {}".format(dry_run))
 
@@ -98,8 +110,14 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         logger.error(f"Could not get manifest {manifest}. Error: {e}")
         return
 
-    s3 = boto3.resource("s3")
-    gs_client = storage.Client()
+    try:
+        logger.info("Getting S3 and GS clients")
+        s3 = boto3.resource("s3")
+        gs_client = storage.Client()
+        logger.info("Successful")
+    except Exception:
+        logger.error(e)
+        return
 
     ignored_dict = get_ignored_files(IGNORED_FILES, "\t")
 
@@ -120,10 +138,20 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
             aws_target_bucket = None
 
         # only the _remove_object_from_s3 function has a dry run option that will not delete object when in the func
-        if aws_target_bucket:
-            aws_deletion_logs.append(
-                _remove_object_from_s3(s3, indexclient, fi, aws_target_bucket, dry_run)
+        try:
+            if aws_target_bucket:
+                aws_deletion_logs.append(
+                    _remove_object_from_s3(
+                        s3, indexclient, fi, aws_target_bucket, dry_run
+                    )
+                )
+        except Exception:
+            logger.error(
+                "Error happened during s3 deletion. Please look at log in s3 bucket"
             )
+            logger.error(e)
+            continue
+
         if not dry_run:
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
@@ -135,12 +163,20 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
                     )
                 )
                 continue
-            gs_deletion_logs.append(
-                _remove_object_from_gs(
-                    gs_client, indexclient, fi, google_target_bucket, ignored_dict
+
+            try:
+                gs_deletion_logs.append(
+                    _remove_object_from_gs(
+                        gs_client, indexclient, fi, google_target_bucket, ignored_dict
+                    )
                 )
-            )
-            delete_record_from_indexd(fi.get("id"), indexclient)
+                delete_record_from_indexd(fi.get("id"), indexclient)
+            except Exception:
+                logger.error(
+                    "Error happened during Google Storage deletion. Please look at the log in Google bucket.c"
+                )
+                logger.error(e)
+                continue
 
     aws_log_list = []
     for log in aws_deletion_logs:
