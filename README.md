@@ -66,6 +66,15 @@ Cloud tokens generally only need to be setup once, the NIH token expires (~30 da
 ### Cloud Tokens
 - Create a directory under `$vpc_name/apis_configs` and name it `dcf_dataservice`
 
+### GDC Token
+- Download token
+Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
+*From root directory*
+- Replace token in config files if they exist already
+`cd dcfprod/apis_configs/dcf_dataservice`
+`vim dcf_dataservice_settings`
+`vim creds.json`
+
 #### Under the `dcf_dataservice` folder
 - Create file named `creds.json`, this file contains GDCAPI token and indexd account
 ```
@@ -128,15 +137,6 @@ aws_secret_access_key=xxxxxxxx
   "client_x509_cert_url": xxxxxxxx
 }
 ```
-
-### NIH Token
-- Download token
-Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
-*From root directory*
-- Replace token in config files
-`cd dcfprod/apis_configs/dcf_dataservice`
-`vim dcf_dataservice_settings`
-`vim creds.json`
 
 ### Final Setup
 Lastly to finish setting up tokens, we need to run `gen3 kube-setup-data-replicate` to refresh the secrets.
