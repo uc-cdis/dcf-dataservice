@@ -66,7 +66,16 @@ Cloud tokens generally only need to be setup once, the NIH token expires (~30 da
 ### Cloud Tokens
 - Create a directory under `$vpc_name/apis_configs` and name it `dcf_dataservice`
 
-#### Under the `dcf_dataservice` file
+### GDC Token
+- Download token
+Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
+*From root directory*
+- Replace token in config files if they exist already
+`cd dcfprod/apis_configs/dcf_dataservice`
+`vim dcf_dataservice_settings`
+`vim creds.json`
+
+#### Under the `dcf_dataservice` folder
 - Create file named `creds.json`, this file contains GDCAPI token and indexd account
 ```
 {
@@ -110,6 +119,7 @@ IGNORED_FILES = "/dcf-dataservice/ignored_files_manifest.csv"
 aws_access_key_id=xxxxxxxxxx
 aws_secret_access_key=xxxxxxxx
 ```
+- Create `aws_fence_bot_secret` file. For qa environments it should be identical to `aws_creds_secret` above. For production environment, generate it by terraform module. https://github.com/uc-cdis/gen3-terraform/tree/master/tf_files/aws/modules/fence-bot-user
 
 *For GCP*
 - Create `gcloud-creds-secret` file containing GCP key
@@ -128,17 +138,10 @@ aws_secret_access_key=xxxxxxxx
 }
 ```
 
-### NIH Token
-- Download token
-Login to NIH (https://portal.gdc.cancer.gov/) and download token under user profile options
-*From root directory*
-- Replace token in config files
-`cd dcfprod/apis_configs/dcf_dataservice`
-`vim dcf_dataservice_settings`
-`vim creds.json`
-
-- Run job to set secrets for cloud and NIH tokens
-`bash ./dcf-dataservice/jobs/kube-setup-scripts.sh`
+### Final Setup
+Lastly to finish setting up tokens, we need to run `gen3 kube-setup-data-replicate` to refresh the secrets.
+Remember to pull from `cloud-automation` repo to ensure latest script is used.
+https://github.com/uc-cdis/cloud-automation/blob/master/gen3/bin/kube-setup-data-replicate.sh
 
 ## Run Replication Job
 ### Dry Run
