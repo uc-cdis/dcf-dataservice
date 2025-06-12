@@ -1,8 +1,15 @@
 import io
 from socket import error as SocketError
 import errno
+import math
 from multiprocessing import Pool, Manager
 from multiprocessing.dummy import Pool as ThreadPool
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from socket import error as SocketError
+import signal
+import sys
 import time
 
 from functools import partial
@@ -15,10 +22,12 @@ import urllib
 import threading
 from threading import Thread
 
+from http.client import IncompleteRead
 import json
 import urllib.request
 import boto3
 import botocore
+from botocore.exceptions import ClientError
 
 from urllib.parse import urlparse
 
@@ -40,9 +49,107 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
-RETRIES_NUM = 5
+RETRIES_NUM = 10
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+
+# Configure retry strategy for downloads
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD", "GET", "OPTIONS"],
+)
+
+download_adapter = HTTPAdapter(max_retries=retry_strategy)
+upload_retries = 3  # Separate retry count for S3 uploads
+
+
+class TransferMonitor:
+    def __init__(self, total_parts):
+        self.lock = threading.Lock()
+        self.start_time = time.time()
+        self.completed_parts = set()
+        self.total_parts = total_parts
+        self.attempts = {}
+        self.failed_parts = set()
+        self.bytes_transferred = 0
+        self.last_progress_log = 0
+
+    def update_progress(self, part_number, bytes_transferred, data_endpoint):
+        with self.lock:
+            self.completed_parts.add(part_number)
+            self.bytes_transferred += bytes_transferred
+            now = time.time()
+
+            # Throttle progress logging
+            if now - self.last_progress_log > 5:  # Log every 5 seconds
+                elapsed = now - self.start_time
+                speed = self.bytes_transferred / elapsed if elapsed > 0 else 0
+                remaining = (
+                    (self.total_parts - len(self.completed_parts))
+                    * (elapsed / len(self.completed_parts))
+                    if self.completed_parts
+                    else 0
+                )
+
+                completed = f"{len(self.completed_parts)}/{self.total_parts}"
+                percentage = f"{(len(self.completed_parts)/self.total_parts)*100:.1f}%"
+                transferred = f"{self.bytes_transferred/(1024**2):.2f}MB"
+                speed = f"{speed/(1024**2):.2f}MB/s"
+                eta = f"{remaining/60:.1f}min" if remaining else "N/A"
+                failed = len(self.failed_parts)
+                transfer_progress = {
+                    "file": data_endpoint,
+                    "completed": completed,
+                    "percentage": percentage,
+                    "transferred": transferred,
+                    "speed": speed,
+                    "eta": eta,
+                    "failed": failed,
+                }
+                logger.info(json.dumps({"summary": transfer_progress}))
+                self.last_progress_log = now
+
+
+def calculate_total_parts(file_size_bytes, chunk_size_bytes):
+    """
+    Calculate total parts for predetermined chunk size
+
+    Args:
+        file_size_bytes (int): Total file size in bytes
+        chunk_size_bytes (int): Fixed chunk size in bytes
+
+    Returns:
+        int: Total number of parts required
+
+    Raises:
+        ValueError: If chunk size violates AWS constraints
+    """
+
+    # AWS S3 requirements
+    MIN_CHUNK = 5 * 1024**2  # 5 MiB
+    MAX_PARTS = 10_000
+
+    # Validate chunk size meets AWS minimum
+    if chunk_size_bytes < MIN_CHUNK:
+        raise ValueError(
+            f"Chunk size {chunk_size_bytes} bytes too small. "
+            f"Minimum 5 MiB ({MIN_CHUNK} bytes) required"
+        )
+
+    # Calculate total parts
+    total_parts = math.ceil(file_size_bytes / chunk_size_bytes)
+
+    # Verify AWS part limit
+    if total_parts > MAX_PARTS:
+        max_allowed_size = MAX_PARTS * chunk_size_bytes
+        raise ValueError(
+            f"File too large ({file_size_bytes} bytes) for {chunk_size_bytes} byte chunks. "
+            f"Max allowed: {max_allowed_size} bytes with {MAX_PARTS} parts"
+        )
+
+    return total_parts
 
 
 class ProcessingFile(object):
@@ -408,7 +515,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi,
+                            target_bucket,
+                            jobinfo.global_config,
+                            jobinfo,
                         )
                         update_url(fi, jobinfo.indexclient)
                     except Exception as e:
@@ -437,7 +547,10 @@ def exec_aws_copy(lock, quick_test, jobinfo):
                 if not quick_test:
                     try:
                         stream_object_from_gdc_api(
-                            fi, target_bucket, jobinfo.global_config
+                            fi,
+                            target_bucket,
+                            jobinfo.global_config,
+                            jobinfo,
                         )
                     except Exception as e:
                         # catch generic exception to prevent the code from terminating
@@ -496,7 +609,7 @@ def exec_aws_copy(lock, quick_test, jobinfo):
     )
 
 
-def stream_object_from_gdc_api(fi, target_bucket, global_config):
+def stream_object_from_gdc_api(fi, target_bucket, global_config, jobinfo):
     """
     Stream object from gdc api. In order to check the integrity, we need to compute md5 during streaming data from
     gdc api and compute its local etag since aws only provides etag for multi-part uploaded object.
@@ -519,120 +632,75 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         Class for thread synchronization
         """
 
-        def __init__(self):
+        def __init__(self, total_parts):
             self.mutexLock = threading.Lock()
-            self.sig_update_turn = 1
+            self.chunk_hashes = {}  # Track hashes by part number
+            self.completed_parts = set()
+            self.total_parts = total_parts
 
-    def _handler_multipart(chunk_info):
-        """
-        streamming chunk data from api to aws bucket
+    def _handler_multipart(chunk_info, monitor):
+        part_number = chunk_info["part_number"]
 
-        Args:
-            chunk_info(dict):
-                {
-                    "start": start,
-                    "end": end,
-                    "part_number": part_number
+        # Configuration values
+        download_chunk_size = 8192  # 8KB chunks for streaming
+
+        for attempt in range(RETRIES_NUM + 1):
+            try:
+                session = requests.Session()
+                session.mount("https://", download_adapter)
+
+                headers = {
+                    "X-Auth-Token": GDC_TOKEN,
+                    "Range": f"bytes={chunk_info['start']}-{chunk_info['end']}",
                 }
-        """
-        tries = 0
-        request_success = False
-        chunk = None
-        while tries < RETRIES_NUM and not request_success:
-            try:
-                req = urllib.request.Request(
+
+                with session.get(
                     data_endpoint,
-                    headers={
-                        "X-Auth-Token": GDC_TOKEN,
-                        "Range": "bytes={}-{}".format(
-                            chunk_info["start"], chunk_info["end"]
-                        ),
-                    },
-                )
+                    headers=headers,
+                    stream=True,
+                ) as response:
+                    response.raise_for_status()
+                    expected_size = chunk_info["end"] - chunk_info["start"] + 1
+                    md5 = hashlib.md5()
+                    downloaded_data = io.BytesIO()
 
-                chunk = urllib.request.urlopen(req).read()
+                    # Stream download in 8KB chunks
+                    for chunk in response.iter_content(chunk_size=download_chunk_size):
+                        if not chunk:
+                            continue
+                        downloaded_data.write(chunk)
+                        md5.update(chunk)
+                        monitor.update_progress(part_number, len(chunk), data_endpoint)
 
-                if len(chunk) == chunk_info["end"] - chunk_info["start"] + 1:
-                    request_success = True
-                logger.info(
-                    f"Downloading {fi.get('id')}: {chunk_data_size}/{fi.get('size')}"
-                )
-
-            except urllib.error.HTTPError as e:
-                logger.warning(
-                    "Fail to open http connection to gdc api. Take a sleep and retry. Detail {}".format(
-                        e
-                    )
-                )
-                time.sleep(5)
-                if e.code == 403:
-                    break
-                tries += 1
-            except SocketError as e:
-                if e.errno != errno.ECONNRESET:
-                    logger.warning(
-                        "Connection reset. Take a sleep and retry. Detail {}".format(e)
-                    )
-                    time.sleep(60)
-                    tries += 1
-            except Exception as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-
-        if tries == RETRIES_NUM:
-            raise Exception(
-                "Can not open http connection to gdc api {}".format(data_endpoint)
-            )
-
-        tries = 0
-        while tries < RETRIES_NUM:
-            try:
-                res = thread_s3.upload_part(
-                    Body=chunk,
-                    Bucket=target_bucket,
-                    Key=object_path,
-                    PartNumber=chunk_info["part_number"],
-                    UploadId=multipart_upload.get("UploadId"),
-                )
-
-                while thread_control.sig_update_turn != chunk_info["part_number"]:
-                    time.sleep(1)
-
-                thread_control.mutexLock.acquire()
-                sig.update(chunk)
-                thread_control.sig_update_turn += 1
-                thread_control.mutexLock.release()
-
-                if thread_control.sig_update_turn % 10 == 0 and not global_config.get(
-                    "quiet"
-                ):
-                    logger.info(
-                        "Uploading {}. Received {} MB".format(
-                            fi.get("id"),
-                            thread_control.sig_update_turn
-                            * 1.0
-                            / 1024
-                            / 1024
-                            * chunk_data_size,
+                    # Validate downloaded size
+                    actual_size = downloaded_data.tell()
+                    if actual_size != expected_size:
+                        raise IncompleteRead(
+                            f"Expected {expected_size} bytes, got {actual_size}"
                         )
+
+                    # Upload full S3 part chunk
+                    downloaded_data.seek(0)
+                    res = thread_s3.upload_part(
+                        Body=downloaded_data,
+                        Bucket=target_bucket,
+                        Key=object_path,
+                        PartNumber=part_number,
+                        UploadId=multipart_upload["UploadId"],
                     )
 
-                return res, chunk_info["part_number"], len(chunk)
+                    return res, part_number, expected_size
+            except (requests.RequestException, IncompleteRead) as e:
+                logger.error(
+                    f"Download failed for {data_endpoint} with error: {e} after {attempt} attempts"
+                )
+            if attempt == RETRIES_NUM:
+                with monitor.lock:
+                    monitor.failed_parts.add(part_number)
+                raise
+            time.sleep(min(2**attempt, 10))
 
-            except botocore.exceptions.ClientError as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-            except Exception as e:
-                logger.warning(e)
-                time.sleep(5)
-                tries += 1
-
-        if tries == RETRIES_NUM:
-            raise botocore.exceptions.ClientError(
-                "Can not upload chunk data of {} to {}".format(fi["id"], target_bucket)
-            )
+            raise Exception(f"Failed after {RETRIES_NUM} download attempts")
 
     def _handler_single_upload():
         """
@@ -720,7 +788,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
                 "Can not open http connection to gdc api {}".format(data_endpoint)
             )
 
-    thread_control = ThreadControl()
     thread_s3 = boto3.client("s3")
     object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
     data_endpoint = (
@@ -730,11 +797,6 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     )
     size = int(fi.get("size"))
 
-    sig = hashlib.md5()
-    # prepare to compute local etag
-    md5_digests = []
-
-    # if size >= 10 * 1024 * 1024:
     try:
         multipart_upload = thread_s3.create_multipart_upload(
             Bucket=target_bucket,
@@ -749,7 +811,14 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         )
         return
 
-    chunk_data_size = global_config.get("data_chunk_size", 1024 * 1024 * 128)
+    chunk_data_size = global_config.get("chunk_size", 256) * 1024 * 1024
+
+    thread_control = ThreadControl(
+        total_parts=calculate_total_parts(
+            size,
+            chunk_data_size,
+        )
+    )
 
     tasks = []
     for part_number, data_range in enumerate(
@@ -758,10 +827,31 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         start, end = data_range
         tasks.append({"start": start, "end": end, "part_number": part_number + 1})
 
-    pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
-    results = pool.map(_handler_multipart, tasks)
-    pool.close()
-    pool.join()
+    if global_config.get("multi_part_upload_threads"):
+        print(f"Thread Size: {global_config.get('multi_part_upload_threads')}")
+
+    total_parts = calculate_total_parts(fi["size"], chunk_data_size)
+    monitor = TransferMonitor(total_parts)
+
+    results = {}
+    try:
+        pool = ThreadPool(global_config.get("multi_part_upload_threads", 10))
+        results = pool.map(partial(_handler_multipart, monitor=monitor), tasks)
+        pool.close()
+        pool.join()
+    except Exception as e:
+        logger.error(f"Fatal error in transfer: {e}")
+    finally:
+        mb_transferred = monitor.bytes_transferred / (1024**2)
+        time_elapsed = time.time() - monitor.start_time
+        avg_speed = mb_transferred / time_elapsed if time_elapsed > 0 else 0
+        summary_json = {
+            "success": len(monitor.completed_parts),
+            "failed": len(monitor.failed_parts),
+            "duration": time.time() - monitor.start_time,
+            "avg_speed": avg_speed,
+        }
+        logger.info(json.dumps({"summary": summary_json}))
 
     parts = []
     total_bytes_received = 0
@@ -773,6 +863,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         total_bytes_received += chunk_size
 
     try:
+        logger.info(f"Starting multipart upload for {object_path}")
         thread_s3.complete_multipart_upload(
             Bucket=target_bucket,
             Key=object_path,
@@ -780,6 +871,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
             UploadId=multipart_upload["UploadId"],
             RequestPayer="requester",
         )
+        logger.info(f"Successfully Completed Multipart Upload for {object_path}")
     except botocore.exceptions.ClientError as error:
         logger.warning(
             "Error when finishing multiple part upload object with uuid {}. Detail {}".format(
@@ -789,7 +881,7 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
         return
 
     sig_check_pass = validate_uploaded_data(
-        fi, thread_s3, target_bucket, sig, total_bytes_received
+        fi, thread_s3, target_bucket, total_bytes_received, thread_control
     )
 
     if not sig_check_pass:
@@ -812,14 +904,24 @@ def stream_object_from_gdc_api(fi, target_bucket, global_config):
     #     # )
     #     # pool.close()
     #     # pool.join()
+    jobinfo.manager_ns.total_processed_files += 1
+    jobinfo.manager_ns.total_copied_data += fi["size"] * 1.0 / 1024 / 1024 / 1024
+    logger.info(
+        "{}/{} objects are processed and {}/{} (GiB) is copied".format(
+            jobinfo.manager_ns.total_processed_files,
+            jobinfo.total_files,
+            int(jobinfo.manager_ns.total_copied_data),
+            int(jobinfo.total_copying_data),
+        )
+    )
 
 
 def validate_uploaded_data(
     fi,
     thread_s3,
     target_bucket,
-    sig,
     total_bytes_received,
+    thread_control,
 ):
     """
     validate uploaded data
@@ -835,13 +937,24 @@ def validate_uploaded_data(
        bool: pass or not
     """
 
-    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
-
     if total_bytes_received != fi.get("size"):
         logger.warning(
             "Can not stream the object {}. Size does not match".format(fi.get("id"))
         )
         return False
+
+    ordered_hashes = [
+        thread_control.chunk_hashes[part_num]
+        for part_num in sorted(thread_control.chunk_hashes)
+    ]
+
+    if len(ordered_hashes) > 1:  # AWS-style multipart ETag
+        combined_hash = hashlib.md5(b"".join(ordered_hashes)).hexdigest()
+        final_etag = f"{combined_hash}-{len(ordered_hashes)}"
+    else:  # Single part
+        final_etag = hashlib.md5(ordered_hashes[0]).hexdigest()
+
+    object_path = "{}/{}".format(fi.get("id"), fi.get("file_name"))
 
     try:
         meta_data = thread_s3.head_object(Bucket=target_bucket, Key=object_path)
@@ -863,7 +976,7 @@ def validate_uploaded_data(
         logger.warning("Can not get etag of {}".format(fi.get("id")))
         return False
 
-    if sig.hexdigest() != fi.get("md5"):
+    if final_etag != fi.get("md5"):
         logger.warning(
             "Can not stream the object {}. md5 check fails".format(fi.get("id"))
         )
@@ -935,6 +1048,18 @@ def run(
     """
     start processes and log after they finish
     """
+
+    # Add this at the beginning of run()
+    def main_signal_handler(sig, frame):
+        logger.warning(
+            "Main thread interrupt received, initiating graceful shutdown..."
+        )
+        # Add any cleanup logic needed
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, main_signal_handler)
+    signal.signal(signal.SIGTERM, main_signal_handler)
+
     resume_logger("./log.txt")
     logger.info(f"Starting GDC AWS replication. Release #:{release}")
     if not global_config.get("log_bucket"):
@@ -1024,40 +1149,40 @@ def run(
             )
         except Exception as e:
             logger.error(e)
-    else:
-        logger.info("=======================SUMMARY=======================")
-        n_copying_gdcapi = 0
-        total_copying_gdcapi = 0
-        n_copying_aws_intelligent_tiering = 0
-        total_copying_aws_intelligent_tiering = 0
-        n_copying_aws_non_intelligent_tiering = 0
-        total_copying_aws_non_intelligent_tiering = 0
-        logger.info("Total size of pFiles: {}".format(len(manager_ns.pFiles)))
-        for pFile in manager_ns.pFiles:
-            if pFile.copy_method == "GDCAPI":
-                n_copying_gdcapi += 1
-                total_copying_gdcapi += pFile.size
-            elif pFile.original_storage == "INTELLIGENT_TIERING":
-                n_copying_aws_intelligent_tiering += 1
-                total_copying_aws_intelligent_tiering += pFile.size
-            else:
-                n_copying_aws_non_intelligent_tiering += 1
-                total_copying_aws_non_intelligent_tiering += pFile.size
 
-        logger.info(
-            "Total files are copied by GDC API {}. Total {}(GiB)".format(
-                n_copying_gdcapi, total_copying_gdcapi * 1.0 / 1024 / 1024 / 1024
-            )
+    logger.info("=======================SUMMARY=======================")
+    n_copying_gdcapi = 0
+    total_copying_gdcapi = 0
+    n_copying_aws_intelligent_tiering = 0
+    total_copying_aws_intelligent_tiering = 0
+    n_copying_aws_non_intelligent_tiering = 0
+    total_copying_aws_non_intelligent_tiering = 0
+    logger.info("Total size of pFiles: {}".format(len(manager_ns.pFiles)))
+    for pFile in manager_ns.pFiles:
+        if pFile.copy_method == "GDCAPI":
+            n_copying_gdcapi += 1
+            total_copying_gdcapi += pFile.size
+        elif pFile.original_storage == "INTELLIGENT_TIERING":
+            n_copying_aws_intelligent_tiering += 1
+            total_copying_aws_intelligent_tiering += pFile.size
+        else:
+            n_copying_aws_non_intelligent_tiering += 1
+            total_copying_aws_non_intelligent_tiering += pFile.size
+
+    logger.info(
+        "Total files are copied by GDC API {}. Total {}(GiB)".format(
+            n_copying_gdcapi, total_copying_gdcapi * 1.0 / 1024 / 1024 / 1024
         )
-        logger.info(
-            "Total files are copied by AWS CLI {} with intelligent tiering storage classes. Total {}(GiB)".format(
-                n_copying_aws_intelligent_tiering,
-                total_copying_aws_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
-            )
+    )
+    logger.info(
+        "Total files are copied by AWS CLI {} with intelligent tiering storage classes. Total {}(GiB)".format(
+            n_copying_aws_intelligent_tiering,
+            total_copying_aws_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
         )
-        logger.info(
-            "Total files are copied by AWS CLI {} with non-intelligent tiering storage classes. Total {}(GiB)".format(
-                n_copying_aws_non_intelligent_tiering,
-                total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
-            )
+    )
+    logger.info(
+        "Total files are copied by AWS CLI {} with non-intelligent tiering storage classes. Total {}(GiB)".format(
+            n_copying_aws_non_intelligent_tiering,
+            total_copying_aws_non_intelligent_tiering * 1.0 / 1024 / 1024 / 1024,
         )
+    )
