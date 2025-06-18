@@ -17,7 +17,7 @@ REQUIRED_PACKAGES = [
     "httplib2==0.20.*",
     "pyparsing>=2.4.2",
     "apache-beam[gcp]==2.*",
-    "urllib3==1.26.5",
+    "urllib3==2.5.0",
     "setuptools==41.4.0",
 ]
 
