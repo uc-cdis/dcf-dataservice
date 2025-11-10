@@ -71,6 +71,7 @@ def delete_objects_from_cloud_resources(
         dry_run(bool): True the program does not really delete the file (for report purpose)
         only_redact(str): Options between [all, aws, gs] to determine which cloud storage we're deleting from
     """
+    logger.info(f"Only Redact Set to {only_redact}")
     try:
         logger.info("getting s3 session")
         session = boto3.session.Session(profile_name="default")
