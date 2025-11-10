@@ -159,6 +159,8 @@ def delete_objects_from_cloud_resources(
                 logger.error(e)
                 continue
 
+        logger.info(f"dry_run: {dry_run}, only_redact: {only_redact}")
+        logger.info(not dry_run and (only_redact == "all" or only_redact == "gs"))
         if not dry_run and (only_redact == "all" or only_redact == "gs"):
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
