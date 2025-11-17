@@ -56,7 +56,9 @@ class DeletionLog(object):
         }
 
 
-def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=True):
+def delete_objects_from_cloud_resources(
+    manifest, log_bucket, release, dry_run=True, only_redact="all"
+):
     """
     delete object from S3 and GS
     for safety use filename instead of file_name in manifest file
@@ -67,7 +69,9 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
         log_filename(str): the name of log file
         release(str): data release
         dry_run(bool): True the program does not really delete the file (for report purpose)
+        only_redact(str): Options between [all, aws, gs] to determine which cloud storage we're deleting from
     """
+    logger.info(f"Only Redact Set to {only_redact}")
     try:
         logger.info("getting s3 session")
         session = boto3.session.Session(profile_name="default")
@@ -112,8 +116,10 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
 
     try:
         logger.info("Getting S3 and GS clients")
-        s3 = boto3.resource("s3")
-        gs_client = storage.Client()
+        s3 = boto3.resource("s3") if only_redact == "all" or only_redact == "s3" else ""
+        gs_client = (
+            storage.Client() if only_redact == "all" or only_redact == "gs" else ""
+        )
         logger.info("Successful")
     except Exception as e:
         logger.error(e)
@@ -127,32 +133,35 @@ def delete_objects_from_cloud_resources(manifest, log_bucket, release, dry_run=T
     for fi in file_infos:
         num = num + 1
         logger.info("Start to process file {}".format(num))
-        try:
-            aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
-        except UserError as e:
-            aws_deletion_logs.append(
-                DeletionLog(
-                    url=fi.get("id") + "/" + fi.get("filename"), message=e.message
-                )
-            )
-            aws_target_bucket = None
-
-        # only the _remove_object_from_s3 function has a dry run option that will not delete object when in the func
-        try:
-            if aws_target_bucket:
+        if only_redact == "all" or only_redact == "s3":
+            try:
+                aws_target_bucket = get_aws_bucket_name(fi, PROJECT_ACL)
+            except UserError as e:
                 aws_deletion_logs.append(
-                    _remove_object_from_s3(
-                        s3, indexclient, fi, aws_target_bucket, dry_run
+                    DeletionLog(
+                        url=fi.get("id") + "/" + fi.get("filename"), message=e.message
                     )
                 )
-        except Exception as e:
-            logger.error(
-                "Error happened during s3 deletion. Please look at log in s3 bucket"
-            )
-            logger.error(e)
-            continue
+                aws_target_bucket = None
 
-        if not dry_run:
+            # only the _remove_object_from_s3 function has a dry run option that will not delete object when in the func
+            try:
+                if aws_target_bucket:
+                    aws_deletion_logs.append(
+                        _remove_object_from_s3(
+                            s3, indexclient, fi, aws_target_bucket, dry_run
+                        )
+                    )
+            except Exception as e:
+                logger.error(
+                    "Error happened during s3 deletion. Please look at log in s3 bucket"
+                )
+                logger.error(e)
+                continue
+
+        logger.info(f"dry_run: {dry_run}, only_redact: {only_redact}")
+        logger.info(not dry_run and (only_redact == "all" or only_redact == "gs"))
+        if not dry_run and (only_redact == "all" or only_redact == "gs"):
             try:
                 google_target_bucket = get_google_bucket_name(fi, PROJECT_ACL)
             except UserError as e:

@@ -61,6 +61,7 @@ def parse_arguments():
     redact_cmd.add_argument("--redact_file", required=True)
     redact_cmd.add_argument("--log_bucket", required=True)
     redact_cmd.add_argument("--release", required=True)
+    redact_cmd.add_argument("--only_redact", default="all")
 
     return parser.parse_args()
 
@@ -107,7 +108,7 @@ if __name__ == "__main__":
     elif args.action == "redact":
         dry_run = False if args.dry_run == "False" else True
         delete_objects_from_cloud_resources(
-            args.redact_file, args.log_bucket, args.release, dry_run
+            args.redact_file, args.log_bucket, args.release, dry_run, args.only_redact
         )
 
     end = timeit.default_timer()
