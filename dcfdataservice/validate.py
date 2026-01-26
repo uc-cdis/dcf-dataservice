@@ -269,6 +269,7 @@ def run(global_config):
                 "deletereason",
                 "gs_url",
                 "indexd_url",
+                "case_submitter_ids",
             ]
             isb_files = []
             for fi in files:
