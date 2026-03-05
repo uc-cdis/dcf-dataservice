@@ -105,6 +105,9 @@ def run(global_config):
 
     VALIDATE_PLATFORM = global_config.get("validate_platform", "AWS")
 
+    logger.info(f"Validating Cloud Storage: {VALIDATE_PLATFORM}")
+    logger.info(global_config)
+
     if _validate_aws(VALIDATE_PLATFORM):
         logger.info("Validating data on AWS Platform..")
         logger.info("Building aws dataset")
