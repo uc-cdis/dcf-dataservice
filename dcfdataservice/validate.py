@@ -175,7 +175,9 @@ def run(global_config):
                     total_aws_copy_failures += 1
                     fail_list.append(fi)
                     logger.error(
-                        "{} is not copied yet to aws buckets".format(object_path)
+                        "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                            fi["id"], fi["aws_url"], fi["indexd_url"]
+                        )
                     )
                 elif fi["size"] != 0:
                     aws_url_fail = 0
