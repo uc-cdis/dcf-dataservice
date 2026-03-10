@@ -35,8 +35,8 @@ def parse_arguments():
     google_replicate_cmd.add_argument("--manifest_file", required=True)
     google_replicate_cmd.add_argument("--thread_num", required=True)
 
-    google_validate_cmd = subparsers.add_parser("validate")
-    google_validate_cmd.add_argument("--global_config", required=True)
+    validate_cmd = subparsers.add_parser("validate")
+    validate_cmd.add_argument("--global_config", required=True)
 
     aws_indexing_cmd = subparsers.add_parser("indexing")
 
