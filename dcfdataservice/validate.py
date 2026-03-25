@@ -29,12 +29,14 @@ def run(global_config):
             'out_manifests': 'active_manifest_aug.tsv, legacy_manifest_aug.tsv'
             'FORCE_CREATE_MANIFEST': 'True' 'False'
             'map_file': 's3://location/to/map_file.json'
+            'validate_platform': 'AWS'
         }
 
     Returns:
         bool
 
     """
+    pass_validation = True
     resume_logger("./log.txt")
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
@@ -88,40 +90,57 @@ def run(global_config):
         for manifest_file in manifest_files:
             records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
             indexd_records.update(records)
-    logger.info("Building aws dataset")
-    aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-    logger.info("Building gs dataset")
-    gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
 
-    logger.info("Done building object datasets")
     if global_config.get("save_copied_objects"):
         with open("./indexd_records.json", "w") as outfile:
             json.dump(indexd_records, outfile)
-        with open("./aws_copied_objects.json", "w") as outfile:
-            json.dump(aws_copied_objects, outfile)
-        with open("./gs_copied_objects.json", "w") as outfile:
-            json.dump(gs_copied_objects, outfile)
-
         try:
             s3.upload_file(
                 "indexd_records.json",
                 global_config.get("log_bucket"),
                 "indexd_records.json",
             )
-            s3.upload_file(
-                "aws_copied_objects.json",
-                global_config.get("log_bucket"),
-                "aws_copied_objects.json",
-            )
-            s3.upload_file(
-                "gs_copied_objects.json",
-                global_config.get("log_bucket"),
-                "gs_copied_objects.json",
-            )
         except Exception as e:
             logger.error(e)
 
-    pass_validation = True
+    VALIDATE_PLATFORM = global_config.get("validate_platform", "AWS")
+
+    logger.info(f"Validating Cloud Storage: {VALIDATE_PLATFORM}")
+    logger.info(global_config)
+
+    if _validate_aws(VALIDATE_PLATFORM):
+        logger.info("Validating data on AWS Platform..")
+        logger.info("Building aws dataset")
+        aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+        logger.info("Done building object datasets")
+        if global_config.get("save_copied_objects"):
+            with open("./aws_copied_objects.json", "w") as outfile:
+                json.dump(aws_copied_objects, outfile)
+            try:
+                s3.upload_file(
+                    "aws_copied_objects.json",
+                    global_config.get("log_bucket"),
+                    "aws_copied_objects.json",
+                )
+            except Exception as e:
+                logger.error(e)
+
+    if _validate_gs(VALIDATE_PLATFORM):
+        logger.info("Validating data on Google Cloud Platform..")
+        logger.info("Building gs dataset")
+        gs_copied_objects = utils.build_object_dataset_gs(PROJECT_ACL)
+        if global_config.get("save_copied_objects"):
+            with open("./gs_copied_objects.json", "w") as outfile:
+                json.dump(gs_copied_objects, outfile)
+            try:
+                s3.upload_file(
+                    "gs_copied_objects.json",
+                    global_config.get("log_bucket"),
+                    "gs_copied_objects.json",
+                )
+            except Exception as e:
+                logger.error(e)
+
     for idx, manifest_file in enumerate(manifest_files):
         total_aws_copy_failures = 0
         total_gs_copy_failures = 0
@@ -142,100 +161,109 @@ def run(global_config):
                 logger.error("There is no indexd record for {}".format(fi["id"]))
 
             # validate aws
-            aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-            object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
-            object_path_2 = "{}/{}/{}".format(
-                utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"]
-            )
-            # if path not in both open and prod account then its a fail
-            if (
-                object_path not in aws_copied_objects
-                and object_path_2 not in aws_copied_objects
-            ) and fi["size"] != 0:
-                total_aws_copy_failures += 1
-                fail_list.append(fi)
-                logger.error("{} is not copied yet to aws buckets".format(object_path))
-            elif fi["size"] != 0:
-                aws_url_fail = 0
-                for path in [object_path, object_path_2]:
-                    fi["aws_url"] = "s3://" + path
-                    if fi["aws_url"] not in fi["indexd_url"]:
-                        aws_url_fail += 1
-                if aws_url_fail == 2:
-                    total_aws_index_failures += 1
+            if _validate_aws(VALIDATE_PLATFORM):
+                aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+                object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
+                object_path_2 = "{}/{}/{}".format(
+                    utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"]
+                )
+                # if path not in both open and prod account then its a fail
+                if (
+                    object_path not in aws_copied_objects
+                    and object_path_2 not in aws_copied_objects
+                ) and fi["size"] != 0:
+                    total_aws_copy_failures += 1
                     fail_list.append(fi)
                     logger.error(
                         "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
                             fi["id"], fi["aws_url"], fi["indexd_url"]
                         )
                     )
+                elif fi["size"] != 0:
+                    aws_url_fail = 0
+                    for path in [object_path, object_path_2]:
+                        fi["aws_url"] = "s3://" + path
+                        if fi["aws_url"] not in fi["indexd_url"]:
+                            aws_url_fail += 1
+                    if aws_url_fail == 2:
+                        total_aws_index_failures += 1
+                        fail_list.append(fi)
+                        logger.error(
+                            "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                                fi["id"], fi["aws_url"], fi["indexd_url"]
+                            )
+                        )
 
-            # validate google
-            gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
-            if fi["id"] in ignored_dict:
-                object_path = "{}/{}".format(
-                    gs_bucket, utils.get_structured_object_key(fi["id"], ignored_dict)
-                )
-            else:
-                fixed_filename = fi["file_name"].replace(" ", "_")
-                object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
+            if _validate_gs(VALIDATE_PLATFORM):
+                # validate google
+                gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
+                if fi["id"] in ignored_dict:
+                    object_path = "{}/{}".format(
+                        gs_bucket,
+                        utils.get_structured_object_key(fi["id"], ignored_dict),
+                    )
+                else:
+                    fixed_filename = fi["file_name"].replace(" ", "_")
+                    object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
 
-            if object_path not in gs_copied_objects and fi["size"] != 0:
-                total_gs_copy_failures += 1
-                fail_list.append(fi)
-                logger.error(
-                    "{} is not copied yet to google buckets".format(object_path)
-                )
-            elif fi["size"] != 0:
-                fi["gs_url"] = "gs://" + object_path
-                if fi["gs_url"] not in fi["indexd_url"]:
-                    total_gs_index_failures += 1
+                if object_path not in gs_copied_objects and fi["size"] != 0:
+                    total_gs_copy_failures += 1
                     fail_list.append(fi)
                     logger.error(
-                        "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
-                            fi["id"], fi["gs_url"], fi["indexd_url"]
+                        "{} is not copied yet to google buckets".format(object_path)
+                    )
+                elif fi["size"] != 0:
+                    fi["gs_url"] = "gs://" + object_path
+                    if fi["gs_url"] not in fi["indexd_url"]:
+                        total_gs_index_failures += 1
+                        fail_list.append(fi)
+                        logger.error(
+                            "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
+                                fi["id"], fi["gs_url"], fi["indexd_url"]
+                            )
+                        )
+
+        if _validate_gs(VALIDATE_PLATFORM):
+            if total_gs_index_failures + total_gs_copy_failures == 0:
+                logger.info(
+                    "All the objects in {} are replicated to GS and indexed correctly!!!".format(
+                        manifest_file
+                    )
+                )
+            else:
+                if total_gs_index_failures > 0:
+                    logger.info(
+                        "TOTAL GS INDEX FAILURE CASES {} in {}".format(
+                            total_gs_index_failures, manifest_file
+                        )
+                    )
+                if total_gs_copy_failures > 0:
+                    logger.info(
+                        "TOTAL GS COPY FAILURE CASES {} in {}".format(
+                            total_gs_copy_failures, manifest_file
                         )
                     )
 
-        if total_gs_index_failures + total_gs_copy_failures == 0:
-            logger.info(
-                "All the objects in {} are replicated to GS and indexed correctly!!!".format(
-                    manifest_file
-                )
-            )
-        else:
-            if total_gs_index_failures > 0:
+        if _validate_aws(VALIDATE_PLATFORM):
+            if total_aws_index_failures + total_aws_copy_failures == 0:
                 logger.info(
-                    "TOTAL GS INDEX FAILURE CASES {} in {}".format(
-                        total_gs_index_failures, manifest_file
+                    "All the objects in {} are replicated to AWS and indexed correctly!!!".format(
+                        manifest_file
                     )
                 )
-            if total_gs_copy_failures > 0:
-                logger.info(
-                    "TOTAL GS COPY FAILURE CASES {} in {}".format(
-                        total_gs_copy_failures, manifest_file
+            else:
+                if total_aws_index_failures > 0:
+                    logger.info(
+                        "TOTAL AWS INDEX FAILURE CASES {} in {}".format(
+                            total_aws_index_failures, manifest_file
+                        )
                     )
-                )
-
-        if total_aws_index_failures + total_aws_copy_failures == 0:
-            logger.info(
-                "All the objects in {} are replicated to AWS and indexed correctly!!!".format(
-                    manifest_file
-                )
-            )
-        else:
-            if total_aws_index_failures > 0:
-                logger.info(
-                    "TOTAL AWS INDEX FAILURE CASES {} in {}".format(
-                        total_aws_index_failures, manifest_file
+                if total_aws_copy_failures > 0:
+                    logger.info(
+                        "TOTAL AWS COPY FAILURE CASES {} in {}".format(
+                            total_aws_copy_failures, manifest_file
+                        )
                     )
-                )
-            if total_aws_copy_failures > 0:
-                logger.info(
-                    "TOTAL AWS COPY FAILURE CASES {} in {}".format(
-                        total_aws_copy_failures, manifest_file
-                    )
-                )
 
         _pass = (
             total_aws_copy_failures
@@ -269,6 +297,7 @@ def run(global_config):
                 "deletereason",
                 "gs_url",
                 "indexd_url",
+                "case_submitter_ids",
             ]
             isb_files = []
             for fi in files:
@@ -341,3 +370,15 @@ def _pass_preliminary_check(FORCE_CREATE_MANIFEST, manifest_files):
                 )
                 raise
     return True
+
+
+def _validate_aws(VALIDATE_PLATFORM):
+    if VALIDATE_PLATFORM == "AWS" or VALIDATE_PLATFORM == "ALL":
+        return True
+    return False
+
+
+def _validate_gs(VALIDATE_PLATFORM):
+    if VALIDATE_PLATFORM == "GS" or VALIDATE_PLATFORM == "ALL":
+        return True
+    return False
