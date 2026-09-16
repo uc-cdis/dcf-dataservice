@@ -8,7 +8,11 @@ from indexclient.client import IndexClient
 
 from dcfdataservice import utils
 from dcfdataservice.errors import UserError
-from dcfdataservice.aws_replicate import bucket_exists, build_object_dataset_aws
+from dcfdataservice.aws_replicate import (
+    bucket_exists,
+    build_object_dataset_aws,
+    object_exists,
+)
 from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
@@ -17,6 +21,22 @@ global logger
 def resume_logger(filename=None):
     global logger
     logger = get_logger("Validation", filename)
+
+
+PROJECT_ACL = {
+    "CHARLIE": {
+        "aws_bucket_prefix": "test-gdc-abc-phs000222",
+        "gs_bucket_prefix": "test-gdc-abc-phs000222",
+    },
+    "TCGA-ACC": {
+        "aws_bucket_prefix": "test-gdc-def-phs000333",
+        "gs_bucket_prefix": "test-gdc-def-phs000333",
+    },
+    "TCGA-BLCA": {
+        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
+        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
+    },
+}
 
 
 def run(global_config):
@@ -42,6 +62,8 @@ def run(global_config):
         raise UserError("please provide the log bucket")
 
     s3 = boto3.client("s3")
+
+    release = global_config.get("release")
 
     session = boto3.session.Session()
     s3_sess = session.resource("s3")
@@ -109,21 +131,21 @@ def run(global_config):
     logger.info(global_config)
 
     if _validate_aws(VALIDATE_PLATFORM):
-        logger.info("Validating data on AWS Platform..")
-        logger.info("Building aws dataset")
-        aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-        logger.info("Done building object datasets")
-        if global_config.get("save_copied_objects"):
-            with open("./aws_copied_objects.json", "w") as outfile:
-                json.dump(aws_copied_objects, outfile)
-            try:
-                s3.upload_file(
-                    "aws_copied_objects.json",
-                    global_config.get("log_bucket"),
-                    "aws_copied_objects.json",
-                )
-            except Exception as e:
-                logger.error(e)
+        logger.info("Not going to build aws dataset anymore")
+        # logger.info("Building aws dataset")
+        # aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
+        # logger.info("Done building object datasets")
+        # if global_config.get("save_copied_objects"):
+        #     with open("./aws_copied_objects.json", "w") as outfile:
+        #         json.dump(aws_copied_objects, outfile)
+        #     try:
+        #         s3.upload_file(
+        #             "aws_copied_objects.json",
+        #             global_config.get("log_bucket"),
+        #             "aws_copied_objects.json",
+        #         )
+        #     except Exception as e:
+        #         logger.error(e)
 
     if _validate_gs(VALIDATE_PLATFORM):
         logger.info("Validating data on Google Cloud Platform..")
@@ -146,10 +168,16 @@ def run(global_config):
         total_gs_copy_failures = 0
         total_aws_index_failures = 0
         total_gs_index_failures = 0
+        total_processed_files = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         fail_list = []
         for fi in files:
+            if float(fi["release"]) != float(release):
+                logger.info(
+                    f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
+                )
+                continue
             del fi["url"]
             fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
 
@@ -164,14 +192,15 @@ def run(global_config):
             if _validate_aws(VALIDATE_PLATFORM):
                 aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
                 object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
-                object_path_2 = "{}/{}/{}".format(
-                    utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"]
-                )
+                # object_path_2 = "{}/{}/{}".format(
+                #     utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"] # NOTE: Won't be checking for flipped bucket since we dont have the full manifest.
+                # )
                 # if path not in both open and prod account then its a fail
-                if (
-                    object_path not in aws_copied_objects
-                    and object_path_2 not in aws_copied_objects
-                ) and fi["size"] != 0:
+
+                # new! checking for object existence per object instead of creating a bulk manifest of all buckets
+                s3_exists = object_exists(s3_sess, aws_bucket, object_path)
+
+                if not s3_exists and fi["size"] != 0:
                     total_aws_copy_failures += 1
                     fail_list.append(fi)
                     logger.error(
@@ -181,11 +210,8 @@ def run(global_config):
                     )
                 elif fi["size"] != 0:
                     aws_url_fail = 0
-                    for path in [object_path, object_path_2]:
-                        fi["aws_url"] = "s3://" + path
-                        if fi["aws_url"] not in fi["indexd_url"]:
-                            aws_url_fail += 1
-                    if aws_url_fail == 2:
+                    fi["aws_url"] = "s3://" + object_path
+                    if fi["aws_url"] not in fi["indexd_url"]:
                         total_aws_index_failures += 1
                         fail_list.append(fi)
                         logger.error(
@@ -222,6 +248,7 @@ def run(global_config):
                                 fi["id"], fi["gs_url"], fi["indexd_url"]
                             )
                         )
+            total_processed_files += 1
 
         if _validate_gs(VALIDATE_PLATFORM):
             if total_gs_index_failures + total_gs_copy_failures == 0:
@@ -264,6 +291,7 @@ def run(global_config):
                             total_aws_copy_failures, manifest_file
                         )
                     )
+        logger.info(f"Total files processed: {total_processed_files}")
 
         _pass = (
             total_aws_copy_failures

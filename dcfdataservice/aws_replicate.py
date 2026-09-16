@@ -40,9 +40,27 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
+logger = get_logger("AWSReplication", filename)
+
+
 RETRIES_NUM = 5
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
+
+PROJECT_ACL = {
+    "CHARLIE": {
+        "aws_bucket_prefix": "test-gdc-abc-phs000222",
+        "gs_bucket_prefix": "test-gdc-abc-phs000222",
+    },
+    "TCGA-ACC": {
+        "aws_bucket_prefix": "test-gdc-def-phs000333",
+        "gs_bucket_prefix": "test-gdc-def-phs000333",
+    },
+    "TCGA-BLCA": {
+        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
+        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
+    },
+}
 
 
 class ProcessingFile(object):
