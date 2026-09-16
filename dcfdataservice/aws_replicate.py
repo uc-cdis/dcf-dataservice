@@ -40,7 +40,7 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
-logger = get_logger("AWSReplication", filename)
+logger = get_logger("AWSReplication", "/log.txt")
 
 
 RETRIES_NUM = 5
