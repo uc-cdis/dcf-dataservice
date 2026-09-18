@@ -505,6 +505,8 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
 
         for batch in sliced_records:
             records = get_bulk_record_with_retry(batch)
+            logger.info("Found records:")
+            print(records)
             if len(records) != len(
                 batch
             ):  # if input doesn't match output, a record hasn't been indexed
@@ -516,7 +518,9 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                     batch_set.add(b["id"])
                 diff_set = batch_set - record_set
                 errored_list.extend(list(diff_set))
-                logger.error(f"Could not find records with ids {diff_set}.")
+                logger.error(
+                    f"{len(records)}/{len(batch)} records found. Could not find records with ids {diff_set}."
+                )
             result.update(records)
 
     if errored_list:
