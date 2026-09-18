@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import boto3
 import botocore
 from cdislogging import get_logger
@@ -16,6 +17,8 @@ from dcfdataservice.aws_replicate import (
 from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
+
+MAX_WORKERS = 20
 
 
 def resume_logger(filename=None):
@@ -37,6 +40,111 @@ PROJECT_ACL = {
         "gs_bucket_prefix": "test-gdc-xyz-phs000111",
     },
 }
+
+
+def _validate_single_file(
+    fi,
+    release,
+    indexd_records,
+    VALIDATE_PLATFORM,
+    PROJECT_ACL,
+    ignored_dict,
+    gs_copied_objects,
+):
+    aws_copy_fail = 0
+    gs_copy_fail = 0
+    aws_index_fail = 0
+    gs_index_fail = 0
+    fails = []
+    processed = False
+
+    if float(fi["release"]) != float(release):
+        logger.info(
+            f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
+        )
+        return (
+            fi,
+            aws_copy_fail,
+            gs_copy_fail,
+            aws_index_fail,
+            gs_index_fail,
+            fails,
+            processed,
+        )
+
+    del fi["url"]
+    fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
+    fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
+
+    if not fi["indexd_url"]:
+        aws_index_fail += 1
+        gs_index_fail += 1
+        fails.append(fi)
+        logger.error("There is no indexd record for {}".format(fi["id"]))
+
+    if _validate_aws(VALIDATE_PLATFORM):
+        # Each thread needs its own session — boto3 sessions are not thread-safe.
+        session = boto3.session.Session()
+        s3_sess = session.resource("s3")
+        aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
+        object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
+        s3_exists = object_exists(s3_sess, aws_bucket, object_path)
+
+        if not s3_exists and fi["size"] != 0:
+            aws_copy_fail += 1
+            fails.append(fi)
+            logger.error(
+                "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                    fi["id"], fi["aws_url"], fi["indexd_url"]
+                )
+            )
+        elif fi["size"] != 0:
+            fi["aws_url"] = "s3://" + object_path
+            if fi["aws_url"] not in fi["indexd_url"]:
+                aws_index_fail += 1
+                fails.append(fi)
+                logger.error(
+                    "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
+                        fi["id"], fi["aws_url"], fi["indexd_url"]
+                    )
+                )
+
+    if _validate_gs(VALIDATE_PLATFORM):
+        gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
+        if fi["id"] in ignored_dict:
+            object_path = "{}/{}".format(
+                gs_bucket,
+                utils.get_structured_object_key(fi["id"], ignored_dict),
+            )
+        else:
+            fixed_filename = fi["file_name"].replace(" ", "_")
+            object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
+
+        if object_path not in gs_copied_objects and fi["size"] != 0:
+            gs_copy_fail += 1
+            fails.append(fi)
+            logger.error("{} is not copied yet to google buckets".format(object_path))
+        elif fi["size"] != 0:
+            fi["gs_url"] = "gs://" + object_path
+            if fi["gs_url"] not in fi["indexd_url"]:
+                gs_index_fail += 1
+                fails.append(fi)
+                logger.error(
+                    "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
+                        fi["id"], fi["gs_url"], fi["indexd_url"]
+                    )
+                )
+
+    processed = True
+    return (
+        fi,
+        aws_copy_fail,
+        gs_copy_fail,
+        aws_index_fail,
+        gs_index_fail,
+        fails,
+        processed,
+    )
 
 
 def run(global_config):
@@ -147,6 +255,7 @@ def run(global_config):
         #     except Exception as e:
         #         logger.error(e)
 
+    gs_copied_objects = {}
     if _validate_gs(VALIDATE_PLATFORM):
         logger.info("Validating data on Google Cloud Platform..")
         logger.info("Building gs dataset")
@@ -172,83 +281,29 @@ def run(global_config):
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
         fail_list = []
-        for fi in files:
-            if float(fi["release"]) != float(release):
-                logger.info(
-                    f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
-                )
-                continue
-            del fi["url"]
-            fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
-
-            fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
-            if not fi["indexd_url"]:
-                total_aws_index_failures += 1
-                total_gs_index_failures += 1
-                fail_list.append(fi)
-                logger.error("There is no indexd record for {}".format(fi["id"]))
-
-            # validate aws
-            if _validate_aws(VALIDATE_PLATFORM):
-                aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-                object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
-                # object_path_2 = "{}/{}/{}".format(
-                #     utils.flip_bucket_accounts(aws_bucket), fi["id"], fi["file_name"] # NOTE: Won't be checking for flipped bucket since we dont have the full manifest.
-                # )
-                # if path not in both open and prod account then its a fail
-
-                # new! checking for object existence per object instead of creating a bulk manifest of all buckets
-                s3_exists = object_exists(s3_sess, aws_bucket, object_path)
-
-                if not s3_exists and fi["size"] != 0:
-                    total_aws_copy_failures += 1
-                    fail_list.append(fi)
-                    logger.error(
-                        "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
-                            fi["id"], fi["aws_url"], fi["indexd_url"]
-                        )
-                    )
-                elif fi["size"] != 0:
-                    aws_url_fail = 0
-                    fi["aws_url"] = "s3://" + object_path
-                    if fi["aws_url"] not in fi["indexd_url"]:
-                        total_aws_index_failures += 1
-                        fail_list.append(fi)
-                        logger.error(
-                            "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
-                                fi["id"], fi["aws_url"], fi["indexd_url"]
-                            )
-                        )
-
-            if _validate_gs(VALIDATE_PLATFORM):
-                # validate google
-                gs_bucket = utils.get_google_bucket_name(fi, PROJECT_ACL)
-                if fi["id"] in ignored_dict:
-                    object_path = "{}/{}".format(
-                        gs_bucket,
-                        utils.get_structured_object_key(fi["id"], ignored_dict),
-                    )
-                else:
-                    fixed_filename = fi["file_name"].replace(" ", "_")
-                    object_path = "{}/{}/{}".format(gs_bucket, fi["id"], fixed_filename)
-
-                if object_path not in gs_copied_objects and fi["size"] != 0:
-                    total_gs_copy_failures += 1
-                    fail_list.append(fi)
-                    logger.error(
-                        "{} is not copied yet to google buckets".format(object_path)
-                    )
-                elif fi["size"] != 0:
-                    fi["gs_url"] = "gs://" + object_path
-                    if fi["gs_url"] not in fi["indexd_url"]:
-                        total_gs_index_failures += 1
-                        fail_list.append(fi)
-                        logger.error(
-                            "indexd does not have gs url of {}. gs_url: {}, indexd_url: {}".format(
-                                fi["id"], fi["gs_url"], fi["indexd_url"]
-                            )
-                        )
-            total_processed_files += 1
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    _validate_single_file,
+                    fi,
+                    release,
+                    indexd_records,
+                    VALIDATE_PLATFORM,
+                    PROJECT_ACL,
+                    ignored_dict,
+                    gs_copied_objects,
+                ): fi
+                for fi in files
+            }
+            for future in as_completed(futures):
+                _, aws_cf, gs_cf, aws_if, gs_if, fi_fails, processed = future.result()
+                total_aws_copy_failures += aws_cf
+                total_gs_copy_failures += gs_cf
+                total_aws_index_failures += aws_if
+                total_gs_index_failures += gs_if
+                fail_list.extend(fi_fails)
+                if processed:
+                    total_processed_files += 1
 
         if _validate_gs(VALIDATE_PLATFORM):
             if total_gs_index_failures + total_gs_copy_failures == 0:

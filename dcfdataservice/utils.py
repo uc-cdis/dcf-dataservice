@@ -1,8 +1,10 @@
 import os
-import boto3
 import csv
-import time
+from itertools import islice
 import random
+import time
+
+import boto3
 from google.cloud import storage
 import threading
 from threading import Thread
@@ -433,6 +435,97 @@ def get_indexd_records():
     return results
 
 
+def get_manifest_from_s3(manifest_file, logger):
+    """
+    Download manifest file from s3 bucket
+
+    Args:
+        manifest_file (_type_): _description_
+        logger (_type_): _description_
+    """
+
+    s3 = boto3.resource("s3")
+
+    manifest_file = manifest_file.strip()
+    out = urlparse(manifest_file)
+    try:
+        s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest_read")
+    except Exception as e:
+        logger.error(f"Could not download manifest {manifest_file}. Error: {e}")
+
+
+def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
+    """
+    Get bulk indexd records for all GDC records
+
+    Args:
+        manifest_file (str): GDC manifest location
+    """
+
+    result = {}
+    gdc_id_list = []
+    errored_list = []
+    WINDOW_SIZE = 15
+
+    indexd_client = IndexClient(
+        INDEXD["host"],
+        INDEXD["version"],
+        (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
+    )
+
+    logger.info(f"Downloding GDC Manifest {manifest_file} from s3 bucket.")
+    get_manifest_from_s3(manifest_file)
+
+    def get_bulk_record_with_retry(
+        guids, max_retries=5, base_delay=1, backoff_factor=2
+    ):
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                return indexd_client.bulk_requests(guids)
+            except Exception as e:
+                attempt += 1
+                if attempt == max_retries:
+                    raise
+                wait_time = base_delay * (backoff_factor ** (attempt - 1))
+                logger.warning(
+                    f"Retrying {guids}: attempt {attempt}/{max_retries}, retrying in {wait_time}s. Error: {e}"
+                )
+                time.sleep(wait_time)
+
+    # open GDC manifest file to extract guids
+    with open("./manifest_read", "r") as csvfile:
+        csv_reader = csv.DictReader(csvfile, delimiter="\t")
+        sliced_records = []  # list of all batched records
+        while True:
+            batch = list(islice(csv_reader, WINDOW_SIZE))
+            if not batch:
+                break
+            sliced_records.append(batch)
+
+        for batch in sliced_records:
+            records = get_bulk_record_with_retry(batch)
+            if len(records) != len(
+                batch
+            ):  # if input doesn't match output, a record hasn't been indexed
+                record_set = set()
+                batch_set = set()
+                for r in records:
+                    record_set.add(r["id"])
+                for b in batch:
+                    batch_set.add(b["id"])
+                diff_set = batch_set - record_set
+                errored_list.extend(list(diff_set))
+                logger.error(f"Could not find records with ids {diff_set}.")
+            result.update(records)
+
+    if errored_list:
+        logger.warning(
+            f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
+        )
+    return result
+
+
 def get_indexd_record_from_GDC_files(manifest_file, logger):
     """
     Get single indexd records for all GDC records
@@ -449,11 +542,7 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
 
-    s3 = boto3.resource("s3")
-
-    manifest_file = manifest_file.strip()
-    out = urlparse(manifest_file)
-    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest_read")
+    get_manifest_from_s3(manifest_file)
 
     def get_record_with_retry(guid, max_retries=5, base_delay=1, backoff_factor=2):
         """
