@@ -482,7 +482,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         attempt = 0
         while attempt < max_retries:
             try:
-                return indexd_client.bulk_requests(guids)
+                return indexd_client.bulk_request(guids)
             except Exception as e:
                 attempt += 1
                 if attempt == max_retries:
