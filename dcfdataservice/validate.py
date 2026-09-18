@@ -218,7 +218,7 @@ def run(global_config):
 
     else:
         for manifest_file in manifest_files:
-            records = utils.get_indexd_record_from_GDC_files(manifest_file, logger)
+            records = utils.get_bulk_indexd_record_from_GDC_files(manifest_file, logger)
             indexd_records.update(records)
 
     if global_config.get("save_copied_objects"):
