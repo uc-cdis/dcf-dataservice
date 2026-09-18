@@ -94,9 +94,7 @@ def _validate_single_file(
             aws_copy_fail += 1
             fails.append(fi)
             logger.error(
-                "indexd does not have aws url of {}. aws_url: {}, indexd_url: {}".format(
-                    fi["id"], fi["aws_url"], fi["indexd_url"]
-                )
+                f"File {fi['id']} does not exist on s3. s3_exists? {s3_exists}. Searched s3 location s3://{aws_bucket}/{object_path}"
             )
         elif fi["size"] != 0:
             fi["aws_url"] = "s3://" + object_path
