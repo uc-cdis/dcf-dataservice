@@ -542,7 +542,7 @@ def get_indexd_record_from_GDC_files(manifest_file, logger):
         (INDEXD["auth"]["username"], INDEXD["auth"]["password"]),
     )
 
-    get_manifest_from_s3(manifest_file)
+    get_manifest_from_s3(manifest_file, logger)
 
     def get_record_with_retry(guid, max_retries=5, base_delay=1, backoff_factor=2):
         """
