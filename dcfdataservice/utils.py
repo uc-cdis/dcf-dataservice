@@ -496,17 +496,21 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
     # open GDC manifest file to extract guids
     with open("./manifest_read", "r") as csvfile:
         csv_reader = csv.DictReader(csvfile, delimiter="\t")
-        sliced_records = []  # list of all batched records
+        all_guids = []  # list of all guids in the gdc manifest
+        sliced_records = []  # list of all batched guids
+
+        for row in csv_reader:
+            all_guids.append(row["id"])
+
         while True:
-            batch = list(islice(csv_reader, WINDOW_SIZE))
+            batch = list(islice(all_guids, WINDOW_SIZE))
             if not batch:
                 break
             sliced_records.append(batch)
 
         for batch in sliced_records:
             records = get_bulk_record_with_retry(batch)
-            logger.info("Found records:")
-            print(records)
+            logger.info(f"Found records:{records}")
             if len(records) != len(
                 batch
             ):  # if input doesn't match output, a record hasn't been indexed
