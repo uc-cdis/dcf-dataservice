@@ -475,6 +475,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
 
     logger.info(f"Downloding GDC Manifest {manifest_file} from s3 bucket.")
     get_manifest_from_s3(manifest_file, logger)
+    logger.info(f"Downloaded GDC Manifest from s3 bucket")
 
     def get_bulk_record_with_retry(
         guids, max_retries=5, base_delay=1, backoff_factor=2
@@ -508,6 +509,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                 break
             sliced_records.append(batch)
 
+        logger.info("Starting bulk request to indexd...")
         for batch in sliced_records:
             records = get_bulk_record_with_retry(batch)
             logger.info(f"Found records:{records}")
