@@ -462,7 +462,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         manifest_file (str): GDC manifest location
     """
 
-    result = {}
+    result = set()
     gdc_id_list = []
     errored_list = []
     WINDOW_SIZE = 15
