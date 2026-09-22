@@ -462,7 +462,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         manifest_file (str): GDC manifest location
     """
 
-    result = set()
+    result = []
     gdc_id_list = []
     errored_list = []
     WINDOW_SIZE = 15
@@ -528,7 +528,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                 logger.error(
                     f"{len(records)}/{len(batch)} records found. Could not find records with ids {diff_set}."
                 )
-            result.update(records)
+            result.append(records)
 
     if errored_list:
         logger.warning(
