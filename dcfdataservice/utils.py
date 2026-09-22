@@ -503,8 +503,9 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         for row in csv_reader:
             all_guids.append(row["id"])
 
+        guid_iter = iter(all_guids)
         while True:
-            batch = list(islice(all_guids, WINDOW_SIZE))
+            batch = list(islice(guid_iter, WINDOW_SIZE))
             if not batch:
                 break
             sliced_records.append(batch)
