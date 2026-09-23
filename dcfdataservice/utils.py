@@ -519,7 +519,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                 record_set = set()
                 batch_set = set()
                 for r in records:
-                    record_set.add(r.id)
+                    record_set.add(r.did)
                 for b in batch:
                     batch_set.add(b["id"])
                 diff_set = batch_set - record_set
