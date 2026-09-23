@@ -528,7 +528,9 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                 logger.error(
                     f"{len(records)}/{len(batch)} records found. Could not find records with ids {diff_set}."
                 )
-            result.append(records)
+
+            for doc in records:
+                result.append(doc.to_json())
 
     if errored_list:
         logger.warning(
