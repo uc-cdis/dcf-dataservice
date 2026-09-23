@@ -513,14 +513,13 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         logger.info("Starting bulk request to indexd...")
         for batch in sliced_records:
             records = get_bulk_record_with_retry(batch)
-            logger.info(f"Found records:{records}")
             if len(records) != len(
                 batch
             ):  # if input doesn't match output, a record hasn't been indexed
                 record_set = set()
                 batch_set = set()
                 for r in records:
-                    record_set.add(r["id"])
+                    record_set.add(r.id)
                 for b in batch:
                     batch_set.add(b["id"])
                 diff_set = batch_set - record_set
