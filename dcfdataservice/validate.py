@@ -98,7 +98,7 @@ def _validate_single_file(
                 f"File {fi['id']} does not exist on s3. s3_exists? {s3_exists}. Searched s3 location s3://{aws_bucket}/{object_path}"
             )
         elif fi["size"] != 0:
-            fi["aws_url"] = "s3://" + object_path
+            fi["aws_url"] = f"s3://{aws_bucket}/{object_path}"
             if fi["aws_url"] not in fi["indexd_url"]:
                 aws_index_fail += 1
                 fails.append(fi)
