@@ -147,9 +147,9 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
 
 @retry(APIError, tries=10, delay=2)
-def remove_url_from_indexd_record(uuid, urls, indexclient):
+def remove_url_auth_from_indexd_record(uuid, urls, indexclient):
     """
-    remove url from indexd record
+    remove url & auth info from indexd record
 
     Args:
         uuid(str): did
@@ -163,6 +163,8 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
                 doc.urls.remove(url)
             if url in doc.urls_metadata:
                 del doc.urls_metadata[url]
+        doc.acl = []
+        doc.authz = []
         try:
             doc.patch()
         except Exception as e:
