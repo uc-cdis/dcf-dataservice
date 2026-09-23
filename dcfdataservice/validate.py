@@ -87,7 +87,8 @@ def _validate_single_file(
         session = boto3.session.Session()
         s3_sess = session.resource("s3")
         aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        object_path = "{}/{}/{}".format(aws_bucket, fi["id"], fi["file_name"])
+        # object_path = "{}/{}".format(fi["id"], fi["file_name"]) NOTE: Add this back. Removing just for testing
+        object_path = fi["id"]
         s3_exists = object_exists(s3_sess, aws_bucket, object_path)
 
         if not s3_exists and fi["size"] != 0:
