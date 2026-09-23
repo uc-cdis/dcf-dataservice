@@ -462,7 +462,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
         manifest_file (str): GDC manifest location
     """
 
-    result = []
+    result = {}
     gdc_id_list = []
     errored_list = []
     WINDOW_SIZE = 15
@@ -528,7 +528,8 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
                 )
 
             for doc in records:
-                result.append(doc.to_json())
+                record_json = doc.to_json()
+                result[record_json["did"]] = record_json["urls"]
 
     if errored_list:
         logger.warning(
