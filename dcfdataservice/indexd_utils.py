@@ -147,9 +147,9 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
 
 @retry(APIError, tries=10, delay=2)
-def remove_url_from_indexd_record(uuid, urls, indexclient):
+def remove_url_auth_from_indexd_record(uuid, urls, indexclient):
     """
-    remove url from indexd record
+    remove url & auth info from indexd record
 
     Args:
         uuid(str): did
@@ -163,6 +163,8 @@ def remove_url_from_indexd_record(uuid, urls, indexclient):
                 doc.urls.remove(url)
             if url in doc.urls_metadata:
                 del doc.urls_metadata[url]
+        doc.acl = []
+        doc.authz = []
         try:
             doc.patch()
         except Exception as e:
@@ -189,6 +191,42 @@ def delete_record_from_indexd(uuid, indexclient):
     except Exception as e:
         raise APIError(
             "INDEX_CLIENT: Can not delete the record with uuid {}. Detail {}".format(
+                uuid, e
+            )
+        )
+
+
+@retry(APIError, tries=10, delay=2)
+def redact_info_from_indexd(uuid, indexclient):
+    """
+    redact info from indexd record
+
+    Args:
+        uuid(str): did
+        indexclient(IndexClient): indexd client
+    """
+    try:
+        doc = indexclient.get(uuid)
+        if doc:
+            doc.urls = []
+            doc.authz = []
+            doc.acl = []
+            doc.file_name = ""
+            doc.urls_metadata = {}
+            doc.description = "The file information for this GUID has been removed at stakeholder request"
+            try:
+                doc.patch()
+            except Exception as e:
+                raise APIError(
+                    "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                        uuid, e
+                    )
+                )
+        else:
+            logger.warning("%s not found in indexd", uuid)
+    except Exception as e:
+        raise APIError(
+            "INDEX_CLIENT: Can not redact infor from the record with uuid {}. Detail {}".format(
                 uuid, e
             )
         )
