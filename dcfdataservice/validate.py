@@ -2,6 +2,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import boto3
 import botocore
+from botocore.config import Config
 from cdislogging import get_logger
 from urllib.parse import urlparse
 
@@ -12,13 +13,12 @@ from dcfdataservice.errors import UserError
 from dcfdataservice.aws_replicate import (
     bucket_exists,
     build_object_dataset_aws,
-    object_exists,
 )
 from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
-MAX_WORKERS = 20
+MAX_WORKERS = 150
 
 
 def resume_logger(filename=None):
@@ -50,6 +50,7 @@ def _validate_single_file(
     PROJECT_ACL,
     ignored_dict,
     gs_copied_objects,
+    s3_client,
 ):
     aws_copy_fail = 0
     gs_copy_fail = 0
@@ -83,13 +84,20 @@ def _validate_single_file(
         logger.error("There is no indexd record for {}".format(fi["id"]))
 
     if _validate_aws(VALIDATE_PLATFORM):
-        # Each thread needs its own session — boto3 sessions are not thread-safe.
-        session = boto3.session.Session()
-        s3_sess = session.resource("s3")
         aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
         # object_path = "{}/{}".format(fi["id"], fi["file_name"]) NOTE: Add this back. Removing just for testing
         object_path = fi["id"]
-        s3_exists = object_exists(s3_sess, aws_bucket, object_path)
+        try:
+            s3_client.head_object(
+                Bucket=aws_bucket, Key=object_path, RequestPayer="requester"
+            )
+            s3_exists = True
+        except botocore.exceptions.ClientError as e:
+            error_code = int(e.response["Error"]["Code"])
+            if error_code in {404, 403}:
+                s3_exists = False
+            else:
+                raise
 
         if not s3_exists and fi["size"] != 0:
             aws_copy_fail += 1
@@ -169,6 +177,10 @@ def run(global_config):
         raise UserError("please provide the log bucket")
 
     s3 = boto3.client("s3")
+    s3_validation_client = boto3.client(
+        "s3",
+        config=Config(max_pool_connections=MAX_WORKERS),
+    )
 
     release = global_config.get("release")
 
@@ -291,6 +303,7 @@ def run(global_config):
                     PROJECT_ACL,
                     ignored_dict,
                     gs_copied_objects,
+                    s3_validation_client,
                 ): fi
                 for fi in files
             }
