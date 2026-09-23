@@ -194,3 +194,39 @@ def delete_record_from_indexd(uuid, indexclient):
                 uuid, e
             )
         )
+
+
+@retry(APIError, tries=10, delay=2)
+def redact_info_from_indexd(uuid, indexclient):
+    """
+    redact info from indexd record
+
+    Args:
+        uuid(str): did
+        indexclient(IndexClient): indexd client
+    """
+    try:
+        doc = indexclient.get(uuid)
+        if doc:
+            doc.urls = []
+            doc.authz = []
+            doc.acl = []
+            doc.file_name = ""
+            doc.urls_metadata = {}
+            doc.description = "The file information for this GUID has been removed at stakeholder request"
+            try:
+                doc.patch()
+            except Exception as e:
+                raise APIError(
+                    "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                        uuid, e
+                    )
+                )
+        else:
+            logger.warning("%s not found in indexd", uuid)
+    except Exception as e:
+        raise APIError(
+            "INDEX_CLIENT: Can not redact infor from the record with uuid {}. Detail {}".format(
+                uuid, e
+            )
+        )
