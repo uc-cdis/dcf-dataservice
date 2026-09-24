@@ -18,14 +18,13 @@ from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
-MAX_WORKERS = 150
-
 
 def resume_logger(filename=None):
     global logger
     logger = get_logger("Validation", filename)
 
 
+# NOTE: Remove this. This is just for testing purposes
 PROJECT_ACL = {
     "CHARLIE": {
         "aws_bucket_prefix": "test-gdc-abc-phs000222",
@@ -202,6 +201,12 @@ def run(global_config):
             "If validation job is run with FORCE_CREATE_MANIFEST True: errors from missing objects are to be expected due to redaction of records in the data release following the current run"
         )
 
+    MAX_WORKERS = global_config.get("MAX_AWS_WORKERS", 150)
+    logger.info(f"Max AWS Workers set to {MAX_WORKERS} workers.")
+
+    BATCH_SIZE = global_config.get("BATCH_SIZE", 20)
+    logger.info(f"IndexD batch get size set to {BATCH_SIZE}")
+
     logger.info("List of the manifests")
     logger.info(global_config.get("manifest_files"))
     logger.info(global_config.get("out_manifests"))
@@ -229,7 +234,9 @@ def run(global_config):
 
     else:
         for manifest_file in manifest_files:
-            records = utils.get_bulk_indexd_record_from_GDC_files(manifest_file, logger)
+            records = utils.get_bulk_indexd_record_from_GDC_files(
+                manifest_file, logger, BATCH_SIZE
+            )
             indexd_records.update(records)
 
     if global_config.get("save_copied_objects"):

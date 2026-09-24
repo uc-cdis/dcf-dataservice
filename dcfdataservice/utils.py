@@ -14,7 +14,7 @@ from dcfdataservice.errors import UserError
 from indexclient.client import IndexClient
 from dcfdataservice.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
-
+# NOTE: Remove this. This is just for testing purposes
 PROJECT_ACL = {
     "CHARLIE": {
         "aws_bucket_prefix": "test-gdc-abc-phs000222",
@@ -454,7 +454,7 @@ def get_manifest_from_s3(manifest_file, logger):
         logger.error(f"Could not download manifest {manifest_file}. Error: {e}")
 
 
-def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
+def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
     """
     Get bulk indexd records for all GDC records
 
@@ -465,7 +465,6 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
     result = {}
     gdc_id_list = []
     errored_list = []
-    WINDOW_SIZE = 15
 
     indexd_client = IndexClient(
         INDEXD["host"],
@@ -505,7 +504,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger):
 
         guid_iter = iter(all_guids)
         while True:
-            batch = list(islice(guid_iter, WINDOW_SIZE))
+            batch = list(islice(guid_iter, batch_size))
             if not batch:
                 break
             sliced_records.append(batch)
