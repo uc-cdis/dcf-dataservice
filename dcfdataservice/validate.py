@@ -175,12 +175,6 @@ def run(global_config):
     if not global_config.get("log_bucket"):
         raise UserError("please provide the log bucket")
 
-    s3 = boto3.client("s3")
-    s3_validation_client = boto3.client(
-        "s3",
-        config=Config(max_pool_connections=MAX_WORKERS),
-    )
-
     release = global_config.get("release")
 
     session = boto3.session.Session()
@@ -213,6 +207,12 @@ def run(global_config):
 
     manifest_files = global_config.get("manifest_files", "").split(",")
     out_manifests = global_config.get("out_manifests", "").split(",")
+
+    s3 = boto3.client("s3")
+    s3_validation_client = boto3.client(
+        "s3",
+        config=Config(max_pool_connections=MAX_WORKERS),
+    )
 
     if len(manifest_files) != len(out_manifests):
         raise UserError(
