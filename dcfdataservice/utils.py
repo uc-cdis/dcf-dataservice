@@ -14,22 +14,6 @@ from dcfdataservice.errors import UserError
 from indexclient.client import IndexClient
 from dcfdataservice.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
-# NOTE: Remove this. This is just for testing purposes
-PROJECT_ACL = {
-    "CHARLIE": {
-        "aws_bucket_prefix": "test-gdc-abc-phs000222",
-        "gs_bucket_prefix": "test-gdc-abc-phs000222",
-    },
-    "TCGA-ACC": {
-        "aws_bucket_prefix": "test-gdc-def-phs000333",
-        "gs_bucket_prefix": "test-gdc-def-phs000333",
-    },
-    "TCGA-BLCA": {
-        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
-        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
-    },
-}
-
 
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
@@ -474,7 +458,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
 
     logger.info(f"Downloding GDC Manifest {manifest_file} from s3 bucket.")
     get_manifest_from_s3(manifest_file, logger)
-    logger.info(f"Downloaded GDC Manifest from s3 bucket")
+    logger.info(f"Downloaded GDC Manifest from s3 bucket.")
 
     def get_bulk_record_with_retry(
         guids, max_retries=5, base_delay=1, backoff_factor=2

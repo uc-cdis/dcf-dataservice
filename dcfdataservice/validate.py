@@ -10,10 +10,8 @@ from indexclient.client import IndexClient
 
 from dcfdataservice import utils
 from dcfdataservice.errors import UserError
-from dcfdataservice.aws_replicate import (
-    bucket_exists,
-    build_object_dataset_aws,
-)
+from dcfdataservice.aws_replicate import bucket_exists
+
 from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
@@ -22,23 +20,6 @@ global logger
 def resume_logger(filename=None):
     global logger
     logger = get_logger("Validation", filename)
-
-
-# NOTE: Remove this. This is just for testing purposes
-PROJECT_ACL = {
-    "CHARLIE": {
-        "aws_bucket_prefix": "test-gdc-abc-phs000222",
-        "gs_bucket_prefix": "test-gdc-abc-phs000222",
-    },
-    "TCGA-ACC": {
-        "aws_bucket_prefix": "test-gdc-def-phs000333",
-        "gs_bucket_prefix": "test-gdc-def-phs000333",
-    },
-    "TCGA-BLCA": {
-        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
-        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
-    },
-}
 
 
 def _validate_single_file(
@@ -84,13 +65,11 @@ def _validate_single_file(
 
     if _validate_aws(VALIDATE_PLATFORM):
         aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        # object_path = "{}/{}".format(fi["id"], fi["file_name"]) NOTE: Add this back. Removing just for testing
-        object_path = fi["id"]
+        object_path = "{}/{}".format(fi["id"], fi["file_name"])
         try:
-            object = s3_client.head_object(
+            s3_client.head_object(
                 Bucket=aws_bucket, Key=object_path, RequestPayer="requester"
             )
-            print(f"found object {object}")
             s3_exists = True
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
@@ -256,23 +235,6 @@ def run(global_config):
 
     logger.info(f"Validating Cloud Storage: {VALIDATE_PLATFORM}")
     logger.info(global_config)
-
-    if _validate_aws(VALIDATE_PLATFORM):
-        logger.info("Not going to build aws dataset anymore")
-        # logger.info("Building aws dataset")
-        # aws_copied_objects, _ = build_object_dataset_aws(PROJECT_ACL, logger)
-        # logger.info("Done building object datasets")
-        # if global_config.get("save_copied_objects"):
-        #     with open("./aws_copied_objects.json", "w") as outfile:
-        #         json.dump(aws_copied_objects, outfile)
-        #     try:
-        #         s3.upload_file(
-        #             "aws_copied_objects.json",
-        #             global_config.get("log_bucket"),
-        #             "aws_copied_objects.json",
-        #         )
-        #     except Exception as e:
-        #         logger.error(e)
 
     gs_copied_objects = {}
     if _validate_gs(VALIDATE_PLATFORM):
