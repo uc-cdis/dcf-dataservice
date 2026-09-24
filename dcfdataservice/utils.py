@@ -447,7 +447,6 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
     """
 
     result = {}
-    gdc_id_list = []
     errored_list = []
 
     indexd_client = IndexClient(
@@ -518,7 +517,7 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
         logger.warning(
             f"Found {len(errored_list)} guids that weren't found in indexd. Here are all the guids: {errored_list}"
         )
-    return result
+    return result, errored_list
 
 
 def get_indexd_record_from_GDC_files(manifest_file, logger):

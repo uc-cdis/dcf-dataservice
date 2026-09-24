@@ -214,7 +214,7 @@ def run(global_config):
 
     else:
         for manifest_file in manifest_files:
-            records = utils.get_bulk_indexd_record_from_GDC_files(
+            records, no_indexd_records = utils.get_bulk_indexd_record_from_GDC_files(
                 manifest_file, logger, BATCH_SIZE
             )
             indexd_records.update(records)
@@ -328,6 +328,11 @@ def run(global_config):
                             total_aws_copy_failures, manifest_file
                         )
                     )
+        if no_indexd_records:
+            logger.warning(
+                f"{len(no_indexd_records)} records not indexed. Here are all the guids: {no_indexd_records}"
+            )
+
         logger.info(f"Total files processed: {total_processed_files}")
 
         _pass = (
