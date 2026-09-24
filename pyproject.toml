@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dcfdataservice"
-version = "4.0.0"
+version = "5.0.0"
 description = "Collection of jobs to replicate data from GDC data center to AWS and Google Buckets"
 authors = ["CTDS UChicago <cdis@uchicago.edu>"]
 license = "Apache-2.0"
@@ -26,7 +26,7 @@ setuptools = "^65.0.0"
 slack-sdk = "^3.19.3"
 cdislogging = "^1.1.1"
 cdiserrors = "^1.0.0"
-indexclient = "^2.1.0"
+indexclient = "^6.3.0"
 
 
 
