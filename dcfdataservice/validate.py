@@ -58,6 +58,7 @@ def _validate_single_file(
     fails = []
     processed = False
 
+    logger.info(f"Checking file {fi.get('id')}")
     if float(fi["release"]) != float(release):
         logger.info(
             f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
