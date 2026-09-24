@@ -58,7 +58,6 @@ def _validate_single_file(
     fails = []
     processed = False
 
-    logger.info(f"Checking file {fi.get('id')}")
     if float(fi["release"]) != float(release):
         logger.info(
             f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
@@ -88,9 +87,10 @@ def _validate_single_file(
         # object_path = "{}/{}".format(fi["id"], fi["file_name"]) NOTE: Add this back. Removing just for testing
         object_path = fi["id"]
         try:
-            s3_client.head_object(
+            object = s3_client.head_object(
                 Bucket=aws_bucket, Key=object_path, RequestPayer="requester"
             )
+            print(f"found object {object}")
             s3_exists = True
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
