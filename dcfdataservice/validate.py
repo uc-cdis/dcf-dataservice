@@ -39,20 +39,6 @@ def _validate_single_file(
     fails = []
     processed = False
 
-    if float(fi["release"]) != float(release):
-        logger.info(
-            f"Skipping validation of record. File {fi['id']} is from release {fi['release']}, only processing release {release}"
-        )
-        return (
-            fi,
-            aws_copy_fail,
-            gs_copy_fail,
-            aws_index_fail,
-            gs_index_fail,
-            fails,
-            processed,
-        )
-
     del fi["url"]
     fi["aws_url"], fi["gs_url"], fi["indexd_url"] = None, None, None
     fi["indexd_url"] = indexd_records.get(fi.get("id"), [])
@@ -183,9 +169,11 @@ def run(global_config):
 
     logger.info("List of the manifests")
     logger.info(global_config.get("manifest_files"))
+    logger.info(global_config.get("previous_manifest"))
     logger.info(global_config.get("out_manifests"))
 
     manifest_files = global_config.get("manifest_files", "").split(",")
+    previous_manifest = global_config.get("previous_manifest", "").split(",")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
     s3 = boto3.client("s3")
@@ -261,6 +249,7 @@ def run(global_config):
         total_processed_files = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
+        prev_files = utils.get_fileinfo_list_from_s3_manifest(previous_manifest)
         fail_list = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
@@ -365,17 +354,25 @@ def run(global_config):
                 "acl",
                 "type",
                 "deletereason",
-                "gs_url",
                 "indexd_url",
                 "case_submitter_ids",
             ]
             isb_files = []
             for fi in files:
+                del fi["gs_url"]
                 del fi["aws_url"]
                 if fi["size"] != 0:
                     isb_files.append(fi)
 
+            logger.info("Merging old manifest with new data...")
+            files = utils.merge_prev_manifest(prev_files, files)
+
+            # free up mem
+            logger.info("Clearing up some memory...")
+            del prev_files, files
+
             utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
+
         else:
             utils.write_csv("./tmp.csv", fail_list)
             out_filename = "FAIL_" + out_filename

@@ -379,6 +379,40 @@ def build_object_dataset_gs(PROJECT_ACL):
     return copied_object
 
 
+def merge_prev_manifest(prev_files, files):
+    """
+    Merge previous release files with current release. It should replace any previous
+    records that show up with the latest records. Ex. If id 1234 is in previous manifest
+    and in the current manifest, then the record from current manifest should go in the final list
+
+    Args:
+        prev_files (list): list of records from previous release DCF GDC manifest
+        files (list): list of records created in the current validation release
+
+    Return:
+        final_files (list): list of merged prev_files + files that's used for generating new manifest
+    """
+
+    prev_files_dict = {}
+    files_dict = {}
+    final_files = []
+
+    for f in files:
+        files_dict[f["id"]] = f
+
+    for p in prev_files:
+        prev_files_dict[p["id"]] = p
+
+    final_dict = prev_files_dict | files_dict
+
+    for _, v in final_dict.items():
+        final_files.append(v)
+
+    del final_dict, prev_files_dict, files_dict
+
+    return final_files
+
+
 def write_csv(filename, files, sorted_attr=None, fieldnames=None):
     def on_key(element):
         return element[sorted_attr]
