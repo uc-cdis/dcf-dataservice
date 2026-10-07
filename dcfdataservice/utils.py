@@ -133,7 +133,9 @@ def get_aws_reversed_acl_bucket_name(target_bucket):
             return target_bucket + "-controlled"
 
 
-def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
+def get_fileinfo_list_from_s3_manifest(
+    url_manifest, temp_manifest_name="./manifest2", start=None, end=None
+):
     """
     Get the manifest from s3
     pass to get_fileinfo_list_from_manifest to get
@@ -143,8 +145,8 @@ def get_fileinfo_list_from_s3_manifest(url_manifest, start=None, end=None):
     s3 = boto3.resource("s3")
 
     out = urlparse(url_manifest)
-    s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest2")
-    return get_fileinfo_list_from_csv_manifest("./manifest2", start, end)
+    s3.meta.client.download_file(out.netloc, out.path[1:], temp_manifest_name)
+    return get_fileinfo_list_from_csv_manifest(temp_manifest_name, start, end)
 
 
 def get_fileinfo_list_from_gs_manifest(url_manifest, start=None, end=None):

@@ -173,7 +173,7 @@ def run(global_config):
     logger.info(global_config.get("out_manifests"))
 
     manifest_files = global_config.get("manifest_files", "").split(",")
-    previous_manifest = global_config.get("previous_manifest", "").split(",")
+    previous_manifest = global_config.get("previous_manifest", "")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
     s3 = boto3.client("s3")
@@ -249,7 +249,9 @@ def run(global_config):
         total_processed_files = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
-        prev_files = utils.get_fileinfo_list_from_s3_manifest(previous_manifest)
+        prev_files = utils.get_fileinfo_list_from_s3_manifest(
+            previous_manifest, temp_manifest_name="./prev_manifest"
+        )
         fail_list = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
