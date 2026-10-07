@@ -384,13 +384,13 @@ def run(global_config):
                     isb_files.append(fi)
 
             logger.info("Merging old manifest with new data...")
-            files = utils.merge_prev_manifest(prev_files, files)
+            files = utils.merge_prev_manifest(prev_files, isb_files)
 
             # free up mem
             logger.info("Clearing up some memory...")
-            del prev_files, files
-
-            utils.write_csv("./tmp.csv", isb_files, fieldnames=HEADERS)
+            del prev_files, isb_files
+            utils.write_csv("./tmp.csv", files, fieldnames=HEADERS)
+            del files
 
         else:
             utils.write_csv("./tmp.csv", fail_list)
