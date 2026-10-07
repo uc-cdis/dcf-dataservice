@@ -67,7 +67,8 @@ def _validate_single_file(
 
     if _validate_aws(VALIDATE_PLATFORM):
         aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        object_path = "{}/{}".format(fi["id"], fi["file_name"])
+        object_path = fi["id"]
+        # object_path = "{}/{}".format(fi["id"], fi["file_name"]) #NOTE: uncomment and remove above line for final. This is for testing purposes only
         try:
             s3_client.head_object(
                 Bucket=aws_bucket, Key=object_path, RequestPayer="requester"
