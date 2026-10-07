@@ -176,6 +176,11 @@ def run(global_config):
     previous_manifest = global_config.get("previous_manifest", "")
     out_manifests = global_config.get("out_manifests", "").split(",")
 
+    if not previous_manifest:
+        logger.warning(
+            "Previous release manifest not provided. Please add s3 location to a previous release manifest if you want full results"
+        )
+
     s3 = boto3.client("s3")
     s3_validation_client = boto3.client(
         "s3",
