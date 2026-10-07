@@ -16,22 +16,6 @@ from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
-# NOTE: Remove this!!!! This is for testing purposes only
-PROJECT_ACL = {
-    "CHARLIE": {
-        "aws_bucket_prefix": "test-gdc-abc-phs000222",
-        "gs_bucket_prefix": "test-gdc-abc-phs000222",
-    },
-    "TCGA-ACC": {
-        "aws_bucket_prefix": "test-gdc-def-phs000333",
-        "gs_bucket_prefix": "test-gdc-def-phs000333",
-    },
-    "TCGA-BLCA": {
-        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
-        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
-    },
-}
-
 
 def resume_logger(filename=None):
     global logger
@@ -67,8 +51,7 @@ def _validate_single_file(
 
     if _validate_aws(VALIDATE_PLATFORM):
         aws_bucket = utils.get_aws_bucket_name(fi, PROJECT_ACL)
-        object_path = fi["id"]
-        # object_path = "{}/{}".format(fi["id"], fi["file_name"]) #NOTE: uncomment and remove above line for final. This is for testing purposes only
+        object_path = "{}/{}".format(fi["id"], fi["file_name"])
         try:
             s3_client.head_object(
                 Bucket=aws_bucket, Key=object_path, RequestPayer="requester"

@@ -15,24 +15,6 @@ from indexclient.client import IndexClient
 from dcfdataservice.settings import INDEXD, POSTFIX_1_EXCEPTION, POSTFIX_2_EXCEPTION
 
 
-# NOTE: Remove this!!!! This is for testing purposes only
-
-PROJECT_ACL = {
-    "CHARLIE": {
-        "aws_bucket_prefix": "test-gdc-abc-phs000222",
-        "gs_bucket_prefix": "test-gdc-abc-phs000222",
-    },
-    "TCGA-ACC": {
-        "aws_bucket_prefix": "test-gdc-def-phs000333",
-        "gs_bucket_prefix": "test-gdc-def-phs000333",
-    },
-    "TCGA-BLCA": {
-        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
-        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
-    },
-}
-
-
 def get_aws_bucket_name(fi, PROJECT_ACL):
     try:
         project_info = PROJECT_ACL[fi.get("project_id")]
