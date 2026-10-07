@@ -16,6 +16,22 @@ from dcfdataservice.settings import PROJECT_ACL, INDEXD, IGNORED_FILES
 
 global logger
 
+# NOTE: Remove this!!!! This is for testing purposes only
+PROJECT_ACL = {
+    "CHARLIE": {
+        "aws_bucket_prefix": "test-gdc-abc-phs000222",
+        "gs_bucket_prefix": "test-gdc-abc-phs000222",
+    },
+    "TCGA-ACC": {
+        "aws_bucket_prefix": "test-gdc-def-phs000333",
+        "gs_bucket_prefix": "test-gdc-def-phs000333",
+    },
+    "TCGA-BLCA": {
+        "aws_bucket_prefix": "test-gdc-xyz-phs000111",
+        "gs_bucket_prefix": "test-gdc-xyz-phs000111",
+    },
+}
+
 
 def resume_logger(filename=None):
     global logger
