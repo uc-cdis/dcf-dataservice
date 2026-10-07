@@ -40,6 +40,9 @@ from dcfdataservice.indexd_utils import update_url
 
 global logger
 
+logger = get_logger("AWSReplication", "/log.txt")
+
+
 RETRIES_NUM = 5
 
 OPEN_ACCOUNT_PROFILE = "data-refresh-open"
