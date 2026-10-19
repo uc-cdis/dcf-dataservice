@@ -198,6 +198,7 @@ def run(global_config):
     logger.info("scan all copied objects")
 
     indexd_records = {}
+    no_indexd_records = []
 
     if global_config.get("map_file"):
         logger.info("Using Map file")
