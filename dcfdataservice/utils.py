@@ -471,7 +471,7 @@ def get_manifest_from_s3(manifest_file, logger):
     try:
         s3.meta.client.download_file(out.netloc, out.path[1:], "./manifest_read")
     except Exception as e:
-        logger.error(f"Could not download manifest {manifest_file}. Error: {e}")
+        raise UserError(f"Could not download manifest {manifest_file}. Error: {e}")
 
 
 def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
@@ -531,6 +531,13 @@ def get_bulk_indexd_record_from_GDC_files(manifest_file, logger, batch_size=20):
         logger.info("Starting bulk request to indexd...")
         for batch in sliced_records:
             records = get_bulk_record_with_retry(batch)
+            if records is None:
+                logger.error(
+                    f"Records returned None. There was an issue getting records from IndexD API for records {batch}. Skipping..."
+                )
+                records = (
+                    []
+                )  # Setting records as empty so that the logic below can add the failed records to errored_list
             if len(records) != len(
                 batch
             ):  # if input doesn't match output, a record hasn't been indexed

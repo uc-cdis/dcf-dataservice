@@ -254,8 +254,12 @@ def run(global_config):
         total_processed_files = 0
         manifest_file = manifest_file.strip()
         files = utils.get_fileinfo_list_from_s3_manifest(manifest_file)
-        prev_files = utils.get_fileinfo_list_from_s3_manifest(
-            previous_manifest, temp_manifest_name="./prev_manifest"
+        prev_files = (
+            utils.get_fileinfo_list_from_s3_manifest(
+                previous_manifest, temp_manifest_name="./prev_manifest"
+            )
+            if previous_manifest
+            else []
         )
         fail_list = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -366,13 +370,30 @@ def run(global_config):
             ]
             isb_files = []
             for fi in files:
-                del fi["gs_url"]
-                del fi["aws_url"]
+                if "gs_url" in fi:
+                    del fi["gs_url"]
+                if "aws_url" in fi:
+                    del fi["aws_url"]
                 if fi["size"] != 0:
                     isb_files.append(fi)
+            prev_list = []
+            for fi in prev_files:
+                if "gs_url" in fi:
+                    del fi["gs_url"]
+                if "aws_url" in fi:
+                    del fi["aws_url"]
+                prev_list.append(fi)
 
             logger.info("Merging old manifest with new data...")
-            files = utils.merge_prev_manifest(prev_files, isb_files)
+            # Check if the headers are the
+            prev_headers = set(prev_files[0].keys())
+            files_headers = set(files[0].keys())
+            all_diff = prev_headers ^ files_headers
+            if len(all_diff) > 0:
+                logger.error(
+                    f"Header mismatch between previous manifest and new manifest: {all_diff}"
+                )
+            files = utils.merge_prev_manifest(prev_list, isb_files)
 
             # free up mem
             logger.info("Clearing up some memory...")
