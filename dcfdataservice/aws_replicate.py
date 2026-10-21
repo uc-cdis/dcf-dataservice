@@ -233,7 +233,6 @@ def object_exists(s3, bucket_name, key):
     except botocore.exceptions.ClientError as e:
         error_code = int(e.response["Error"]["Code"])
         if error_code in {404, 403}:
-            logger.warning(f"Object {key} not found in bucket {bucket_name}")
             return False
         else:
             logger.error(

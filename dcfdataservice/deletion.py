@@ -259,7 +259,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
     full_path = join("s3://" + target_bucket, key)
     deleting_object = {"Key": key}
     deletion_log = DeletionLog(url=full_path)
-
+    logger.info(f"url path is {full_path}")
     if not object_exists(s3, target_bucket, key):
         return deletion_log
 
