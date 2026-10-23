@@ -21,8 +21,7 @@ from dcfdataservice.utils import (
     get_structured_object_key,
 )
 from dcfdataservice.indexd_utils import (
-    remove_url_from_indexd_record,
-    delete_record_from_indexd,
+    redact_info_from_indexd,
 )
 from dcfdataservice.errors import UserError, APIError
 from dcfdataservice.settings import IGNORED_FILES
@@ -179,7 +178,6 @@ def delete_objects_from_cloud_resources(
                         gs_client, indexclient, fi, google_target_bucket, ignored_dict
                     )
                 )
-                delete_record_from_indexd(fi.get("id"), indexclient)
             except Exception as e:
                 logger.error(
                     "Error happened during Google Storage deletion. Please look at the log in Google bucket.c"
@@ -274,7 +272,7 @@ def _remove_object_from_s3(s3, indexclient, f, target_bucket, dry_run=False):
         if res.get("Deleted"):
             try:
                 deletion_log.deleted = True
-                remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+                redact_info_from_indexd(f.get("id"), indexclient)
                 deletion_log.indexdUpdated = True
                 logger.info("Deleted {} from AWS".format(f.get("id")))
             except Exception as e:
@@ -331,7 +329,7 @@ def _remove_object_from_gs(client, indexclient, f, target_bucket, ignored_dict):
 
     try:
         logger.info("Start to update indexd for {}".format(f["id"]))
-        remove_url_from_indexd_record(f.get("id"), [full_path], indexclient)
+        redact_info_from_indexd(f.get("id"), indexclient)
         deletion_log.indexdUpdated = True
     except Exception as e:
         logger.warning(

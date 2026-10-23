@@ -7,9 +7,7 @@ from dcfdataservice import utils
 from dcfdataservice.errors import APIError, UserError
 from dcfdataservice.settings import PROJECT_ACL
 
-
 logger.basicConfig(level=logger.INFO, format="%(asctime)s %(message)s")
-
 
 NAMESPACE = ""
 if os.getenv("AUTH_NAMESPACE"):
@@ -17,6 +15,18 @@ if os.getenv("AUTH_NAMESPACE"):
     logger.info("using namespace {}".format(NAMESPACE))
 else:
     logger.warning("not using any auth namespace")
+
+try:
+    from dcfdataservice.settings import (
+        REDACT_URL_VALUE,
+        REDACT_AUTHZ_VALUE,
+        REDACT_ACL_VALUE,
+        REDACT_FILE_NAME_VALUE,
+        REDACT_URL_METADATA_VALUE,
+        REDACT_DESCRIPTION,
+    )
+except:
+    logger.warning("Redact field value undefined in settings. Using default value")
 
 
 def _remove_changed_url(doc, url):
@@ -147,33 +157,6 @@ def update_url(fi, indexclient, provider="s3", url=None):
 
 
 @retry(APIError, tries=10, delay=2)
-def remove_url_from_indexd_record(uuid, urls, indexclient):
-    """
-    remove url from indexd record
-
-    Args:
-        uuid(str): did
-        urls(list): list of urls
-        indexclient(IndexClient): indexd client
-    """
-    doc = indexclient.get(uuid)
-    if doc is not None:
-        for url in urls:
-            if url in doc.urls:
-                doc.urls.remove(url)
-            if url in doc.urls_metadata:
-                del doc.urls_metadata[url]
-        try:
-            doc.patch()
-        except Exception as e:
-            raise APIError(
-                "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
-                    uuid, e
-                )
-            )
-
-
-@retry(APIError, tries=10, delay=2)
 def delete_record_from_indexd(uuid, indexclient):
     """
     remove url from indexd record
@@ -189,6 +172,45 @@ def delete_record_from_indexd(uuid, indexclient):
     except Exception as e:
         raise APIError(
             "INDEX_CLIENT: Can not delete the record with uuid {}. Detail {}".format(
+                uuid, e
+            )
+        )
+
+
+@retry(APIError, tries=10, delay=2)
+def redact_info_from_indexd(uuid, indexclient):
+    """
+    redact info from indexd record
+
+    Args:
+        uuid(str): did
+        indexclient(IndexClient): indexd client
+    """
+    try:
+        doc = indexclient.get(uuid)
+        if doc:
+            doc.urls = REDACT_URL_VALUE or []
+            doc.authz = REDACT_AUTHZ_VALUE or []
+            doc.acl = REDACT_ACL_VALUE or []
+            doc.file_name = REDACT_FILE_NAME_VALUE or ""
+            doc.urls_metadata = REDACT_URL_METADATA_VALUE or {}
+            doc.description = (
+                REDACT_DESCRIPTION
+                or "The file information for this GUID has been removed at stakeholder request"
+            )
+            try:
+                doc.patch()
+            except Exception as e:
+                raise APIError(
+                    "INDEX_CLIENT: Can not update the record with uuid {}. Detail {}".format(
+                        uuid, e
+                    )
+                )
+        else:
+            logger.warning("%s not found in indexd", uuid)
+    except Exception as e:
+        raise APIError(
+            "INDEX_CLIENT: Can not redact info from the record with uuid {}. Detail {}".format(
                 uuid, e
             )
         )
