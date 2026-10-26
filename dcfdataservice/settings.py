@@ -47,3 +47,12 @@ POSTFIX_2_EXCEPTION = [
     "gdc-organoid-pancreatic-phs001611",
     "gdc-beataml1-cohort-phs001657",
 ]
+
+REDACT_URL_VALUE = []
+REDACT_AUTHZ_VALUE = []
+REDACT_ACL_VALUE = []
+REDACT_FILE_NAME_VALUE = ""
+REDACT_URL_METADATA_VALUE = {}
+REDACT_DESCRIPTION = (
+    "The file information for this GUID has been removed at stakeholder request"
+)
